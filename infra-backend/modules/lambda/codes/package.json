@@ -1,0 +1,17 @@
+{
+  "name": "@girlcode360/backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-api.mjs",
+    "build:health": "node scripts/build-api.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.147",
+    "@types/node": "^26.1.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2"
+  }
+}

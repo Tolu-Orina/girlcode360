@@ -1,0 +1,314 @@
+[
+  {
+    "week": 4,
+    "title": "Early weeks",
+    "baby": "A tiny cluster of cells is forming.",
+    "maternal": "You may notice fatigue or tender breasts.",
+    "nutrition": "Folate-rich foods support early development.",
+    "priority": true
+  },
+  {
+    "week": 5,
+    "title": "Week 5",
+    "baby": "The neural tube is beginning to form.",
+    "maternal": "Nausea may start for some people.",
+    "nutrition": "Stay hydrated; small frequent meals can help.",
+    "priority": true
+  },
+  {
+    "week": 6,
+    "title": "Week 6",
+    "baby": "A heartbeat may be detectable on scan.",
+    "maternal": "Heightened smell and tiredness are common.",
+    "nutrition": "Continue prenatal vitamins if advised by your clinician.",
+    "priority": true
+  },
+  {
+    "week": 7,
+    "title": "Week 7",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": true
+  },
+  {
+    "week": 8,
+    "title": "Week 8",
+    "baby": "Facial features are starting to shape.",
+    "maternal": "Clothes may feel tighter around the waist.",
+    "nutrition": "Iron-rich foods support energy.",
+    "priority": true
+  },
+  {
+    "week": 9,
+    "title": "Week 9",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": true
+  },
+  {
+    "week": 10,
+    "title": "Week 10",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": true
+  },
+  {
+    "week": 11,
+    "title": "Week 11",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": true
+  },
+  {
+    "week": 12,
+    "title": "End of first trimester",
+    "baby": "Many major organs are formed.",
+    "maternal": "Energy may return for some people.",
+    "nutrition": "Discuss screening options with your clinician.",
+    "priority": true
+  },
+  {
+    "week": 13,
+    "title": "Week 13",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 14,
+    "title": "Week 14",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 15,
+    "title": "Week 15",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 16,
+    "title": "Week 16",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 17,
+    "title": "Week 17",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 18,
+    "title": "Mid-pregnancy",
+    "baby": "Movements may become clearer.",
+    "maternal": "Round-ligament twinges can occur.",
+    "nutrition": "Balanced plates with protein and fibre.",
+    "priority": true
+  },
+  {
+    "week": 19,
+    "title": "Week 19",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": true
+  },
+  {
+    "week": 20,
+    "title": "Halfway mark",
+    "baby": "Anatomy scan window for many clinics.",
+    "maternal": "You may feel stronger kicks.",
+    "nutrition": "Keep up fluids and gentle movement if cleared.",
+    "priority": true
+  },
+  {
+    "week": 21,
+    "title": "Week 21",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": true
+  },
+  {
+    "week": 22,
+    "title": "Week 22",
+    "baby": "Hearing pathways continue to mature.",
+    "maternal": "Back discomfort can increase.",
+    "nutrition": "Supportive shoes and rest breaks help.",
+    "priority": true
+  },
+  {
+    "week": 23,
+    "title": "Week 23",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 24,
+    "title": "Week 24",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 25,
+    "title": "Week 25",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 26,
+    "title": "Week 26",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 27,
+    "title": "Week 27",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 28,
+    "title": "Week 28",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 29,
+    "title": "Week 29",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 30,
+    "title": "Week 30",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 31,
+    "title": "Week 31",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 32,
+    "title": "Week 32",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 33,
+    "title": "Week 33",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 34,
+    "title": "Week 34",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 35,
+    "title": "Week 35",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 36,
+    "title": "Late pregnancy",
+    "baby": "Baby practices breathing movements.",
+    "maternal": "Braxton Hicks may be noticed.",
+    "nutrition": "Small meals; elevate feet when swollen.",
+    "priority": true
+  },
+  {
+    "week": 37,
+    "title": "Week 37",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": true
+  },
+  {
+    "week": 38,
+    "title": "Near term",
+    "baby": "Baby may drop lower.",
+    "maternal": "Sleep can be fragmented.",
+    "nutrition": "Know your local emergency numbers.",
+    "priority": true
+  },
+  {
+    "week": 39,
+    "title": "Week 39",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": true
+  },
+  {
+    "week": 40,
+    "title": "Due-week window",
+    "baby": "Ready for birth timing that clinicians discuss.",
+    "maternal": "Rest when you can.",
+    "nutrition": "Have your hospital bag and contacts ready.",
+    "priority": true
+  },
+  {
+    "week": 41,
+    "title": "Week 41",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  },
+  {
+    "week": 42,
+    "title": "Week 42",
+    "baby": "Development continues week by week \u2014 ask your clinician for personalised guidance.",
+    "maternal": "Notice how you feel; log symptoms that matter to you.",
+    "nutrition": "Eat regularly, drink water, and follow clinician advice for supplements.",
+    "priority": false
+  }
+]

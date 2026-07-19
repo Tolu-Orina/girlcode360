@@ -1,0 +1,8 @@
+version: 0.2
+phases:
+  build:
+    commands:
+      - echo "E2E tests placeholder (Phase 0)"
+artifacts:
+  files:
+    - '**/*'

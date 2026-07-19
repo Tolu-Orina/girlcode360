@@ -1,0 +1,25 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - curl -fsSL https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip -o /tmp/tf.zip
+      - unzip -o /tmp/tf.zip -d /usr/local/bin
+  build:
+    commands:
+      - cd infra-backend/modules/lambda/codes && npm ci && npm run build
+      - cd "$CODEBUILD_SRC_DIR/infra-backend"
+      - |
+        terraform init \
+          -backend-config="bucket=girlcode360-tf-state" \
+          -backend-config="key=backend/${TF_VAR_environment}/terraform.tfstate" \
+          -backend-config="region=${AWS_DEFAULT_REGION}" \
+          -backend-config="dynamodb_table=girlcode360-tf-lock"
+      - terraform apply -auto-approve tfplan
+      # Schema after infra: cluster endpoint is in SSM; skip if DSQL disabled
+      - cd "$CODEBUILD_SRC_DIR/infra-backend/scripts" && npm ci
+      - node "$CODEBUILD_SRC_DIR/infra-backend/scripts/migrate-dsql.mjs"
+artifacts:
+  files:
+    - '**/*'

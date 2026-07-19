@@ -1,0 +1,14 @@
+# Optional CloudWatch alarm stubs for Bedrock cost/error (Phase 6A.9)
+# Wire when BEDROCK_ENABLED=true in the target account.
+
+# resource "aws_cloudwatch_metric_alarm" "bedrock_errors" {
+#   alarm_name          = "girlcode360-${var.environment}-bedrock-errors"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = 1
+#   metric_name         = "InvocationClientErrors"
+#   namespace           = "AWS/Bedrock"
+#   period              = 300
+#   statistic           = "Sum"
+#   threshold           = 10
+#   alarm_description   = "Bedrock client errors for Nova 2 Lite"
+# }

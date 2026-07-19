@@ -1,0 +1,14 @@
+# EventBridge schedule stub for monthly HealthLens (Phase 6B.4)
+# Enable when DSQL + Bedrock are live in the account.
+
+# resource "aws_cloudwatch_event_rule" "healthlens_monthly" {
+#   name                = "girlcode360-${var.environment}-healthlens-monthly"
+#   description         = "1st of month 06:00 UTC HealthLens batch"
+#   schedule_expression = "cron(0 6 1 * ? *)"
+# }
+#
+# resource "aws_cloudwatch_event_target" "healthlens_monthly" {
+#   rule = aws_cloudwatch_event_rule.healthlens_monthly.name
+#   arn  = aws_lambda_function.api.arn
+#   input = jsonencode({ path = "/v1/healthlens/cron", source = "eventbridge" })
+# }

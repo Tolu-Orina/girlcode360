@@ -1,0 +1,8 @@
+{
+  "name": "girlcode360-dsql-migrate",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pg": "^8.16.0"
+  }
+}

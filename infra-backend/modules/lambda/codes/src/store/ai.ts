@@ -1,0 +1,318 @@
+import {
+  buildPrepCardText,
+  crisisMessage,
+  daysBetween,
+  detectCrisis,
+  healthLensActivation,
+  runHealthLensRules,
+  type HealthLensFinding,
+} from "../../../../../../packages/domain/src/index";
+import { converseNova } from "../../../../../../packages/ai-provider/src/index";
+import { zaraSystemPrompt } from "../../../../../../packages/ai-provider/src/prompts";
+import { listCycles, listDays, getUser } from "./memory";
+import { getPregnancy, listPregnancyDays, ttcStatus } from "./journey";
+import type { Market } from "../types";
+
+import { isPremium } from "./billing";
+
+const FREE_ZARA_LIMIT = 3;
+const FREE_HL_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
+
+const quota = new Map<string, number>(); // `${sub}:${day}`
+const reports = new Map<
+  string,
+  Array<{
+    id: string;
+    createdAt: string;
+    narrative: string;
+    confidence: "Low" | "Medium" | "High";
+    findings: HealthLensFinding[];
+    stub: boolean;
+  }>
+>();
+const hlPrefs = new Map<
+  string,
+  { populationLearningConsent: boolean; lastOndemandAt: string | null }
+>();
+
+function dayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function getZaraQuota(sub: string) {
+  const key = `${sub}:${dayKey()}`;
+  const used = quota.get(key) ?? 0;
+  if (isPremium(sub)) {
+    return { used, limit: null as number | null, remaining: null as number | null };
+  }
+  return {
+    used,
+    limit: FREE_ZARA_LIMIT,
+    remaining: Math.max(0, FREE_ZARA_LIMIT - used),
+  };
+}
+
+function consumeZaraQuota(sub: string): boolean {
+  if (isPremium(sub)) return true;
+  const q = getZaraQuota(sub);
+  if ((q.remaining ?? 0) <= 0) return false;
+  const key = `${sub}:${dayKey()}`;
+  quota.set(key, (quota.get(key) ?? 0) + 1);
+  return true;
+}
+
+export function assembleZaraContext(sub: string): Record<string, unknown> {
+  const profile = getUser(sub);
+  const cycles = listCycles(sub);
+  const starts = cycles.map((c) => c.startDate).sort();
+  const intervals: number[] = [];
+  for (let i = 1; i < starts.length; i++) {
+    intervals.push(daysBetween(starts[i - 1]!, starts[i]!));
+  }
+  const days = listDays(sub).slice(-45);
+  const symptomCounts = new Map<string, number>();
+  for (const d of days) {
+    for (const s of d.symptomIds) {
+      symptomCounts.set(s, (symptomCounts.get(s) ?? 0) + 1);
+    }
+  }
+  const recent_symptoms = [...symptomCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([id, n]) => `${id.replace(/_/g, " ")} (${n} days)`);
+
+  const avg =
+    intervals.length > 0
+      ? Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length)
+      : null;
+
+  const ttc = ttcStatus(sub);
+  const preg = getPregnancy(sub);
+
+  const ctx = {
+    market: profile?.market ?? "UK",
+    modules_active: profile?.modules ?? [],
+    cycle_summary: {
+      avg_length: avg,
+      last_6_cycles: intervals.slice(-6),
+      cycle_count: cycles.length,
+    },
+    recent_symptoms,
+    ttc_months: ttc?.monthsTrying ?? null,
+    pregnancy_active: Boolean(preg),
+    last_logged: days[days.length - 1]?.date ?? null,
+  };
+  const json = JSON.stringify(ctx);
+  // Cap ~4KB
+  return json.length > 4000
+    ? { ...ctx, recent_symptoms: recent_symptoms.slice(0, 3), _truncated: true }
+    : ctx;
+}
+
+export async function zaraChat(
+  sub: string,
+  message: string,
+  mode: "context" | "anonymous",
+): Promise<{
+  reply: string;
+  crisis: boolean;
+  stub: boolean;
+  quota: ReturnType<typeof getZaraQuota>;
+}> {
+  const profile = getUser(sub);
+  const market = (profile?.market ?? "UK") as Market;
+
+  if (detectCrisis(message)) {
+    return {
+      reply: crisisMessage(market),
+      crisis: true,
+      stub: false,
+      quota: getZaraQuota(sub),
+    };
+  }
+
+  if (!consumeZaraQuota(sub)) {
+    return {
+      reply:
+        "You’ve reached today’s free Zara conversations (3). Premium unlocks unlimited chats, or try again tomorrow.",
+      crisis: false,
+      stub: true,
+      quota: getZaraQuota(sub),
+    };
+  }
+
+  const system = zaraSystemPrompt(market, mode);
+  const messages =
+    mode === "context"
+      ? [
+          {
+            role: "user" as const,
+            content: `Health summary (pseudonymised JSON):\n${JSON.stringify(assembleZaraContext(sub))}\n\nQuestion: ${message}`,
+          },
+        ]
+      : [{ role: "user" as const, content: message }];
+
+  const result = await converseNova({ system, messages });
+  return {
+    reply: result.text,
+    crisis: false,
+    stub: result.stub,
+    quota: getZaraQuota(sub),
+  };
+}
+
+function lensInput(sub: string) {
+  const profile = getUser(sub);
+  const cycles = listCycles(sub);
+  const starts = cycles.map((c) => c.startDate).sort();
+  const intervals: number[] = [];
+  for (let i = 1; i < starts.length; i++) {
+    intervals.push(daysBetween(starts[i - 1]!, starts[i]!));
+  }
+  const days = listDays(sub);
+  const first = days[0]?.date ?? starts[0];
+  const last = days[days.length - 1]?.date ?? starts[starts.length - 1];
+  const loggingSpanDays =
+    first && last ? Math.max(0, daysBetween(first, last)) : 0;
+  const pregDays = listPregnancyDays(sub);
+  const kicksLast7Days = pregDays
+    .slice(-7)
+    .reduce((n, d) => n + (d.kicks ?? 0), 0);
+
+  return {
+    cycleIntervalsDays: intervals,
+    loggingSpanDays,
+    cycleCount: cycles.length,
+    recentSymptomIds: days.slice(-60).flatMap((d) => d.symptomIds),
+    pregnancyWeek: null as number | null,
+    kicksLast7Days: pregDays.some((d) => d.kicks != null)
+      ? kicksLast7Days
+      : null,
+    pcosModule: profile?.modules.includes("pcos_manager") ?? false,
+  };
+}
+
+export function getHealthLensStatus(sub: string) {
+  const input = lensInput(sub);
+  const act = healthLensActivation(input.cycleCount, input.loggingSpanDays);
+  const prefs = hlPrefs.get(sub) ?? {
+    populationLearningConsent: false,
+    lastOndemandAt: null,
+  };
+  return { ...act, populationLearningConsent: prefs.populationLearningConsent };
+}
+
+export function setPopulationLearningConsent(sub: string, granted: boolean) {
+  const cur = hlPrefs.get(sub) ?? {
+    populationLearningConsent: false,
+    lastOndemandAt: null,
+  };
+  hlPrefs.set(sub, { ...cur, populationLearningConsent: granted });
+  return getHealthLensStatus(sub);
+}
+
+export async function generateHealthLensReport(sub: string): Promise<
+  | {
+      id: string;
+      createdAt: string;
+      narrative: string;
+      confidence: "Low" | "Medium" | "High";
+      findings: HealthLensFinding[];
+      stub: boolean;
+    }
+  | { error: string }
+> {
+  const status = getHealthLensStatus(sub);
+  if (!status.activated) return { error: "not_activated" };
+
+  if (!isPremium(sub)) {
+    const prefs = hlPrefs.get(sub);
+    if (
+      prefs?.lastOndemandAt &&
+      Date.now() - Date.parse(prefs.lastOndemandAt) < FREE_HL_COOLDOWN_MS
+    ) {
+      return { error: "ondemand_cooldown" };
+    }
+  }
+
+  const findings = runHealthLensRules(lensInput(sub));
+  const confidence =
+    findings.find((f) => f.confidence === "High")?.confidence ??
+    findings.find((f) => f.confidence === "Medium")?.confidence ??
+    "Low";
+
+  const profile = getUser(sub);
+  const market = (profile?.market ?? "UK") as Market;
+  const system = `Summarise these wellness rule findings for the user. Never diagnose. Market=${market}.`;
+  const result = await converseNova({
+    system,
+    messages: [
+      {
+        role: "user",
+        content: JSON.stringify({ confidence, findings }),
+      },
+    ],
+    maxTokens: 600,
+  });
+
+  const report = {
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    narrative: result.text,
+    confidence,
+    findings,
+    stub: result.stub,
+  };
+  const list = reports.get(sub) ?? [];
+  list.unshift(report);
+  reports.set(sub, list.slice(0, 20));
+
+  const prefs = hlPrefs.get(sub) ?? {
+    populationLearningConsent: false,
+    lastOndemandAt: null,
+  };
+  hlPrefs.set(sub, { ...prefs, lastOndemandAt: report.createdAt });
+
+  return report;
+}
+
+export function latestHealthLensReport(sub: string) {
+  return (reports.get(sub) ?? [])[0] ?? null;
+}
+
+export function buildPrepCard(sub: string, questions: string[]) {
+  const findings = runHealthLensRules(lensInput(sub));
+  const cycles = listCycles(sub);
+  const profile = getUser(sub);
+  const cycleSummary = `${cycles.length} cycles logged; modules: ${(profile?.modules ?? []).join(", ") || "none"}`;
+  const text = buildPrepCardText({
+    market: profile?.market ?? "UK",
+    findings,
+    cycleSummary,
+    questions,
+  });
+  return {
+    text,
+    filename: `girlcode360-prep-card-${new Date().toISOString().slice(0, 10)}.txt`,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export const ZARA_DISCLAIMER =
+  "AI-generated wellness guidance — not a diagnosis or medical advice. Speak with a clinician for personal medical decisions.";
+
+export function countHealthLensReports(sub: string): number {
+  return (reports.get(sub) ?? []).length;
+}
+
+export function listHealthLensReportsForExport(sub: string) {
+  return reports.get(sub) ?? [];
+}
+
+export function purgeUserAi(sub: string): void {
+  reports.delete(sub);
+  hlPrefs.delete(sub);
+  for (const key of [...quota.keys()]) {
+    if (key.startsWith(`${sub}:`)) quota.delete(key);
+  }
+}

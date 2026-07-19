@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-health/
+.terraform/
+*.tfstate
+*.tfstate.*
+.tfplan
+tfplan
+.env
+.env.local
+*.zip
+.DS_Store
+coverage/
+*.log

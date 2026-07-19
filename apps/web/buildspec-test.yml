@@ -1,0 +1,13 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+  build:
+    commands:
+      - cd apps/web
+      - npm ci
+      - npm run build
+artifacts:
+  files:
+    - '**/*'

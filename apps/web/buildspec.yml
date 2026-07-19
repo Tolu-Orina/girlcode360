@@ -1,0 +1,30 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+  pre_build:
+    commands:
+      - |
+        export VITE_COGNITO_REGION=eu-west-2
+        export VITE_COGNITO_USER_POOL_ID=$(aws ssm get-parameter --name "/girlcode360/${ENVIRONMENT}/backend/cognito_user_pool_id" --query Parameter.Value --output text)
+        export VITE_COGNITO_CLIENT_ID=$(aws ssm get-parameter --name "/girlcode360/${ENVIRONMENT}/backend/cognito_client_id" --query Parameter.Value --output text)
+        export VITE_API_BASE_URL=$(aws ssm get-parameter --name "/girlcode360/${ENVIRONMENT}/backend/api_base_url" --query Parameter.Value --output text)
+        export VITE_PUBLIC_SITE_URL=$(aws ssm get-parameter --name "/girlcode360/${ENVIRONMENT}/web/url" --query Parameter.Value --output text)
+        echo "VITE_COGNITO_USER_POOL_ID=$VITE_COGNITO_USER_POOL_ID" >> apps/web/.env.production
+        echo "VITE_COGNITO_CLIENT_ID=$VITE_COGNITO_CLIENT_ID" >> apps/web/.env.production
+        echo "VITE_API_BASE_URL=$VITE_API_BASE_URL" >> apps/web/.env.production
+        echo "VITE_COGNITO_REGION=$VITE_COGNITO_REGION" >> apps/web/.env.production
+        echo "VITE_PUBLIC_SITE_URL=$VITE_PUBLIC_SITE_URL" >> apps/web/.env.production
+  build:
+    commands:
+      - cd apps/web
+      - npm ci
+      - npm run build
+      - aws s3 sync dist/ "s3://girlcode360-web-${ENVIRONMENT}/" --delete
+      - |
+        DIST_ID=$(aws ssm get-parameter --name "/girlcode360/${ENVIRONMENT}/web/cloudfront_distribution_id" --query Parameter.Value --output text)
+        aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*"
+artifacts:
+  files:
+    - apps/web/dist/**/*
