@@ -22,6 +22,3 @@ All-inclusive women’s beauty and wellness platform (UK · Nigeria · Ghana).
 - **Out of scope now:** Marketplace and SheMatch.
 - **Config:** SSM Parameter Store · Secrets Manager JSON blobs.
 
-## Phase 0 status
-
-Scaffold: `apps/web`, `apps/admin` (later), `infra-web`, `infra-backend` (incl. `modules/lambda/codes`), `packages/`, `ci-cd/`.
