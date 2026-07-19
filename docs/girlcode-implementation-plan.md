@@ -199,7 +199,6 @@ Indexes: `(user_id, date)` on logs; GIN optional later. **No PostGIS** until mar
 | `/girlcode360/dev/backend/api_base_url` | `https://api.dev....` |
 | `/girlcode360/dev/backend/cognito_user_pool_id` | `eu-west-2_...` |
 | `/girlcode360/dev/backend/cognito_client_id` | `...` |
-| `/girlcode360/dev/backend/zara_model_id` | `eu.amazon.nova-2-lite-v1:0` |
 | `/girlcode360/dev/web/cloudfront_distribution_id` | `E...` |
 
 **Exit:** Dev pipeline green; PWA points at Cognito + health endpoint; bottom tabs render on mobile width.  
@@ -593,7 +592,7 @@ Cut in this order — **never** cut the items in the “do not cut” list.
 | Wallet encryption | Web Crypto envelope encryption; Argon2id KDF |
 | SaMD avoidance | [MHRA software/apps guidance](https://www.gov.uk/government/publications/medical-devices-that-need-a-clinical-investigation/determining-if-a-clinical-investigations-is-required) |
 | Auth | Cognito User Pools + custom pages (`amazon-cognito-identity-js`) — **not Amplify, not Hosted UI** |
-| Nova 2 Lite | Prefer `eu.amazon.nova-2-lite-v1:0` from `eu-west-2` |
+| Nova 2 Lite | Prefer `global.amazon.nova-2-lite-v1:0` (Global CRIS) from `eu-west-2` |
 
 ---
 
@@ -603,7 +602,6 @@ Cut in this order — **never** cut the items in the “do not cut” list.
 # After AWS SSO / credentials configured
 aws ssm put-parameter --name /girlcode360/cicd/codeconnections_arn --type String --value "<arn>"
 aws secretsmanager create-secret --name girlcode360/dev/app --secret-string '{"stripe_secret_key":"","paystack_secret_key":"","vapid_private_key":""}'
-aws ssm put-parameter --name /girlcode360/dev/backend/zara_model_id --type String --value "eu.amazon.nova-2-lite-v1:0"
 
 # Repo bootstrap (illustrative)
 npm create vite@latest apps/web -- --template react-ts

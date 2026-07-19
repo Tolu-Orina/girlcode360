@@ -65,6 +65,7 @@ module "lambda" {
   dsql_enabled         = var.enable_dsql
   data_bucket_name     = module.s3_data.bucket_id
   kms_key_arn          = module.kms.key_arn
+  zara_model_id        = var.zara_model_id
 }
 
 module "apigw" {
@@ -84,7 +85,6 @@ module "ssm" {
   cognito_user_pool_id     = module.cognito.user_pool_id
   cognito_client_id        = module.cognito.client_id
   cognito_user_pool_region = var.aws_region
-  zara_model_id            = var.zara_model_id
   data_bucket_name         = module.s3_data.bucket_id
   dsql_endpoint            = module.dsql.endpoint
 }

@@ -82,8 +82,8 @@ PWA (Vite + React)
 
 | Access pattern | Model ID |
 | --- | --- |
-| EU geo inference (preferred for `eu-west-2`) | `eu.amazon.nova-2-lite-v1:0` |
-| Global CRIS | `global.amazon.nova-2-lite-v1:0` |
+| Global CRIS (preferred) | `global.amazon.nova-2-lite-v1:0` |
+| EU geo inference | `eu.amazon.nova-2-lite-v1:0` |
 | In-region (where available) | `amazon.nova-2-lite-v1:0` |
 
 Auth is **IAM on the Lambda execution role** (`bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`) — no third-party LLM API key in Secrets Manager.
@@ -227,7 +227,7 @@ Full day-by-day detail: [girlcode-implementation-plan.md](./girlcode-implementat
 
 - [ ] `packages/ai-provider` Bedrock Converse/ConverseStream client for Nova 2 Lite
 - [ ] IAM: Lambda role `bedrock:InvokeModel` + `bedrock:InvokeModelWithResponseStream` on Nova 2 Lite model ARNs
-- [ ] SSM: `/girlcode360/{env}/backend/zara_model_id` (default `eu.amazon.nova-2-lite-v1:0`), `zara_daily_free_limit`
+- [ ] Lambda env `ZARA_MODEL_ID` from TF var (default `global.amazon.nova-2-lite-v1:0`); SSM `zara_daily_free_limit` when added
 - [ ] API routes: `POST /v1/zara/chat` (stream), `GET /v1/healthlens/status`, `POST /v1/healthlens/report`, `POST /v1/healthlens/prep-card`
 - [ ] DynamoDB **or** DSQL counters for daily Zara quota (idempotent per user/day)
 - [ ] EventBridge cron: `healthlens-monthly`

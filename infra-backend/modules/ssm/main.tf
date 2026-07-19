@@ -29,10 +29,6 @@ variable "cognito_user_pool_region" {
   type = string
 }
 
-variable "zara_model_id" {
-  type = string
-}
-
 variable "data_bucket_name" {
   type = string
 }
@@ -63,12 +59,6 @@ resource "aws_ssm_parameter" "cognito_region" {
   name  = "/girlcode360/${var.environment}/backend/cognito_region"
   type  = "String"
   value = var.cognito_user_pool_region
-}
-
-resource "aws_ssm_parameter" "zara_model_id" {
-  name  = "/girlcode360/${var.environment}/backend/zara_model_id"
-  type  = "String"
-  value = var.zara_model_id
 }
 
 resource "aws_ssm_parameter" "data_bucket" {

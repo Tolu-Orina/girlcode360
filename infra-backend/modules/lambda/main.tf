@@ -41,6 +41,10 @@ variable "kms_key_arn" {
   type = string
 }
 
+variable "zara_model_id" {
+  type = string
+}
+
 data "archive_file" "api" {
   type        = "zip"
   source_dir  = "${path.module}/codes/dist"
@@ -153,6 +157,7 @@ resource "aws_lambda_function" "api" {
       DSQL_ENABLED           = tostring(var.dsql_enabled)
       DATA_BUCKET            = var.data_bucket_name
       CONSENT_POLICY_VERSION = "2026-07-v1"
+      ZARA_MODEL_ID          = var.zara_model_id
     }
   }
 }

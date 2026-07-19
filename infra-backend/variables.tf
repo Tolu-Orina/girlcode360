@@ -15,7 +15,7 @@ variable "enable_dsql" {
 
 variable "zara_model_id" {
   type    = string
-  default = "eu.amazon.nova-2-lite-v1:0"
+  default = "global.amazon.nova-2-lite-v1:0"
 }
 
 variable "cognito_callback_urls" {

@@ -8,7 +8,24 @@ phases:
       - unzip -o /tmp/tf.zip -d /usr/local/bin
   build:
     commands:
-      - cd infra-web
+      # Plan artifact is a secondary input; PrimarySource is the git tree (no tfplan).
+      - |
+        set -euo pipefail
+        PLAN_ROOT=""
+        for v in $(env | awk -F= '/^CODEBUILD_SRC_DIR_TerraformPlanOutput/ {print $1}'); do
+          PLAN_ROOT="${!v}"
+          break
+        done
+        if [ -z "${PLAN_ROOT}" ] || [ ! -f "${PLAN_ROOT}/infra-web/tfplan" ]; then
+          echo "ERROR: tfplan not found in plan artifact"
+          echo "Expected secondary input CODEBUILD_SRC_DIR_TerraformPlanOutput*"
+          env | grep '^CODEBUILD_SRC_DIR' || true
+          find /codebuild/output -name tfplan 2>/dev/null || true
+          exit 1
+        fi
+        echo "Using plan artifact at ${PLAN_ROOT}"
+        cp "${PLAN_ROOT}/infra-web/tfplan" "${CODEBUILD_SRC_DIR}/infra-web/tfplan"
+      - cd "$CODEBUILD_SRC_DIR/infra-web"
       - |
         terraform init \
           -backend-config="bucket=girlcode360-tf-state" \
