@@ -171,8 +171,8 @@ export function WalletPanel({
         doc.fileIv,
       );
       if (doc.noteCiphertext && doc.noteIv) {
-        const n = await decryptNote(dek, doc.noteCiphertext, doc.noteIv);
-        console.info("Wallet note (in-memory):", n);
+        // Decrypt in memory for viewer only — never log plaintext
+        await decryptNote(dek, doc.noteCiphertext, doc.noteIv);
       }
       const blob = new Blob([plain.buffer as ArrayBuffer], {
         type: doc.contentType,

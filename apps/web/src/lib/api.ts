@@ -21,7 +21,7 @@ import {
   type UpsertCycleDayRequest,
   type UserProfile,
 } from "../../../../packages/api-types/src/index";
-import { apiBaseUrl } from "./config";
+import { apiBaseUrl, cognitoConfig } from "./config";
 import { getCurrentSession } from "./cognito";
 
 export {
@@ -59,12 +59,19 @@ function toBase64Url(str: string): string {
 }
 
 async function authHeader(): Promise<string> {
+  const cognitoReady = Boolean(
+    cognitoConfig.userPoolId && cognitoConfig.clientId,
+  );
   try {
     const session = await getCurrentSession();
     if (session) return `Bearer ${session.getIdToken().getJwtToken()}`;
   } catch {
-    /* Cognito not configured — fall through to local dev token */
+    /* no session */
   }
+  if (cognitoReady) {
+    throw new ApiError(401, "not_authenticated");
+  }
+  // Local scaffold when Cognito env is unset
   let raw = sessionStorage.getItem("gc360.devSub");
   if (!raw) {
     raw = JSON.stringify({
@@ -93,6 +100,32 @@ async function request<T>(
       ...extraHeaders,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let code = `http_${res.status}`;
+    try {
+      const j = (await res.json()) as { error?: string };
+      if (j.error) code = j.error;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, code);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+/** Public (unauthenticated) API calls — wallet share recipients. */
+async function publicRequest<T>(
+  method: string,
+  path: string,
+): Promise<T> {
+  if (!apiBaseUrl) {
+    throw new ApiError(0, "api_base_url_missing");
+  }
+  const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${path}`, {
+    method,
+    headers: { Accept: "application/json" },
   });
   if (!res.ok) {
     let code = `http_${res.status}`;
@@ -365,18 +398,18 @@ export function revokeWalletShare(token: string) {
 }
 
 export function getPublicWalletShare(token: string) {
-  return request<
+  return publicRequest<
     import("../../../../packages/api-types/src/index").WalletSharePublic
-  >("GET", `/v1/wallet/share/${token}`);
+  >("GET", `/v1/wallet/share/${encodeURIComponent(token)}`);
 }
 
 export function getPublicWalletObject(token: string) {
-  return request<{
+  return publicRequest<{
     ciphertextB64: string;
     fileIv: string;
     contentType: string;
     filename: string;
-  }>("GET", `/v1/wallet/share/${token}/object`);
+  }>("GET", `/v1/wallet/share/${encodeURIComponent(token)}/object`);
 }
 
 /* ——— Phase 6: Zara + HealthLens ——— */

@@ -207,6 +207,7 @@ export function OnboardingPage() {
     try {
       await patchModules({ modules });
       await patchMe({ onboardingComplete: true });
+      localStorage.setItem("gc_onboarding_complete", "1");
       navigate("/app", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save modules");

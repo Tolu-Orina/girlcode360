@@ -96,6 +96,9 @@ export function CyclePage() {
       const local = await loadLocalState();
       if (!cancelled) setState(local);
       try {
+        // Drain outbox before accepting server snapshot
+        await flushOutbox();
+        if (cancelled) return;
         const remote = await getCycles();
         if (cancelled) return;
         const next = await hydrateFromServer(remote);

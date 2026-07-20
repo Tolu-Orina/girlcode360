@@ -16,14 +16,14 @@ function envPremium(sub: string): boolean {
   return list.includes(sub);
 }
 
-export function isPremium(sub: string): boolean {
+export async function isPremium(sub: string): Promise<boolean> {
   if (envPremium(sub)) return true;
   return subscriptions.get(sub)?.premium === true;
 }
 
-export function getBillingStatus(sub: string) {
+export async function getBillingStatus(sub: string) {
   const row = subscriptions.get(sub);
-  const premium = isPremium(sub);
+  const premium = await isPremium(sub);
   return {
     premium,
     provider: premium ? (row?.provider ?? (envPremium(sub) ? "dev" : null)) : null,
@@ -32,7 +32,7 @@ export function getBillingStatus(sub: string) {
   };
 }
 
-export function activatePremium(
+export async function activatePremium(
   sub: string,
   provider: BillingProvider,
   renewsAt?: string | null,
@@ -47,12 +47,12 @@ export function activatePremium(
   return getBillingStatus(sub);
 }
 
-export function deactivatePremium(sub: string) {
+export async function deactivatePremium(sub: string) {
   subscriptions.delete(sub);
   return getBillingStatus(sub);
 }
 
-export function createCheckoutSession(
+export async function createCheckoutSession(
   sub: string,
   provider: "stripe" | "paystack",
   successUrl?: string,
@@ -62,7 +62,6 @@ export function createCheckoutSession(
     successUrl ??
     process.env.WEB_APP_URL ??
     "https://app.girlcode360.local/app/account";
-  // Stub URL — wire Stripe Checkout / Paystack initialize when secrets exist
   const checkoutUrl = `${base}${base.includes("?") ? "&" : "?"}billing=pending&session=${sessionId}&provider=${provider}`;
   return {
     provider,
@@ -75,24 +74,28 @@ export function createCheckoutSession(
   };
 }
 
-export function handleBillingWebhook(
+export async function handleBillingWebhook(
   provider: "stripe" | "paystack",
   body: { sub?: string; customerId?: string; event?: string },
-): { ok: boolean; error?: string; status?: ReturnType<typeof getBillingStatus> } {
+): Promise<{
+  ok: boolean;
+  error?: string;
+  status?: Awaited<ReturnType<typeof getBillingStatus>>;
+}> {
   const sub = body.sub ?? body.customerId;
   if (!sub) return { ok: false, error: "sub_required" };
   if (body.event === "subscription.deleted" || body.event === "charge.failed") {
-    return { ok: true, status: deactivatePremium(sub) };
+    return { ok: true, status: await deactivatePremium(sub) };
   }
-  return { ok: true, status: activatePremium(sub, provider) };
+  return { ok: true, status: await activatePremium(sub, provider) };
 }
 
-export function purgeUserBilling(sub: string): void {
+export async function purgeUserBilling(sub: string): Promise<void> {
   subscriptions.delete(sub);
 }
 
-export function createPortalSession(sub: string) {
-  const status = getBillingStatus(sub);
+export async function createPortalSession(sub: string) {
+  const status = await getBillingStatus(sub);
   return {
     portalUrl:
       (process.env.WEB_APP_URL ?? "https://app.girlcode360.local") +

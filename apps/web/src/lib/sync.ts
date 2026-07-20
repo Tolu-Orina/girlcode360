@@ -11,6 +11,7 @@ import {
   idbGetMeta,
   idbMarkOutbox,
   idbPendingOutbox,
+  idbPruneOutboxDone,
   idbPutCycle,
   idbPutDay,
   idbReplaceCycles,
@@ -135,8 +136,8 @@ export async function flushOutbox(): Promise<CycleState | null> {
     const pending = await idbPendingOutbox();
     if (pending.length === 0) return loadLocalState();
 
-    // Batch under the first item's idempotency key for this flush window
-    const batchKey = pending.map((p) => p.idempotencyKey).join(":");
+    // Stable key for this exact pending set (sorted) so retries stay idempotent
+    const batchKey = [...pending.map((p) => p.idempotencyKey)].sort().join(":");
     const ops = pending.map((p) => p.op as SyncOp);
     for (const p of pending) await idbMarkOutbox(p.id, "syncing");
 
@@ -146,6 +147,7 @@ export async function flushOutbox(): Promise<CycleState | null> {
       await idbReplaceDays(res.days);
       await idbSetMeta("prediction", res.prediction);
       for (const p of pending) await idbMarkOutbox(p.id, "done");
+      await idbPruneOutboxDone();
     } catch {
       for (const p of pending) await idbMarkOutbox(p.id, "error", "sync_failed");
     }
@@ -155,6 +157,10 @@ export async function flushOutbox(): Promise<CycleState | null> {
   }
 }
 
+/**
+ * Apply server snapshot only when local outbox is empty.
+ * Otherwise flush first so offline edits are not wiped.
+ */
 export async function hydrateFromServer(
   snapshot: {
     cycles: Cycle[];
@@ -162,6 +168,13 @@ export async function hydrateFromServer(
     prediction: PredictionResponse;
   },
 ): Promise<CycleState> {
+  const pending = await idbPendingOutbox();
+  if (pending.length > 0) {
+    const flushed = await flushOutbox();
+    if (flushed) return flushed;
+    // Flush failed — keep local, do not overwrite
+    return loadLocalState();
+  }
   await idbReplaceCycles(snapshot.cycles);
   await idbReplaceDays(snapshot.days);
   await idbSetMeta("prediction", snapshot.prediction);

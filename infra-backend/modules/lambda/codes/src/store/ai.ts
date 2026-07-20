@@ -39,10 +39,10 @@ function dayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function getZaraQuota(sub: string) {
+export async function getZaraQuota(sub: string) {
   const key = `${sub}:${dayKey()}`;
   const used = quota.get(key) ?? 0;
-  if (isPremium(sub)) {
+  if (await isPremium(sub)) {
     return { used, limit: null as number | null, remaining: null as number | null };
   }
   return {
@@ -52,24 +52,26 @@ export function getZaraQuota(sub: string) {
   };
 }
 
-function consumeZaraQuota(sub: string): boolean {
-  if (isPremium(sub)) return true;
-  const q = getZaraQuota(sub);
+async function consumeZaraQuota(sub: string): Promise<boolean> {
+  if (await isPremium(sub)) return true;
+  const q = await getZaraQuota(sub);
   if ((q.remaining ?? 0) <= 0) return false;
   const key = `${sub}:${dayKey()}`;
   quota.set(key, (quota.get(key) ?? 0) + 1);
   return true;
 }
 
-export function assembleZaraContext(sub: string): Record<string, unknown> {
-  const profile = getUser(sub);
-  const cycles = listCycles(sub);
+export async function assembleZaraContext(
+  sub: string,
+): Promise<Record<string, unknown>> {
+  const profile = await getUser(sub);
+  const cycles = await listCycles(sub);
   const starts = cycles.map((c) => c.startDate).sort();
   const intervals: number[] = [];
   for (let i = 1; i < starts.length; i++) {
     intervals.push(daysBetween(starts[i - 1]!, starts[i]!));
   }
-  const days = listDays(sub).slice(-45);
+  const days = (await listDays(sub)).slice(-45);
   const symptomCounts = new Map<string, number>();
   for (const d of days) {
     for (const s of d.symptomIds) {
@@ -86,8 +88,8 @@ export function assembleZaraContext(sub: string): Record<string, unknown> {
       ? Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length)
       : null;
 
-  const ttc = ttcStatus(sub);
-  const preg = getPregnancy(sub);
+  const ttc = await ttcStatus(sub);
+  const preg = await getPregnancy(sub);
 
   const ctx = {
     market: profile?.market ?? "UK",
@@ -103,7 +105,6 @@ export function assembleZaraContext(sub: string): Record<string, unknown> {
     last_logged: days[days.length - 1]?.date ?? null,
   };
   const json = JSON.stringify(ctx);
-  // Cap ~4KB
   return json.length > 4000
     ? { ...ctx, recent_symptoms: recent_symptoms.slice(0, 3), _truncated: true }
     : ctx;
@@ -117,9 +118,9 @@ export async function zaraChat(
   reply: string;
   crisis: boolean;
   stub: boolean;
-  quota: ReturnType<typeof getZaraQuota>;
+  quota: Awaited<ReturnType<typeof getZaraQuota>>;
 }> {
-  const profile = getUser(sub);
+  const profile = await getUser(sub);
   const market = (profile?.market ?? "UK") as Market;
 
   if (detectCrisis(message)) {
@@ -127,17 +128,17 @@ export async function zaraChat(
       reply: crisisMessage(market),
       crisis: true,
       stub: false,
-      quota: getZaraQuota(sub),
+      quota: await getZaraQuota(sub),
     };
   }
 
-  if (!consumeZaraQuota(sub)) {
+  if (!(await consumeZaraQuota(sub))) {
     return {
       reply:
         "You’ve reached today’s free Zara conversations (3). Premium unlocks unlimited chats, or try again tomorrow.",
       crisis: false,
       stub: true,
-      quota: getZaraQuota(sub),
+      quota: await getZaraQuota(sub),
     };
   }
 
@@ -147,7 +148,7 @@ export async function zaraChat(
       ? [
           {
             role: "user" as const,
-            content: `Health summary (pseudonymised JSON):\n${JSON.stringify(assembleZaraContext(sub))}\n\nQuestion: ${message}`,
+            content: `Health summary (pseudonymised JSON):\n${JSON.stringify(await assembleZaraContext(sub))}\n\nQuestion: ${message}`,
           },
         ]
       : [{ role: "user" as const, content: message }];
@@ -157,24 +158,24 @@ export async function zaraChat(
     reply: result.text,
     crisis: false,
     stub: result.stub,
-    quota: getZaraQuota(sub),
+    quota: await getZaraQuota(sub),
   };
 }
 
-function lensInput(sub: string) {
-  const profile = getUser(sub);
-  const cycles = listCycles(sub);
+async function lensInput(sub: string) {
+  const profile = await getUser(sub);
+  const cycles = await listCycles(sub);
   const starts = cycles.map((c) => c.startDate).sort();
   const intervals: number[] = [];
   for (let i = 1; i < starts.length; i++) {
     intervals.push(daysBetween(starts[i - 1]!, starts[i]!));
   }
-  const days = listDays(sub);
+  const days = await listDays(sub);
   const first = days[0]?.date ?? starts[0];
   const last = days[days.length - 1]?.date ?? starts[starts.length - 1];
   const loggingSpanDays =
     first && last ? Math.max(0, daysBetween(first, last)) : 0;
-  const pregDays = listPregnancyDays(sub);
+  const pregDays = await listPregnancyDays(sub);
   const kicksLast7Days = pregDays
     .slice(-7)
     .reduce((n, d) => n + (d.kicks ?? 0), 0);
@@ -192,8 +193,8 @@ function lensInput(sub: string) {
   };
 }
 
-export function getHealthLensStatus(sub: string) {
-  const input = lensInput(sub);
+export async function getHealthLensStatus(sub: string) {
+  const input = await lensInput(sub);
   const act = healthLensActivation(input.cycleCount, input.loggingSpanDays);
   const prefs = hlPrefs.get(sub) ?? {
     populationLearningConsent: false,
@@ -202,7 +203,10 @@ export function getHealthLensStatus(sub: string) {
   return { ...act, populationLearningConsent: prefs.populationLearningConsent };
 }
 
-export function setPopulationLearningConsent(sub: string, granted: boolean) {
+export async function setPopulationLearningConsent(
+  sub: string,
+  granted: boolean,
+) {
   const cur = hlPrefs.get(sub) ?? {
     populationLearningConsent: false,
     lastOndemandAt: null,
@@ -222,10 +226,10 @@ export async function generateHealthLensReport(sub: string): Promise<
     }
   | { error: string }
 > {
-  const status = getHealthLensStatus(sub);
+  const status = await getHealthLensStatus(sub);
   if (!status.activated) return { error: "not_activated" };
 
-  if (!isPremium(sub)) {
+  if (!(await isPremium(sub))) {
     const prefs = hlPrefs.get(sub);
     if (
       prefs?.lastOndemandAt &&
@@ -235,13 +239,13 @@ export async function generateHealthLensReport(sub: string): Promise<
     }
   }
 
-  const findings = runHealthLensRules(lensInput(sub));
+  const findings = runHealthLensRules(await lensInput(sub));
   const confidence =
     findings.find((f) => f.confidence === "High")?.confidence ??
     findings.find((f) => f.confidence === "Medium")?.confidence ??
     "Low";
 
-  const profile = getUser(sub);
+  const profile = await getUser(sub);
   const market = (profile?.market ?? "UK") as Market;
   const system = `Summarise these wellness rule findings for the user. Never diagnose. Market=${market}.`;
   const result = await converseNova({
@@ -276,14 +280,14 @@ export async function generateHealthLensReport(sub: string): Promise<
   return report;
 }
 
-export function latestHealthLensReport(sub: string) {
+export async function latestHealthLensReport(sub: string) {
   return (reports.get(sub) ?? [])[0] ?? null;
 }
 
-export function buildPrepCard(sub: string, questions: string[]) {
-  const findings = runHealthLensRules(lensInput(sub));
-  const cycles = listCycles(sub);
-  const profile = getUser(sub);
+export async function buildPrepCard(sub: string, questions: string[]) {
+  const findings = runHealthLensRules(await lensInput(sub));
+  const cycles = await listCycles(sub);
+  const profile = await getUser(sub);
   const cycleSummary = `${cycles.length} cycles logged; modules: ${(profile?.modules ?? []).join(", ") || "none"}`;
   const text = buildPrepCardText({
     market: profile?.market ?? "UK",
@@ -301,15 +305,15 @@ export function buildPrepCard(sub: string, questions: string[]) {
 export const ZARA_DISCLAIMER =
   "AI-generated wellness guidance — not a diagnosis or medical advice. Speak with a clinician for personal medical decisions.";
 
-export function countHealthLensReports(sub: string): number {
+export async function countHealthLensReports(sub: string): Promise<number> {
   return (reports.get(sub) ?? []).length;
 }
 
-export function listHealthLensReportsForExport(sub: string) {
+export async function listHealthLensReportsForExport(sub: string) {
   return reports.get(sub) ?? [];
 }
 
-export function purgeUserAi(sub: string): void {
+export async function purgeUserAi(sub: string): Promise<void> {
   reports.delete(sub);
   hlPrefs.delete(sub);
   for (const key of [...quota.keys()]) {

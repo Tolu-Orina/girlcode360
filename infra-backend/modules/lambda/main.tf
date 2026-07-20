@@ -124,12 +124,10 @@ resource "aws_iam_role_policy" "app" {
         Resource = ["*"]
       },
       {
-        # App connections use a custom DB role + DbConnect once wired.
-        # Admin DDL stays in CI (migrate-dsql.mjs).
+        # App uses custom DB role + DbConnect. Admin DDL stays in CI migrate-dsql.mjs.
         Effect = "Allow"
         Action = [
-          "dsql:DbConnect",
-          "dsql:DbConnectAdmin"
+          "dsql:DbConnect"
         ]
         Resource = ["*"]
       }
@@ -155,6 +153,7 @@ resource "aws_lambda_function" "api" {
       COGNITO_CLIENT_ID      = var.cognito_client_id
       DSQL_ENDPOINT          = var.dsql_endpoint
       DSQL_ENABLED           = tostring(var.dsql_enabled)
+      DSQL_USER              = "girlcode360_app"
       DATA_BUCKET            = var.data_bucket_name
       CONSENT_POLICY_VERSION = "2026-07-v1"
       ZARA_MODEL_ID          = var.zara_model_id
@@ -172,4 +171,12 @@ output "function_name" {
 
 output "function_arn" {
   value = aws_lambda_function.api.arn
+}
+
+output "role_arn" {
+  value = aws_iam_role.lambda.arn
+}
+
+output "role_name" {
+  value = aws_iam_role.lambda.name
 }

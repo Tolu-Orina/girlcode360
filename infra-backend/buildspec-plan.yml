@@ -16,7 +16,7 @@ phases:
           -backend-config="key=backend/${TF_VAR_environment}/terraform.tfstate" \
           -backend-config="region=${AWS_DEFAULT_REGION}" \
           -backend-config="dynamodb_table=girlcode360-tf-lock"
-      - terraform plan -out=tfplan
+      - terraform plan -var="enable_dsql=true" -out=tfplan
 artifacts:
   files:
     - infra-backend/tfplan

@@ -35,14 +35,16 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function getPregnancy(sub: string): PregnancyProfile | undefined {
+export async function getPregnancy(
+  sub: string,
+): Promise<PregnancyProfile | undefined> {
   return pregnancyByUser.get(sub);
 }
 
-export function initPregnancy(
+export async function initPregnancy(
   sub: string,
   body: InitPregnancyRequest,
-): PregnancyProfile {
+): Promise<PregnancyProfile> {
   const edd = calculateEdd(body.anchorDate, body.method);
   const now = new Date().toISOString();
   const existing = pregnancyByUser.get(sub);
@@ -59,8 +61,8 @@ export function initPregnancy(
   return profile;
 }
 
-export function pregnancyStatus(sub: string) {
-  const profile = getPregnancy(sub);
+export async function pregnancyStatus(sub: string) {
+  const profile = await getPregnancy(sub);
   if (!profile) return null;
   const week = gestationalWeek(
     profile.anchorDate,
@@ -79,16 +81,16 @@ function pregDayMap(sub: string): Map<string, PregnancyDayLog> {
   return m;
 }
 
-export function listPregnancyDays(sub: string): PregnancyDayLog[] {
+export async function listPregnancyDays(sub: string): Promise<PregnancyDayLog[]> {
   return [...pregDayMap(sub).values()].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
 }
 
-export function upsertPregnancyDay(
+export async function upsertPregnancyDay(
   sub: string,
   body: UpsertPregnancyDayRequest,
-): PregnancyDayLog {
+): Promise<PregnancyDayLog> {
   const map = pregDayMap(sub);
   const existing = map.get(body.date);
   const now = new Date().toISOString();
@@ -111,16 +113,16 @@ export function upsertPregnancyDay(
   return next;
 }
 
-export function listAppointments(sub: string): Appointment[] {
+export async function listAppointments(sub: string): Promise<Appointment[]> {
   return [...(appointmentsByUser.get(sub) ?? [])].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
 }
 
-export function createAppointment(
+export async function createAppointment(
   sub: string,
   body: CreateAppointmentRequest,
-): Appointment {
+): Promise<Appointment> {
   const now = new Date().toISOString();
   const appt: Appointment = {
     id: crypto.randomUUID(),
@@ -140,7 +142,10 @@ export function createAppointment(
   return appt;
 }
 
-export function deleteAppointment(sub: string, id: string): boolean {
+export async function deleteAppointment(
+  sub: string,
+  id: string,
+): Promise<boolean> {
   const list = appointmentsByUser.get(sub) ?? [];
   const next = list.filter((a) => a.id !== id);
   if (next.length === list.length) return false;
@@ -148,15 +153,18 @@ export function deleteAppointment(sub: string, id: string): boolean {
   return true;
 }
 
-export function getTtc(sub: string): TtcProfile | undefined {
+export async function getTtc(sub: string): Promise<TtcProfile | undefined> {
   return ttcByUser.get(sub);
 }
 
-export function initTtc(sub: string, startedOn?: string): {
+export async function initTtc(
+  sub: string,
+  startedOn?: string,
+): Promise<{
   profile: TtcProfile;
   monthsTrying: number;
   twelveMonthPrompt: string | null;
-} {
+}> {
   const now = new Date().toISOString();
   const start = startedOn ?? todayIso();
   const profile: TtcProfile = {
@@ -172,8 +180,8 @@ export function initTtc(sub: string, startedOn?: string): {
   };
 }
 
-export function ttcStatus(sub: string) {
-  const profile = getTtc(sub);
+export async function ttcStatus(sub: string) {
+  const profile = await getTtc(sub);
   if (!profile) return null;
   const monthsTrying = ttcMonthCount(profile.startedOn, todayIso());
   return {
@@ -193,16 +201,16 @@ function ttcDayMap(sub: string): Map<string, TtcDayLog> {
   return m;
 }
 
-export function listTtcDays(sub: string): TtcDayLog[] {
+export async function listTtcDays(sub: string): Promise<TtcDayLog[]> {
   return [...ttcDayMap(sub).values()].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
 }
 
-export function upsertTtcDay(
+export async function upsertTtcDay(
   sub: string,
   body: UpsertTtcDayRequest,
-): TtcDayLog | { error: string } {
+): Promise<TtcDayLog | { error: string }> {
   const intimacy = body.intimacy ?? false;
   if (intimacy && body.intimacyConsent !== true) {
     return { error: "intimacy_consent_required" };
@@ -222,13 +230,15 @@ export function upsertTtcDay(
     note: body.note !== undefined ? body.note : (existing?.note ?? null),
     updatedAt: now,
   };
-  // Clearing intimacy
   if (body.intimacy === false) next.intimacy = false;
   map.set(body.date, next);
   return next;
 }
 
-export function deleteTtcIntimacy(sub: string, date: string): boolean {
+export async function deleteTtcIntimacy(
+  sub: string,
+  date: string,
+): Promise<boolean> {
   const map = ttcDayMap(sub);
   const existing = map.get(date);
   if (!existing) return false;
@@ -240,8 +250,8 @@ export function deleteTtcIntimacy(sub: string, date: string): boolean {
   return true;
 }
 
-export function fertileForUser(sub: string) {
-  const cycles = listCycles(sub);
+export async function fertileForUser(sub: string) {
+  const cycles = await listCycles(sub);
   if (cycles.length < 2) {
     return {
       enoughData: false,
@@ -254,7 +264,7 @@ export function fertileForUser(sub: string) {
         "Log at least two periods to estimate a fertile window. Estimates are not a guarantee of fertility.",
     };
   }
-  const prediction = buildPrediction(sub);
+  const prediction = await buildPrediction(sub);
   const last = cycles[cycles.length - 1]!;
   const window = calculateFertileWindow(
     last.startDate,
@@ -274,7 +284,7 @@ export function fertileForUser(sub: string) {
   return { ...window, enoughData: true };
 }
 
-export function defaultNotifPrefs(): NotificationPrefs {
+export async function defaultNotifPrefs(): Promise<NotificationPrefs> {
   return {
     masterEnabled: true,
     period: true,
@@ -288,15 +298,17 @@ export function defaultNotifPrefs(): NotificationPrefs {
   };
 }
 
-export function getNotificationPrefs(sub: string): NotificationPrefs {
-  return notifByUser.get(sub) ?? defaultNotifPrefs();
+export async function getNotificationPrefs(
+  sub: string,
+): Promise<NotificationPrefs> {
+  return notifByUser.get(sub) ?? (await defaultNotifPrefs());
 }
 
-export function patchNotificationPrefs(
+export async function patchNotificationPrefs(
   sub: string,
   patch: PatchNotificationPrefsRequest,
-): NotificationPrefs {
-  const cur = getNotificationPrefs(sub);
+): Promise<NotificationPrefs> {
+  const cur = await getNotificationPrefs(sub);
   const next: NotificationPrefs = {
     ...cur,
     ...patch,
@@ -306,11 +318,11 @@ export function patchNotificationPrefs(
   return next;
 }
 
-export function emergencyNumbers(market: Market) {
+export async function emergencyNumbers(market: Market) {
   return EMERGENCY_BY_MARKET[market] ?? EMERGENCY_BY_MARKET.UK;
 }
 
-export function purgeUserJourney(sub: string): void {
+export async function purgeUserJourney(sub: string): Promise<void> {
   pregnancyByUser.delete(sub);
   pregDaysByUser.delete(sub);
   appointmentsByUser.delete(sub);

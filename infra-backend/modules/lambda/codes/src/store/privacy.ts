@@ -52,62 +52,63 @@ function addHoursIso(ms: number): string {
   return new Date(Date.now() + ms).toISOString();
 }
 
-export function getMyData(sub: string) {
-  const profile = getUser(sub);
+export async function getMyData(sub: string) {
+  const profile = await getUser(sub);
   if (!profile) return null;
   return {
     profile,
-    consents: latestConsentsByPurpose(sub),
+    consents: await latestConsentsByPurpose(sub),
     modules: profile.modules,
     counts: {
-      cycles: listCycles(sub).length,
-      cycleDays: listDays(sub).length,
-      biometrics: listBiometrics(sub).length,
-      medications: listMedications(sub).length,
-      walletDocs: countWalletDocsAll(sub),
-      pregnancyDays: listPregnancyDays(sub).length,
-      ttcDays: listTtcDays(sub).length,
-      healthLensReports: countHealthLensReports(sub),
+      cycles: (await listCycles(sub)).length,
+      cycleDays: (await listDays(sub)).length,
+      biometrics: (await listBiometrics(sub)).length,
+      medications: (await listMedications(sub)).length,
+      walletDocs: await countWalletDocsAll(sub),
+      pregnancyDays: (await listPregnancyDays(sub)).length,
+      ttcDays: (await listTtcDays(sub)).length,
+      healthLensReports: await countHealthLensReports(sub),
     },
-    premium: isPremium(sub),
-    deletion: getDeletion(sub),
+    premium: await isPremium(sub),
+    deletion: await getDeletion(sub),
     exportedAt: new Date().toISOString(),
   };
 }
 
-export function buildExportPayload(sub: string): Record<string, unknown> {
+export async function buildExportPayload(
+  sub: string,
+): Promise<Record<string, unknown>> {
   return {
     exportedAt: new Date().toISOString(),
-    profile: getUser(sub),
-    consents: listConsents(sub),
-    cycles: listCycles(sub),
-    cycleDays: listDays(sub),
-    biometrics: listBiometrics(sub),
-    medications: listMedications(sub),
-    pregnancy: pregnancyStatus(sub),
-    pregnancyDays: listPregnancyDays(sub),
-    appointments: listAppointments(sub),
-    ttc: ttcStatus(sub),
-    ttcDays: listTtcDays(sub),
-    notificationPrefs: getNotificationPrefs(sub),
-    walletDocs: listWalletDocs(sub).map((d) => ({
+    profile: await getUser(sub),
+    consents: await listConsents(sub),
+    cycles: await listCycles(sub),
+    cycleDays: await listDays(sub),
+    biometrics: await listBiometrics(sub),
+    medications: await listMedications(sub),
+    pregnancy: await pregnancyStatus(sub),
+    pregnancyDays: await listPregnancyDays(sub),
+    appointments: await listAppointments(sub),
+    ttc: await ttcStatus(sub),
+    ttcDays: await listTtcDays(sub),
+    notificationPrefs: await getNotificationPrefs(sub),
+    walletDocs: (await listWalletDocs(sub)).map((d) => ({
       id: d.id,
       filename: d.filename,
       category: d.category,
       contentType: d.contentType,
       sizeBytes: d.sizeBytes,
       createdAt: d.createdAt,
-      // ciphertext omitted from JSON export summary — download via wallet
     })),
-    healthLensReports: listHealthLensReportsForExport(sub),
-    billing: getBillingStatus(sub),
+    healthLensReports: await listHealthLensReportsForExport(sub),
+    billing: await getBillingStatus(sub),
   };
 }
 
-export function createExportJob(sub: string) {
+export async function createExportJob(sub: string) {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const payload = buildExportPayload(sub);
+  const payload = await buildExportPayload(sub);
   const job: ExportRow & { userSub: string } = {
     id,
     userSub: sub,
@@ -128,7 +129,7 @@ export function createExportJob(sub: string) {
   };
 }
 
-export function getExportJob(sub: string, id: string) {
+export async function getExportJob(sub: string, id: string) {
   const job = exportsById.get(id);
   if (!job || job.userSub !== sub) return null;
   return {
@@ -141,11 +142,11 @@ export function getExportJob(sub: string, id: string) {
   };
 }
 
-export function getDeletion(sub: string): DeletionRow | null {
+export async function getDeletion(sub: string): Promise<DeletionRow | null> {
   return deletions.get(sub) ?? null;
 }
 
-export function requestDeletion(sub: string) {
+export async function requestDeletion(sub: string) {
   const existing = deletions.get(sub);
   if (existing?.status === "cooling_off") return existing;
   const now = new Date().toISOString();
@@ -161,7 +162,7 @@ export function requestDeletion(sub: string) {
   return row;
 }
 
-export function cancelDeletion(sub: string) {
+export async function cancelDeletion(sub: string) {
   const row = deletions.get(sub);
   if (!row || row.status !== "cooling_off") return null;
   const next: DeletionRow = {
@@ -173,24 +174,24 @@ export function cancelDeletion(sub: string) {
   return next;
 }
 
-function wipeUser(sub: string) {
-  purgeUserAi(sub);
-  purgeUserWallet(sub);
-  purgeUserJourney(sub);
-  purgeUserBilling(sub);
-  purgeUserMemory(sub);
+async function wipeUser(sub: string) {
+  await purgeUserAi(sub);
+  await purgeUserWallet(sub);
+  await purgeUserJourney(sub);
+  await purgeUserBilling(sub);
+  await purgeUserMemory(sub);
   for (const [id, job] of [...exportsById.entries()]) {
     if (job.userSub === sub) exportsById.delete(id);
   }
 }
 
 /** Process cooling-off expiries (also callable from EventBridge later). */
-export function runDeletionPurge(now = Date.now()): number {
+export async function runDeletionPurge(now = Date.now()): Promise<number> {
   let n = 0;
   for (const [sub, row] of [...deletions.entries()]) {
     if (row.status !== "cooling_off") continue;
     if (Date.parse(row.purgeAfter) > now) continue;
-    wipeUser(sub);
+    await wipeUser(sub);
     deletions.set(sub, {
       ...row,
       purgedAt: new Date().toISOString(),
@@ -202,9 +203,9 @@ export function runDeletionPurge(now = Date.now()): number {
 }
 
 /** Dev helper: force purge now (skips remaining cooling-off). */
-export function forcePurgeNow(sub: string) {
+export async function forcePurgeNow(sub: string) {
   const row = deletions.get(sub);
-  wipeUser(sub);
+  await wipeUser(sub);
   if (row) {
     deletions.set(sub, {
       ...row,

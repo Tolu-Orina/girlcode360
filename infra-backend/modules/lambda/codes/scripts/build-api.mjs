@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { build } from "esbuild";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,17 @@ await build({
   target: "node20",
   format: "cjs",
   outfile: join(outdir, "index.js"),
+  external: ["pg-native"],
+  // Replace export object so Lambda gets a real handler function (getter snapshot race).
+  footer: {
+    js: "module.exports = { handler };",
+  },
 });
+
+// Zip source is codes/dist only — mark CJS so local require() works under type:module parent.
+writeFileSync(
+  join(outdir, "package.json"),
+  JSON.stringify({ type: "commonjs" }, null, 2),
+);
 
 console.log("Built infra-backend/modules/lambda/codes/dist/index.js");

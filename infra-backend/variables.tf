@@ -9,7 +9,7 @@ variable "aws_region" {
 
 variable "enable_dsql" {
   type        = bool
-  description = "Create Aurora DSQL cluster (Phase 0 can set false until account/region ready)"
+  description = "Provision Aurora DSQL cluster and wire Lambda DSQL_ENABLED (always on for GirlCode360)"
   default     = true
 }
 

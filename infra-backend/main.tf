@@ -100,3 +100,12 @@ output "cognito_user_pool_id" {
 output "cognito_client_id" {
   value = module.cognito.client_id
 }
+
+output "lambda_role_arn" {
+  value       = module.lambda.role_arn
+  description = "IAM role ARN mapped to DSQL app role girlcode360_app via migrate-dsql.mjs"
+}
+
+output "dsql_endpoint" {
+  value = module.dsql.endpoint
+}

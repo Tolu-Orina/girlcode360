@@ -47,17 +47,17 @@ export const PCOS_ARTICLES = [
   },
 ];
 
-export function pcosInsightsForUser(sub: string) {
-  const cycles = listCycles(sub);
+export async function pcosInsightsForUser(sub: string) {
+  const cycles = await listCycles(sub);
   const starts = cycles.map((c) => c.startDate).sort();
   const intervals: number[] = [];
   for (let i = 1; i < starts.length; i++) {
     intervals.push(daysBetween(starts[i - 1]!, starts[i]!));
   }
-  const days = listDays(sub);
+  const days = await listDays(sub);
   const recent = days.slice(-60);
   const recentSymptomIds = recent.flatMap((d) => d.symptomIds);
-  const bios = listBiometrics(sub);
+  const bios = await listBiometrics(sub);
   const recentStressScores = bios
     .slice(-30)
     .map((b) => b.stress)

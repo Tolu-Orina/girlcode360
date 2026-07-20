@@ -5,8 +5,8 @@ import {
 import { listCycles } from "../store/memory";
 import type { Cycle, PredictionResponse } from "../types";
 
-export function buildPrediction(sub: string): PredictionResponse {
-  const cycles = listCycles(sub);
+export async function buildPrediction(sub: string): Promise<PredictionResponse> {
+  const cycles = await listCycles(sub);
   const override =
     [...cycles].reverse().find((c) => c.cycleLengthOverride != null)
       ?.cycleLengthOverride ?? null;

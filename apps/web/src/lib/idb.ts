@@ -160,6 +160,22 @@ export async function idbMarkOutbox(
   });
 }
 
+export async function idbPruneOutboxDone(): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("outbox", "readwrite");
+    const store = tx.objectStore("outbox");
+    const req = store.getAll();
+    req.onsuccess = () => {
+      for (const row of req.result as OutboxItem[]) {
+        if (row.status === "done") store.delete(row.id);
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function idbReplaceCycles(cycles: unknown[]): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {

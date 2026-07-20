@@ -1,3 +1,6 @@
+import { isDsqlEnabled } from "../db/client";
+import * as dsqlCycles from "./dsql/cycles";
+import * as dsqlUsers from "./dsql/users";
 import type {
   BiometricLog,
   ConsentPurpose,
@@ -25,14 +28,16 @@ const cyclesByUser = new Map<string, Cycle[]>();
 const daysByUser = new Map<string, Map<string, CycleDay>>();
 const idempotency = new Map<string, unknown>();
 
-export function getUser(sub: string): UserProfile | undefined {
+export async function getUser(sub: string): Promise<UserProfile | undefined> {
+  if (isDsqlEnabled()) return dsqlUsers.getUser(sub);
   return users.get(sub);
 }
 
-export function upsertUser(
+export async function upsertUser(
   sub: string,
   patch: Partial<UserProfile> & { email?: string },
-): UserProfile {
+): Promise<UserProfile> {
+  if (isDsqlEnabled()) return dsqlUsers.upsertUser(sub, patch);
   const now = new Date().toISOString();
   const existing = users.get(sub);
   const next: UserProfile = {
@@ -51,17 +56,24 @@ export function upsertUser(
   return next;
 }
 
-export function setModules(sub: string, modules: HealthModule[]): UserProfile {
+export async function setModules(
+  sub: string,
+  modules: HealthModule[],
+): Promise<UserProfile> {
+  if (isDsqlEnabled()) return dsqlUsers.setModules(sub, modules);
   if (!users.get(sub)) throw new Error("USER_NOT_FOUND");
   return upsertUser(sub, { modules });
 }
 
-export function addConsents(
+export async function addConsents(
   sub: string,
   jurisdiction: Market,
   policyVersion: string,
   items: Array<{ purpose: ConsentPurpose; granted: boolean }>,
-): ConsentRecord[] {
+): Promise<ConsentRecord[]> {
+  if (isDsqlEnabled()) {
+    return dsqlUsers.addConsents(sub, jurisdiction, policyVersion, items);
+  }
   const now = new Date().toISOString();
   const rows: ConsentRecord[] = items.map((item) => ({
     id: crypto.randomUUID(),
@@ -76,12 +88,16 @@ export function addConsents(
   return rows;
 }
 
-export function listConsents(sub: string): ConsentRecord[] {
+export async function listConsents(sub: string): Promise<ConsentRecord[]> {
+  if (isDsqlEnabled()) return dsqlUsers.listConsents(sub);
   return consents.get(sub) ?? [];
 }
 
-export function latestConsentsByPurpose(sub: string): ConsentRecord[] {
-  const all = listConsents(sub);
+export async function latestConsentsByPurpose(
+  sub: string,
+): Promise<ConsentRecord[]> {
+  if (isDsqlEnabled()) return dsqlUsers.latestConsentsByPurpose(sub);
+  const all = await listConsents(sub);
   const map = new Map<ConsentPurpose, ConsentRecord>();
   for (const row of all) map.set(row.purpose, row);
   return [...map.values()];
@@ -91,15 +107,24 @@ function sortCycles(list: Cycle[]): Cycle[] {
   return [...list].sort((a, b) => a.startDate.localeCompare(b.startDate));
 }
 
-export function listCycles(sub: string): Cycle[] {
+export async function listCycles(sub: string): Promise<Cycle[]> {
+  if (isDsqlEnabled()) return dsqlCycles.listCycles(sub);
   return sortCycles(cyclesByUser.get(sub) ?? []);
 }
 
-export function getCycle(sub: string, id: string): Cycle | undefined {
+export async function getCycle(
+  sub: string,
+  id: string,
+): Promise<Cycle | undefined> {
+  if (isDsqlEnabled()) return dsqlCycles.getCycle(sub, id);
   return (cyclesByUser.get(sub) ?? []).find((c) => c.id === id);
 }
 
-export function createCycle(sub: string, body: CreateCycleRequest): Cycle {
+export async function createCycle(
+  sub: string,
+  body: CreateCycleRequest,
+): Promise<Cycle> {
+  if (isDsqlEnabled()) return dsqlCycles.createCycle(sub, body);
   const now = new Date().toISOString();
   const cycle: Cycle = {
     id: crypto.randomUUID(),
@@ -115,18 +140,19 @@ export function createCycle(sub: string, body: CreateCycleRequest): Cycle {
   return cycle;
 }
 
-export function upsertCycleWithId(
+export async function upsertCycleWithId(
   sub: string,
   id: string,
   body: CreateCycleRequest,
-): Cycle {
-  const existing = getCycle(sub, id);
+): Promise<Cycle> {
+  if (isDsqlEnabled()) return dsqlCycles.upsertCycleWithId(sub, id, body);
+  const existing = await getCycle(sub, id);
   if (existing) {
-    return patchCycle(sub, id, {
+    return (await patchCycle(sub, id, {
       startDate: body.startDate,
       endDate: body.endDate,
       cycleLengthOverride: body.cycleLengthOverride,
-    })!;
+    }))!;
   }
   const now = new Date().toISOString();
   const cycle: Cycle = {
@@ -143,11 +169,12 @@ export function upsertCycleWithId(
   return cycle;
 }
 
-export function patchCycle(
+export async function patchCycle(
   sub: string,
   id: string,
   patch: PatchCycleRequest,
-): Cycle | undefined {
+): Promise<Cycle | undefined> {
+  if (isDsqlEnabled()) return dsqlCycles.patchCycle(sub, id, patch);
   const list = cyclesByUser.get(sub) ?? [];
   const idx = list.findIndex((c) => c.id === id);
   if (idx < 0) return undefined;
@@ -167,7 +194,8 @@ export function patchCycle(
   return next;
 }
 
-export function deleteCycle(sub: string, id: string): boolean {
+export async function deleteCycle(sub: string, id: string): Promise<boolean> {
+  if (isDsqlEnabled()) return dsqlCycles.deleteCycle(sub, id);
   const list = cyclesByUser.get(sub) ?? [];
   const next = list.filter((c) => c.id !== id);
   if (next.length === list.length) return false;
@@ -184,11 +212,12 @@ function dayMap(sub: string): Map<string, CycleDay> {
   return m;
 }
 
-export function listDays(
+export async function listDays(
   sub: string,
   from?: string,
   to?: string,
-): CycleDay[] {
+): Promise<CycleDay[]> {
+  if (isDsqlEnabled()) return dsqlCycles.listDays(sub, from, to);
   const all = [...dayMap(sub).values()].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
@@ -199,10 +228,11 @@ export function listDays(
   });
 }
 
-export function upsertDay(
+export async function upsertDay(
   sub: string,
   body: UpsertCycleDayRequest,
-): CycleDay {
+): Promise<CycleDay> {
+  if (isDsqlEnabled()) return dsqlCycles.upsertDay(sub, body);
   const map = dayMap(sub);
   const existing = map.get(body.date);
   const now = new Date().toISOString();
@@ -221,18 +251,20 @@ export function upsertDay(
   return next;
 }
 
-export function getIdempotent(
+export async function getIdempotent(
   sub: string,
   key: string,
-): unknown | undefined {
+): Promise<unknown | undefined> {
+  if (isDsqlEnabled()) return dsqlCycles.getIdempotent(sub, key);
   return idempotency.get(`${sub}:${key}`);
 }
 
-export function setIdempotent(
+export async function setIdempotent(
   sub: string,
   key: string,
   response: unknown,
-): void {
+): Promise<void> {
+  if (isDsqlEnabled()) return dsqlCycles.setIdempotent(sub, key, response);
   idempotency.set(`${sub}:${key}`, response);
 }
 
@@ -254,11 +286,11 @@ function bioMap(sub: string): Map<string, BiometricLog> {
   return m;
 }
 
-export function listBiometrics(
+export async function listBiometrics(
   sub: string,
   from?: string,
   to?: string,
-): BiometricLog[] {
+): Promise<BiometricLog[]> {
   return [...bioMap(sub).values()]
     .filter((b) => {
       if (from && b.date < from) return false;
@@ -268,10 +300,10 @@ export function listBiometrics(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function upsertBiometric(
+export async function upsertBiometric(
   sub: string,
   body: UpsertBiometricRequest,
-): BiometricLog {
+): Promise<BiometricLog> {
   const map = bioMap(sub);
   const existing = map.get(body.date);
   const now = new Date().toISOString();
@@ -297,16 +329,18 @@ export function upsertBiometric(
   return next;
 }
 
-export function listMedications(sub: string): MedicationReminder[] {
+export async function listMedications(
+  sub: string,
+): Promise<MedicationReminder[]> {
   return [...(medsByUser.get(sub) ?? [])].sort((a, b) =>
     a.timeLocal.localeCompare(b.timeLocal),
   );
 }
 
-export function createMedication(
+export async function createMedication(
   sub: string,
   body: CreateMedicationRequest,
-): MedicationReminder {
+): Promise<MedicationReminder> {
   const now = new Date().toISOString();
   const med: MedicationReminder = {
     id: crypto.randomUUID(),
@@ -324,11 +358,11 @@ export function createMedication(
   return med;
 }
 
-export function patchMedication(
+export async function patchMedication(
   sub: string,
   id: string,
   patch: PatchMedicationRequest,
-): MedicationReminder | undefined {
+): Promise<MedicationReminder | undefined> {
   const list = medsByUser.get(sub) ?? [];
   const idx = list.findIndex((m) => m.id === id);
   if (idx < 0) return undefined;
@@ -347,7 +381,10 @@ export function patchMedication(
   return next;
 }
 
-export function deleteMedication(sub: string, id: string): boolean {
+export async function deleteMedication(
+  sub: string,
+  id: string,
+): Promise<boolean> {
   const list = medsByUser.get(sub) ?? [];
   const next = list.filter((m) => m.id !== id);
   if (next.length === list.length) return false;
@@ -355,10 +392,10 @@ export function deleteMedication(sub: string, id: string): boolean {
   return true;
 }
 
-export function savePushSubscription(
+export async function savePushSubscription(
   sub: string,
   body: PushSubscriptionRequest,
-): { id: string; endpoint: string } {
+): Promise<{ id: string; endpoint: string }> {
   const list = pushByUser.get(sub) ?? [];
   const existing = list.find((s) => s.endpoint === body.endpoint);
   if (existing) {
@@ -377,22 +414,22 @@ export function savePushSubscription(
   return { id: row.id, endpoint: row.endpoint };
 }
 
-export function listPushSubscriptions(sub: string) {
+export async function listPushSubscriptions(sub: string) {
   return pushByUser.get(sub) ?? [];
 }
 
 /** Due reminders for scheduling (generic push body applied at send time). */
-export function dueMedications(
+export async function dueMedications(
   sub: string,
   nowLocalHhMm: string,
-): MedicationReminder[] {
-  return listMedications(sub).filter(
-    (m) => m.enabled && m.timeLocal <= nowLocalHhMm,
-  );
+): Promise<MedicationReminder[]> {
+  const meds = await listMedications(sub);
+  return meds.filter((m) => m.enabled && m.timeLocal <= nowLocalHhMm);
 }
 
-/** Art.17 purge — wipe in-memory profile + health maps for this user. */
-export function purgeUserMemory(sub: string): void {
+/** Art.17 purge — wipe profile + health maps for this user (DSQL when enabled). */
+export async function purgeUserMemory(sub: string): Promise<void> {
+  if (isDsqlEnabled()) await dsqlUsers.purgeUser(sub);
   users.delete(sub);
   consents.delete(sub);
   cyclesByUser.delete(sub);
@@ -404,4 +441,3 @@ export function purgeUserMemory(sub: string): void {
     if (key.startsWith(`${sub}:`)) idempotency.delete(key);
   }
 }
-

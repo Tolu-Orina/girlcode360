@@ -410,6 +410,8 @@ Resources:
         EnvironmentVariables:
           - Name: TF_VAR_environment
             Value: dev
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-validate'
@@ -444,6 +446,8 @@ Resources:
         EnvironmentVariables:
           - Name: TF_VAR_environment
             Value: test
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-validate-test'
@@ -480,6 +484,8 @@ Resources:
             Value: !Ref AWS::Region
           - Name: TF_VAR_environment
             Value: dev
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-plan'
@@ -516,6 +522,8 @@ Resources:
             Value: !Ref AWS::Region
           - Name: TF_VAR_environment
             Value: test
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-plan-test'
@@ -552,6 +560,8 @@ Resources:
             Value: !Ref AWS::Region
           - Name: TF_VAR_environment
             Value: dev
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-deploy'
@@ -588,6 +598,8 @@ Resources:
             Value: !Ref AWS::Region
           - Name: TF_VAR_environment
             Value: test
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-deploy-test'
@@ -622,6 +634,8 @@ Resources:
         EnvironmentVariables:
           - Name: TF_VAR_environment
             Value: prod
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-validate-prod'
@@ -660,6 +674,8 @@ Resources:
             Value: !Ref AWS::Region
           - Name: TF_VAR_environment
             Value: prod
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-plan-prod'
@@ -698,6 +714,8 @@ Resources:
             Value: !Ref AWS::Region
           - Name: TF_VAR_environment
             Value: prod
+          - Name: TF_VAR_enable_dsql
+            Value: "true"
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-deploy-prod'

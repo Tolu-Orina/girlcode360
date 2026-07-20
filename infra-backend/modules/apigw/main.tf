@@ -58,6 +58,7 @@ resource "aws_api_gateway_resource" "v1" {
   path_part   = "v1"
 }
 
+# ——— Public: GET /v1/health ———
 resource "aws_api_gateway_resource" "health" {
   rest_api_id = aws_api_gateway_rest_api.main.id
   parent_id   = aws_api_gateway_resource.v1.id
@@ -80,6 +81,182 @@ resource "aws_api_gateway_integration" "health_get" {
   uri                     = var.lambda_invoke_arn
 }
 
+# ——— Public: GET /v1/wallet/share/{token}[+ /object] ———
+resource "aws_api_gateway_resource" "wallet" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.v1.id
+  path_part   = "wallet"
+}
+
+resource "aws_api_gateway_resource" "wallet_share" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.wallet.id
+  path_part   = "share"
+}
+
+resource "aws_api_gateway_resource" "wallet_share_token" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.wallet_share.id
+  path_part   = "{token}"
+}
+
+resource "aws_api_gateway_method" "wallet_share_get" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.wallet_share_token.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "wallet_share_get" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.wallet_share_token.id
+  http_method             = aws_api_gateway_method.wallet_share_get.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_method" "wallet_share_options" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.wallet_share_token.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "wallet_share_options" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.wallet_share_token.id
+  http_method             = aws_api_gateway_method.wallet_share_options.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_resource" "wallet_share_object" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.wallet_share_token.id
+  path_part   = "object"
+}
+
+resource "aws_api_gateway_method" "wallet_share_object_get" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.wallet_share_object.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "wallet_share_object_get" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.wallet_share_object.id
+  http_method             = aws_api_gateway_method.wallet_share_object_get.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_method" "wallet_share_object_options" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.wallet_share_object.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "wallet_share_object_options" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.wallet_share_object.id
+  http_method             = aws_api_gateway_method.wallet_share_object_options.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+# ——— Public: POST /v1/billing/webhooks/{stripe|paystack} ———
+resource "aws_api_gateway_resource" "billing" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.v1.id
+  path_part   = "billing"
+}
+
+resource "aws_api_gateway_resource" "billing_webhooks" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.billing.id
+  path_part   = "webhooks"
+}
+
+resource "aws_api_gateway_resource" "billing_webhooks_stripe" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.billing_webhooks.id
+  path_part   = "stripe"
+}
+
+resource "aws_api_gateway_method" "billing_webhooks_stripe_post" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.billing_webhooks_stripe.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "billing_webhooks_stripe_post" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.billing_webhooks_stripe.id
+  http_method             = aws_api_gateway_method.billing_webhooks_stripe_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_resource" "billing_webhooks_paystack" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.billing_webhooks.id
+  path_part   = "paystack"
+}
+
+resource "aws_api_gateway_method" "billing_webhooks_paystack_post" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.billing_webhooks_paystack.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "billing_webhooks_paystack_post" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.billing_webhooks_paystack.id
+  http_method             = aws_api_gateway_method.billing_webhooks_paystack_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+# ——— Public: POST /v1/privacy/purge-tick (INTERNAL_PURGE_KEY in Lambda) ———
+resource "aws_api_gateway_resource" "privacy" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.v1.id
+  path_part   = "privacy"
+}
+
+resource "aws_api_gateway_resource" "privacy_purge_tick" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.privacy.id
+  path_part   = "purge-tick"
+}
+
+resource "aws_api_gateway_method" "privacy_purge_tick_post" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.privacy_purge_tick.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "privacy_purge_tick_post" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.privacy_purge_tick.id
+  http_method             = aws_api_gateway_method.privacy_purge_tick_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+# ——— Authenticated catch-all ———
 resource "aws_api_gateway_resource" "proxy" {
   rest_api_id = aws_api_gateway_rest_api.main.id
   parent_id   = aws_api_gateway_resource.v1.id
@@ -135,6 +312,21 @@ resource "aws_api_gateway_deployment" "main" {
       aws_api_gateway_resource.health.id,
       aws_api_gateway_method.health_get.id,
       aws_api_gateway_integration.health_get.id,
+      aws_api_gateway_resource.wallet_share_token.id,
+      aws_api_gateway_method.wallet_share_get.id,
+      aws_api_gateway_integration.wallet_share_get.id,
+      aws_api_gateway_resource.wallet_share_object.id,
+      aws_api_gateway_method.wallet_share_object_get.id,
+      aws_api_gateway_integration.wallet_share_object_get.id,
+      aws_api_gateway_resource.billing_webhooks_stripe.id,
+      aws_api_gateway_method.billing_webhooks_stripe_post.id,
+      aws_api_gateway_integration.billing_webhooks_stripe_post.id,
+      aws_api_gateway_resource.billing_webhooks_paystack.id,
+      aws_api_gateway_method.billing_webhooks_paystack_post.id,
+      aws_api_gateway_integration.billing_webhooks_paystack_post.id,
+      aws_api_gateway_resource.privacy_purge_tick.id,
+      aws_api_gateway_method.privacy_purge_tick_post.id,
+      aws_api_gateway_integration.privacy_purge_tick_post.id,
       aws_api_gateway_resource.proxy.id,
       aws_api_gateway_method.proxy_any.id,
       aws_api_gateway_integration.proxy_any.id,
@@ -149,6 +341,11 @@ resource "aws_api_gateway_deployment" "main" {
 
   depends_on = [
     aws_api_gateway_integration.health_get,
+    aws_api_gateway_integration.wallet_share_get,
+    aws_api_gateway_integration.wallet_share_object_get,
+    aws_api_gateway_integration.billing_webhooks_stripe_post,
+    aws_api_gateway_integration.billing_webhooks_paystack_post,
+    aws_api_gateway_integration.privacy_purge_tick_post,
     aws_api_gateway_integration.proxy_any,
     aws_api_gateway_integration.proxy_options,
   ]

@@ -1,3 +1,11 @@
+import { createHash } from "node:crypto";
+import {
+  deleteObject,
+  getObject,
+  isDataBucketEnabled,
+  putObject,
+  walletObjectKey,
+} from "../db/s3";
 import type {
   CreateWalletShareRequest,
   CreateWalletUploadRequest,
@@ -23,12 +31,16 @@ type WalletSharePublic = {
 };
 
 const docsByUser = new Map<string, WalletDocMeta[]>();
-/** docId → ciphertext bytes (base64) — server-side ciphertext only */
+/** docId → ciphertext bytes (base64) — used when DATA_BUCKET is unset */
 const objects = new Map<string, string>();
-const sharesByToken = new Map<
+/** Tracks which docs have ciphertext (memory path or after S3 put in this instance). */
+const objectPresent = new Set<string>();
+/** docId → owning userSub (needed for S3 key on purge / public get) */
+const docOwner = new Map<string, string>();
+const sharesByTokenHash = new Map<
   string,
   {
-    token: string;
+    tokenHash: string;
     docId: string;
     userSub: string;
     expiresAt: string;
@@ -45,24 +57,87 @@ function addDaysIso(days: number): string {
   return d.toISOString();
 }
 
-export function listWalletDocs(sub: string): WalletDocMeta[] {
+function hashToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+async function storeCiphertext(
+  userSub: string,
+  docId: string,
+  ciphertextB64: string,
+): Promise<void> {
+  if (isDataBucketEnabled()) {
+    await putObject(
+      walletObjectKey(userSub, docId),
+      Buffer.from(ciphertextB64, "base64"),
+      "application/octet-stream",
+    );
+  } else {
+    objects.set(docId, ciphertextB64);
+  }
+  objectPresent.add(docId);
+  docOwner.set(docId, userSub);
+}
+
+async function loadCiphertext(
+  userSub: string,
+  docId: string,
+): Promise<string | undefined> {
+  if (isDataBucketEnabled()) {
+    const buf = await getObject(walletObjectKey(userSub, docId));
+    if (!buf) return undefined;
+    return buf.toString("base64");
+  }
+  return objects.get(docId);
+}
+
+async function removeCiphertext(userSub: string, docId: string): Promise<void> {
+  if (isDataBucketEnabled()) {
+    await deleteObject(walletObjectKey(userSub, docId));
+  } else {
+    objects.delete(docId);
+  }
+  objectPresent.delete(docId);
+  docOwner.delete(docId);
+}
+
+async function hasCiphertext(userSub: string, docId: string): Promise<boolean> {
+  if (objectPresent.has(docId)) return true;
+  if (isDataBucketEnabled()) {
+    const buf = await getObject(walletObjectKey(userSub, docId));
+    if (buf) {
+      objectPresent.add(docId);
+      docOwner.set(docId, userSub);
+      return true;
+    }
+    return false;
+  }
+  return objects.has(docId);
+}
+
+export async function listWalletDocs(sub: string): Promise<WalletDocMeta[]> {
   return (docsByUser.get(sub) ?? [])
     .filter((d) => !d.deletedAt)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function getWalletDoc(
+export async function getWalletDoc(
   sub: string,
   id: string,
-): WalletDocMeta | undefined {
+): Promise<WalletDocMeta | undefined> {
   return (docsByUser.get(sub) ?? []).find((d) => d.id === id);
 }
 
-export function createWalletUpload(
+export async function createWalletUpload(
   sub: string,
   body: CreateWalletUploadRequest,
   apiBase: string,
-): { doc: WalletDocMeta; uploadUrl: string; uploadPath: string; uploadHeaders: Record<string, string> } {
+): Promise<{
+  doc: WalletDocMeta;
+  uploadUrl: string;
+  uploadPath: string;
+  uploadHeaders: Record<string, string>;
+}> {
   if (!body.filename || !body.contentType || !body.wrappedDek || !body.fileIv) {
     throw new Error("INVALID_UPLOAD");
   }
@@ -90,6 +165,7 @@ export function createWalletUpload(
   const list = docsByUser.get(sub) ?? [];
   list.push(doc);
   docsByUser.set(sub, list);
+  docOwner.set(id, sub);
   const base = apiBase.replace(/\/$/, "");
   return {
     doc,
@@ -99,31 +175,36 @@ export function createWalletUpload(
   };
 }
 
-export function putWalletObject(
+export async function putWalletObject(
   sub: string,
   id: string,
   ciphertextB64: string,
-): boolean {
-  const doc = getWalletDoc(sub, id);
+): Promise<boolean> {
+  const doc = await getWalletDoc(sub, id);
   if (!doc || doc.deletedAt) return false;
-  objects.set(id, ciphertextB64);
+  await storeCiphertext(sub, id, ciphertextB64);
   return true;
 }
 
-export function getWalletObject(
+export async function getWalletObject(
   sub: string,
   id: string,
-): string | undefined {
-  const doc = getWalletDoc(sub, id);
+): Promise<string | undefined> {
+  const doc = await getWalletDoc(sub, id);
   if (!doc || doc.deletedAt) return undefined;
-  return objects.get(id);
+  return loadCiphertext(sub, id);
 }
 
-export function getWalletObjectPublic(docId: string): string | undefined {
-  return objects.get(docId);
+export async function getWalletObjectPublic(
+  docId: string,
+): Promise<string | undefined> {
+  const owner = docOwner.get(docId);
+  if (owner) return loadCiphertext(owner, docId);
+  if (!isDataBucketEnabled()) return objects.get(docId);
+  return undefined;
 }
 
-export function patchWalletMeta(
+export async function patchWalletMeta(
   sub: string,
   id: string,
   patch: {
@@ -131,7 +212,7 @@ export function patchWalletMeta(
     noteCiphertext?: string | null;
     noteIv?: string | null;
   },
-): WalletDocMeta | undefined {
+): Promise<WalletDocMeta | undefined> {
   const list = docsByUser.get(sub) ?? [];
   const idx = list.findIndex((d) => d.id === id && !d.deletedAt);
   if (idx < 0) return undefined;
@@ -152,7 +233,10 @@ export function patchWalletMeta(
 }
 
 /** Soft delete — purge after 30 days (FR-050). */
-export function softDeleteWalletDoc(sub: string, id: string): WalletDocMeta | undefined {
+export async function softDeleteWalletDoc(
+  sub: string,
+  id: string,
+): Promise<WalletDocMeta | undefined> {
   const list = docsByUser.get(sub) ?? [];
   const idx = list.findIndex((d) => d.id === id && !d.deletedAt);
   if (idx < 0) return undefined;
@@ -165,24 +249,23 @@ export function softDeleteWalletDoc(sub: string, id: string): WalletDocMeta | un
   };
   list[idx] = next;
   docsByUser.set(sub, list);
-  // Revoke shares
-  for (const [token, share] of sharesByToken) {
+  for (const [tokenHash, share] of sharesByTokenHash) {
     if (share.docId === id) {
-      sharesByToken.set(token, { ...share, revoked: true });
+      sharesByTokenHash.set(tokenHash, { ...share, revoked: true });
     }
   }
   return next;
 }
 
 /** Apply due purges (ciphertext + metadata). */
-export function runWalletPurge(): number {
+export async function runWalletPurge(): Promise<number> {
   const now = Date.now();
   let n = 0;
   for (const [sub, list] of docsByUser) {
     const kept: WalletDocMeta[] = [];
     for (const d of list) {
       if (d.purgeAfter && Date.parse(d.purgeAfter) <= now) {
-        objects.delete(d.id);
+        await removeCiphertext(sub, d.id);
         n++;
       } else {
         kept.push(d);
@@ -193,28 +276,29 @@ export function runWalletPurge(): number {
   return n;
 }
 
-export function createWalletShare(
+export async function createWalletShare(
   sub: string,
   docId: string,
   body: CreateWalletShareRequest,
-): WalletShare | { error: string } {
-  const doc = getWalletDoc(sub, docId);
+): Promise<WalletShare | { error: string }> {
+  const doc = await getWalletDoc(sub, docId);
   if (!doc || doc.deletedAt) return { error: "doc_not_found" };
-  if (!objects.has(docId)) return { error: "object_missing" };
+  if (!(await hasCiphertext(sub, docId))) return { error: "object_missing" };
   const days = body.expiresIn === "24h" ? 1 : body.expiresIn === "48h" ? 2 : 7;
   const token = crypto.randomUUID().replace(/-/g, "");
+  const tokenHash = hashToken(token);
   const now = new Date().toISOString();
   const share = {
-    token,
+    tokenHash,
     docId,
     userSub: sub,
     expiresAt: addDaysIso(days),
     revoked: false,
     createdAt: now,
   };
-  sharesByToken.set(token, share);
+  sharesByTokenHash.set(tokenHash, share);
   return {
-    token: share.token,
+    token,
     docId: share.docId,
     expiresAt: share.expiresAt,
     revoked: false,
@@ -222,31 +306,34 @@ export function createWalletShare(
   };
 }
 
-export function revokeWalletShare(
+export async function revokeWalletShare(
   sub: string,
   token: string,
-): boolean {
-  const share = sharesByToken.get(token);
+): Promise<boolean> {
+  const tokenHash = hashToken(token);
+  const share = sharesByTokenHash.get(tokenHash);
   if (!share || share.userSub !== sub) return false;
-  sharesByToken.set(token, { ...share, revoked: true });
+  sharesByTokenHash.set(tokenHash, { ...share, revoked: true });
   return true;
 }
 
-export function getPublicShare(
+export async function getPublicShare(
   token: string,
   apiBase: string,
-): WalletSharePublic | { error: string } {
-  const share = sharesByToken.get(token);
+): Promise<WalletSharePublic | { error: string }> {
+  const tokenHash = hashToken(token);
+  const share = sharesByTokenHash.get(tokenHash);
   if (!share || share.revoked) return { error: "share_invalid" };
   if (Date.parse(share.expiresAt) < Date.now()) return { error: "share_expired" };
-  // Find doc across users
   let doc: WalletDocMeta | undefined;
   for (const list of docsByUser.values()) {
     doc = list.find((d) => d.id === share.docId);
     if (doc) break;
   }
   if (!doc || doc.deletedAt) return { error: "doc_not_found" };
-  if (!objects.has(doc.id)) return { error: "object_missing" };
+  if (!(await hasCiphertext(share.userSub, doc.id))) {
+    return { error: "object_missing" };
+  }
   const base = apiBase.replace(/\/$/, "");
   return {
     token,
@@ -258,29 +345,39 @@ export function getPublicShare(
   };
 }
 
-export function listSharesForDoc(sub: string, docId: string) {
-  return [...sharesByToken.values()].filter(
-    (s) => s.userSub === sub && s.docId === docId && !s.revoked,
-  );
+export async function listSharesForDoc(sub: string, docId: string) {
+  // Plaintext token is returned only once at create; list keeps the same keys.
+  return [...sharesByTokenHash.values()]
+    .filter((s) => s.userSub === sub && s.docId === docId && !s.revoked)
+    .map((s) => ({
+      token: "",
+      docId: s.docId,
+      expiresAt: s.expiresAt,
+      revoked: s.revoked,
+      createdAt: s.createdAt,
+    }));
 }
 
-export function lookupShareCiphertext(token: string): string | undefined {
-  const share = sharesByToken.get(token);
+export async function lookupShareCiphertext(
+  token: string,
+): Promise<string | undefined> {
+  const tokenHash = hashToken(token);
+  const share = sharesByTokenHash.get(tokenHash);
   if (!share || share.revoked) return undefined;
   if (Date.parse(share.expiresAt) < Date.now()) return undefined;
-  return objects.get(share.docId);
+  return loadCiphertext(share.userSub, share.docId);
 }
 
-export function purgeUserWallet(sub: string): void {
+export async function purgeUserWallet(sub: string): Promise<void> {
   const docs = docsByUser.get(sub) ?? [];
-  for (const d of docs) objects.delete(d.id);
+  for (const d of docs) await removeCiphertext(sub, d.id);
   docsByUser.delete(sub);
-  for (const [token, share] of [...sharesByToken.entries()]) {
-    if (share.userSub === sub) sharesByToken.delete(token);
+  for (const [tokenHash, share] of [...sharesByTokenHash.entries()]) {
+    if (share.userSub === sub) sharesByTokenHash.delete(tokenHash);
   }
 }
 
 /** Include soft-deleted for My Data counts */
-export function countWalletDocsAll(sub: string): number {
+export async function countWalletDocsAll(sub: string): Promise<number> {
   return (docsByUser.get(sub) ?? []).length;
 }
