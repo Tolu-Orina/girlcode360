@@ -74,3 +74,7 @@ export async function deleteObject(key: string): Promise<void> {
 export function walletObjectKey(userSub: string, docId: string): string {
   return `wallet/${userSub}/${docId}`;
 }
+
+export function exportObjectKey(userSub: string, exportId: string): string {
+  return `exports/${userSub}/${exportId}.json`;
+}

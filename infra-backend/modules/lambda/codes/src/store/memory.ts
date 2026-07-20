@@ -1,5 +1,6 @@
 import { isDsqlEnabled } from "../db/client";
 import * as dsqlCycles from "./dsql/cycles";
+import * as dsqlPcos from "./dsql/pcos";
 import * as dsqlUsers from "./dsql/users";
 import type {
   BiometricLog,
@@ -291,6 +292,7 @@ export async function listBiometrics(
   from?: string,
   to?: string,
 ): Promise<BiometricLog[]> {
+  if (isDsqlEnabled()) return dsqlPcos.listBiometrics(sub, from, to);
   return [...bioMap(sub).values()]
     .filter((b) => {
       if (from && b.date < from) return false;
@@ -304,6 +306,7 @@ export async function upsertBiometric(
   sub: string,
   body: UpsertBiometricRequest,
 ): Promise<BiometricLog> {
+  if (isDsqlEnabled()) return dsqlPcos.upsertBiometric(sub, body);
   const map = bioMap(sub);
   const existing = map.get(body.date);
   const now = new Date().toISOString();
@@ -332,6 +335,7 @@ export async function upsertBiometric(
 export async function listMedications(
   sub: string,
 ): Promise<MedicationReminder[]> {
+  if (isDsqlEnabled()) return dsqlPcos.listMedications(sub);
   return [...(medsByUser.get(sub) ?? [])].sort((a, b) =>
     a.timeLocal.localeCompare(b.timeLocal),
   );
@@ -341,6 +345,7 @@ export async function createMedication(
   sub: string,
   body: CreateMedicationRequest,
 ): Promise<MedicationReminder> {
+  if (isDsqlEnabled()) return dsqlPcos.createMedication(sub, body);
   const now = new Date().toISOString();
   const med: MedicationReminder = {
     id: crypto.randomUUID(),
@@ -363,6 +368,7 @@ export async function patchMedication(
   id: string,
   patch: PatchMedicationRequest,
 ): Promise<MedicationReminder | undefined> {
+  if (isDsqlEnabled()) return dsqlPcos.patchMedication(sub, id, patch);
   const list = medsByUser.get(sub) ?? [];
   const idx = list.findIndex((m) => m.id === id);
   if (idx < 0) return undefined;
@@ -385,6 +391,7 @@ export async function deleteMedication(
   sub: string,
   id: string,
 ): Promise<boolean> {
+  if (isDsqlEnabled()) return dsqlPcos.deleteMedication(sub, id);
   const list = medsByUser.get(sub) ?? [];
   const next = list.filter((m) => m.id !== id);
   if (next.length === list.length) return false;
@@ -396,6 +403,7 @@ export async function savePushSubscription(
   sub: string,
   body: PushSubscriptionRequest,
 ): Promise<{ id: string; endpoint: string }> {
+  if (isDsqlEnabled()) return dsqlPcos.savePushSubscription(sub, body);
   const list = pushByUser.get(sub) ?? [];
   const existing = list.find((s) => s.endpoint === body.endpoint);
   if (existing) {
@@ -415,6 +423,7 @@ export async function savePushSubscription(
 }
 
 export async function listPushSubscriptions(sub: string) {
+  if (isDsqlEnabled()) return dsqlPcos.listPushSubscriptions(sub);
   return pushByUser.get(sub) ?? [];
 }
 
@@ -429,7 +438,10 @@ export async function dueMedications(
 
 /** Art.17 purge — wipe profile + health maps for this user (DSQL when enabled). */
 export async function purgeUserMemory(sub: string): Promise<void> {
-  if (isDsqlEnabled()) await dsqlUsers.purgeUser(sub);
+  if (isDsqlEnabled()) {
+    await dsqlPcos.purgeUserPcos(sub);
+    await dsqlUsers.purgeUser(sub);
+  }
   users.delete(sub);
   consents.delete(sub);
   cyclesByUser.delete(sub);

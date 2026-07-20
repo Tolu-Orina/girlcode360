@@ -6,8 +6,10 @@ import {
   ttcMonthCount,
   ttcTwelveMonthPrompt,
 } from "../../../../../../packages/domain/src/index";
+import { isDsqlEnabled } from "../db/client";
 import { listCycles } from "./memory";
 import { buildPrediction } from "../lib/prediction";
+import * as dsqlJourney from "./dsql/journey";
 import type {
   Appointment,
   CreateAppointmentRequest,
@@ -38,6 +40,7 @@ function todayIso(): string {
 export async function getPregnancy(
   sub: string,
 ): Promise<PregnancyProfile | undefined> {
+  if (isDsqlEnabled()) return dsqlJourney.getPregnancy(sub);
   return pregnancyByUser.get(sub);
 }
 
@@ -45,6 +48,7 @@ export async function initPregnancy(
   sub: string,
   body: InitPregnancyRequest,
 ): Promise<PregnancyProfile> {
+  if (isDsqlEnabled()) return dsqlJourney.initPregnancy(sub, body);
   const edd = calculateEdd(body.anchorDate, body.method);
   const now = new Date().toISOString();
   const existing = pregnancyByUser.get(sub);
@@ -82,6 +86,7 @@ function pregDayMap(sub: string): Map<string, PregnancyDayLog> {
 }
 
 export async function listPregnancyDays(sub: string): Promise<PregnancyDayLog[]> {
+  if (isDsqlEnabled()) return dsqlJourney.listPregnancyDays(sub);
   return [...pregDayMap(sub).values()].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
@@ -91,6 +96,7 @@ export async function upsertPregnancyDay(
   sub: string,
   body: UpsertPregnancyDayRequest,
 ): Promise<PregnancyDayLog> {
+  if (isDsqlEnabled()) return dsqlJourney.upsertPregnancyDay(sub, body);
   const map = pregDayMap(sub);
   const existing = map.get(body.date);
   const now = new Date().toISOString();
@@ -114,6 +120,7 @@ export async function upsertPregnancyDay(
 }
 
 export async function listAppointments(sub: string): Promise<Appointment[]> {
+  if (isDsqlEnabled()) return dsqlJourney.listAppointments(sub);
   return [...(appointmentsByUser.get(sub) ?? [])].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
@@ -123,6 +130,7 @@ export async function createAppointment(
   sub: string,
   body: CreateAppointmentRequest,
 ): Promise<Appointment> {
+  if (isDsqlEnabled()) return dsqlJourney.createAppointment(sub, body);
   const now = new Date().toISOString();
   const appt: Appointment = {
     id: crypto.randomUUID(),
@@ -146,6 +154,7 @@ export async function deleteAppointment(
   sub: string,
   id: string,
 ): Promise<boolean> {
+  if (isDsqlEnabled()) return dsqlJourney.deleteAppointment(sub, id);
   const list = appointmentsByUser.get(sub) ?? [];
   const next = list.filter((a) => a.id !== id);
   if (next.length === list.length) return false;
@@ -154,6 +163,7 @@ export async function deleteAppointment(
 }
 
 export async function getTtc(sub: string): Promise<TtcProfile | undefined> {
+  if (isDsqlEnabled()) return dsqlJourney.getTtc(sub);
   return ttcByUser.get(sub);
 }
 
@@ -165,13 +175,15 @@ export async function initTtc(
   monthsTrying: number;
   twelveMonthPrompt: string | null;
 }> {
-  const now = new Date().toISOString();
   const start = startedOn ?? todayIso();
-  const profile: TtcProfile = {
-    startedOn: start,
-    updatedAt: now,
-  };
-  ttcByUser.set(sub, profile);
+  const profile = isDsqlEnabled()
+    ? await dsqlJourney.initTtc(sub, start)
+    : (() => {
+        const now = new Date().toISOString();
+        const p: TtcProfile = { startedOn: start, updatedAt: now };
+        ttcByUser.set(sub, p);
+        return p;
+      })();
   const monthsTrying = ttcMonthCount(start, todayIso());
   return {
     profile,
@@ -202,6 +214,7 @@ function ttcDayMap(sub: string): Map<string, TtcDayLog> {
 }
 
 export async function listTtcDays(sub: string): Promise<TtcDayLog[]> {
+  if (isDsqlEnabled()) return dsqlJourney.listTtcDays(sub);
   return [...ttcDayMap(sub).values()].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
@@ -215,6 +228,7 @@ export async function upsertTtcDay(
   if (intimacy && body.intimacyConsent !== true) {
     return { error: "intimacy_consent_required" };
   }
+  if (isDsqlEnabled()) return dsqlJourney.upsertTtcDay(sub, body);
   const map = ttcDayMap(sub);
   const existing = map.get(body.date);
   const now = new Date().toISOString();
@@ -239,6 +253,7 @@ export async function deleteTtcIntimacy(
   sub: string,
   date: string,
 ): Promise<boolean> {
+  if (isDsqlEnabled()) return dsqlJourney.deleteTtcIntimacy(sub, date);
   const map = ttcDayMap(sub);
   const existing = map.get(date);
   if (!existing) return false;
@@ -301,6 +316,12 @@ export async function defaultNotifPrefs(): Promise<NotificationPrefs> {
 export async function getNotificationPrefs(
   sub: string,
 ): Promise<NotificationPrefs> {
+  if (isDsqlEnabled()) {
+    return (
+      (await dsqlJourney.getNotificationPrefs(sub)) ??
+      (await defaultNotifPrefs())
+    );
+  }
   return notifByUser.get(sub) ?? (await defaultNotifPrefs());
 }
 
@@ -309,6 +330,9 @@ export async function patchNotificationPrefs(
   patch: PatchNotificationPrefsRequest,
 ): Promise<NotificationPrefs> {
   const cur = await getNotificationPrefs(sub);
+  if (isDsqlEnabled()) {
+    return dsqlJourney.patchNotificationPrefs(sub, cur, patch);
+  }
   const next: NotificationPrefs = {
     ...cur,
     ...patch,
@@ -323,6 +347,7 @@ export async function emergencyNumbers(market: Market) {
 }
 
 export async function purgeUserJourney(sub: string): Promise<void> {
+  if (isDsqlEnabled()) await dsqlJourney.purgeUserJourney(sub);
   pregnancyByUser.delete(sub);
   pregDaysByUser.delete(sub);
   appointmentsByUser.delete(sub);

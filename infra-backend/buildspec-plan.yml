@@ -17,8 +17,12 @@ phases:
           -backend-config="region=${AWS_DEFAULT_REGION}" \
           -backend-config="dynamodb_table=girlcode360-tf-lock"
       - terraform plan -var="enable_dsql=true" -out=tfplan
+      - |
+        # archive_file writes this during plan; apply needs the same zip on disk
+        test -f modules/lambda/api.zip || { echo "ERROR: modules/lambda/api.zip missing after plan"; ls -la modules/lambda; exit 1; }
 artifacts:
   files:
     - infra-backend/tfplan
-    - infra-backend/**/*
+    - infra-backend/modules/lambda/api.zip
     - infra-backend/modules/lambda/codes/dist/**/*
+    - infra-backend/**/*

@@ -8,7 +8,7 @@ phases:
       - unzip -o /tmp/tf.zip -d /usr/local/bin
   build:
     commands:
-      # Plan artifact is a secondary input; PrimarySource is the git tree (no tfplan).
+      # Plan artifact is a secondary input; PrimarySource is the git tree (no tfplan/api.zip).
       # CodeBuild runs /bin/sh — keep this POSIX (no bash pipefail / ${!var}).
       - |
         set -eu
@@ -28,7 +28,19 @@ phases:
         fi
         echo "Using plan artifact at $PLAN_ROOT"
         cp "$PLAN_ROOT/infra-backend/tfplan" "$CODEBUILD_SRC_DIR/infra-backend/tfplan"
-        # Keep Lambda zip identical to what was planned (do not rebuild here)
+
+        # Saved plans still upload Lambda from filename on disk — copy the planned zip.
+        mkdir -p "$CODEBUILD_SRC_DIR/infra-backend/modules/lambda"
+        if [ -f "$PLAN_ROOT/infra-backend/modules/lambda/api.zip" ]; then
+          cp "$PLAN_ROOT/infra-backend/modules/lambda/api.zip" \
+            "$CODEBUILD_SRC_DIR/infra-backend/modules/lambda/api.zip"
+        else
+          echo "ERROR: api.zip missing from plan artifact (is *.zip gitignored without exception?)"
+          find "$PLAN_ROOT" -name 'api.zip' 2>/dev/null || true
+          ls -la "$PLAN_ROOT/infra-backend/modules/lambda" 2>/dev/null || true
+          exit 1
+        fi
+
         if [ -d "$PLAN_ROOT/infra-backend/modules/lambda/codes/dist" ]; then
           rm -rf "$CODEBUILD_SRC_DIR/infra-backend/modules/lambda/codes/dist"
           mkdir -p "$CODEBUILD_SRC_DIR/infra-backend/modules/lambda/codes"
@@ -43,13 +55,12 @@ phases:
           -backend-config="region=${AWS_DEFAULT_REGION}" \
           -backend-config="dynamodb_table=girlcode360-tf-lock"
       - terraform apply -auto-approve tfplan
-      # Schema + app role after infra: cluster endpoint is in SSM; skip if DSQL disabled
+      # Schema after infra: cluster endpoint is in SSM; skip if DSQL disabled
       - cd "$CODEBUILD_SRC_DIR/infra-backend/scripts" && npm ci
       - |
         set -eu
-        export LAMBDA_ROLE_ARN="$(cd "$CODEBUILD_SRC_DIR/infra-backend" && terraform output -raw lambda_role_arn)"
+        export LAMBDA_ROLE_ARN="$(cd "$CODEBUILD_SRC_DIR/infra-backend" && terraform output -raw lambda_role_arn 2>/dev/null || true)"
         export DSQL_USER=girlcode360_app
-        echo "Bootstrapping DSQL app role for $LAMBDA_ROLE_ARN"
         node "$CODEBUILD_SRC_DIR/infra-backend/scripts/migrate-dsql.mjs"
 artifacts:
   files:

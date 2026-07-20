@@ -393,8 +393,14 @@ export function createWalletShare(
   }>("POST", `/v1/wallet/docs/${docId}/shares`, body);
 }
 
-export function revokeWalletShare(token: string) {
-  return request("DELETE", `/v1/wallet/shares/${token}`);
+export function listWalletShares(docId: string) {
+  return request<{
+    shares: import("../../../../packages/api-types/src/index").WalletShareListItem[];
+  }>("GET", `/v1/wallet/docs/${docId}/shares`);
+}
+
+export function revokeWalletShare(idOrToken: string) {
+  return request("DELETE", `/v1/wallet/shares/${encodeURIComponent(idOrToken)}`);
 }
 
 export function getPublicWalletShare(token: string) {

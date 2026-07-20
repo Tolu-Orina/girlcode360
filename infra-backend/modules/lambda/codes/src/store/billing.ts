@@ -1,4 +1,7 @@
-/** Premium entitlement — env allowlist + in-memory subscriptions (Phase 7). */
+/** Premium entitlement — env allowlist + DSQL/in-memory subscriptions (Phase 7). */
+
+import { isDsqlEnabled } from "../db/client";
+import * as dsqlBilling from "./dsql/billing";
 
 export type BillingProvider = "stripe" | "paystack" | "dev";
 
@@ -18,11 +21,16 @@ function envPremium(sub: string): boolean {
 
 export async function isPremium(sub: string): Promise<boolean> {
   if (envPremium(sub)) return true;
+  if (isDsqlEnabled()) {
+    return (await dsqlBilling.getSubscription(sub))?.premium === true;
+  }
   return subscriptions.get(sub)?.premium === true;
 }
 
 export async function getBillingStatus(sub: string) {
-  const row = subscriptions.get(sub);
+  const row = isDsqlEnabled()
+    ? await dsqlBilling.getSubscription(sub)
+    : subscriptions.get(sub);
   const premium = await isPremium(sub);
   return {
     premium,
@@ -37,18 +45,30 @@ export async function activatePremium(
   provider: BillingProvider,
   renewsAt?: string | null,
 ) {
-  const now = new Date().toISOString();
-  subscriptions.set(sub, {
-    premium: true,
-    provider,
-    renewsAt: renewsAt ?? null,
-    updatedAt: now,
-  });
+  if (isDsqlEnabled()) {
+    await dsqlBilling.upsertSubscription(sub, {
+      premium: true,
+      provider,
+      renewsAt: renewsAt ?? null,
+    });
+  } else {
+    const now = new Date().toISOString();
+    subscriptions.set(sub, {
+      premium: true,
+      provider,
+      renewsAt: renewsAt ?? null,
+      updatedAt: now,
+    });
+  }
   return getBillingStatus(sub);
 }
 
 export async function deactivatePremium(sub: string) {
-  subscriptions.delete(sub);
+  if (isDsqlEnabled()) {
+    await dsqlBilling.deleteSubscription(sub);
+  } else {
+    subscriptions.delete(sub);
+  }
   return getBillingStatus(sub);
 }
 
@@ -91,7 +111,11 @@ export async function handleBillingWebhook(
 }
 
 export async function purgeUserBilling(sub: string): Promise<void> {
-  subscriptions.delete(sub);
+  if (isDsqlEnabled()) {
+    await dsqlBilling.deleteSubscription(sub);
+  } else {
+    subscriptions.delete(sub);
+  }
 }
 
 export async function createPortalSession(sub: string) {

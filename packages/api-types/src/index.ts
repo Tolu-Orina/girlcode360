@@ -471,7 +471,17 @@ export type CreateWalletUploadResponse = {
 };
 
 export type WalletShare = {
+  id: string;
   token: string;
+  docId: string;
+  expiresAt: string;
+  revoked: boolean;
+  createdAt: string;
+};
+
+/** List/revoke shape — plaintext token is never returned after create. */
+export type WalletShareListItem = {
+  id: string;
   docId: string;
   expiresAt: string;
   revoked: boolean;

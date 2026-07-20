@@ -9,6 +9,7 @@ tfplan
 .env
 .env.local
 *.zip
+!infra-backend/modules/lambda/api.zip
 .DS_Store
 coverage/
 *.log

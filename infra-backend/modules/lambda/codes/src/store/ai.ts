@@ -9,11 +9,12 @@ import {
 } from "../../../../../../packages/domain/src/index";
 import { converseNova } from "../../../../../../packages/ai-provider/src/index";
 import { zaraSystemPrompt } from "../../../../../../packages/ai-provider/src/prompts";
+import { isDsqlEnabled } from "../db/client";
 import { listCycles, listDays, getUser } from "./memory";
 import { getPregnancy, listPregnancyDays, ttcStatus } from "./journey";
 import type { Market } from "../types";
-
 import { isPremium } from "./billing";
+import * as dsqlAi from "./dsql/ai";
 
 const FREE_ZARA_LIMIT = 3;
 const FREE_HL_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
@@ -40,8 +41,9 @@ function dayKey(): string {
 }
 
 export async function getZaraQuota(sub: string) {
-  const key = `${sub}:${dayKey()}`;
-  const used = quota.get(key) ?? 0;
+  const used = isDsqlEnabled()
+    ? await dsqlAi.getZaraUsed(sub, dayKey())
+    : (quota.get(`${sub}:${dayKey()}`) ?? 0);
   if (await isPremium(sub)) {
     return { used, limit: null as number | null, remaining: null as number | null };
   }
@@ -56,8 +58,12 @@ async function consumeZaraQuota(sub: string): Promise<boolean> {
   if (await isPremium(sub)) return true;
   const q = await getZaraQuota(sub);
   if ((q.remaining ?? 0) <= 0) return false;
-  const key = `${sub}:${dayKey()}`;
-  quota.set(key, (quota.get(key) ?? 0) + 1);
+  if (isDsqlEnabled()) {
+    await dsqlAi.incrementZaraUsed(sub, dayKey());
+  } else {
+    const key = `${sub}:${dayKey()}`;
+    quota.set(key, (quota.get(key) ?? 0) + 1);
+  }
   return true;
 }
 
@@ -193,13 +199,29 @@ async function lensInput(sub: string) {
   };
 }
 
+async function getHlPrefs(sub: string) {
+  if (isDsqlEnabled()) return dsqlAi.getHealthLensPrefs(sub);
+  return (
+    hlPrefs.get(sub) ?? {
+      populationLearningConsent: false,
+      lastOndemandAt: null,
+    }
+  );
+}
+
+async function setHlPrefs(
+  sub: string,
+  prefs: { populationLearningConsent: boolean; lastOndemandAt: string | null },
+) {
+  if (isDsqlEnabled()) return dsqlAi.setHealthLensPrefs(sub, prefs);
+  hlPrefs.set(sub, prefs);
+  return prefs;
+}
+
 export async function getHealthLensStatus(sub: string) {
   const input = await lensInput(sub);
   const act = healthLensActivation(input.cycleCount, input.loggingSpanDays);
-  const prefs = hlPrefs.get(sub) ?? {
-    populationLearningConsent: false,
-    lastOndemandAt: null,
-  };
+  const prefs = await getHlPrefs(sub);
   return { ...act, populationLearningConsent: prefs.populationLearningConsent };
 }
 
@@ -207,11 +229,8 @@ export async function setPopulationLearningConsent(
   sub: string,
   granted: boolean,
 ) {
-  const cur = hlPrefs.get(sub) ?? {
-    populationLearningConsent: false,
-    lastOndemandAt: null,
-  };
-  hlPrefs.set(sub, { ...cur, populationLearningConsent: granted });
+  const cur = await getHlPrefs(sub);
+  await setHlPrefs(sub, { ...cur, populationLearningConsent: granted });
   return getHealthLensStatus(sub);
 }
 
@@ -230,9 +249,9 @@ export async function generateHealthLensReport(sub: string): Promise<
   if (!status.activated) return { error: "not_activated" };
 
   if (!(await isPremium(sub))) {
-    const prefs = hlPrefs.get(sub);
+    const prefs = await getHlPrefs(sub);
     if (
-      prefs?.lastOndemandAt &&
+      prefs.lastOndemandAt &&
       Date.now() - Date.parse(prefs.lastOndemandAt) < FREE_HL_COOLDOWN_MS
     ) {
       return { error: "ondemand_cooldown" };
@@ -267,20 +286,23 @@ export async function generateHealthLensReport(sub: string): Promise<
     findings,
     stub: result.stub,
   };
-  const list = reports.get(sub) ?? [];
-  list.unshift(report);
-  reports.set(sub, list.slice(0, 20));
 
-  const prefs = hlPrefs.get(sub) ?? {
-    populationLearningConsent: false,
-    lastOndemandAt: null,
-  };
-  hlPrefs.set(sub, { ...prefs, lastOndemandAt: report.createdAt });
+  if (isDsqlEnabled()) {
+    await dsqlAi.insertHealthLensReport(sub, report);
+  } else {
+    const list = reports.get(sub) ?? [];
+    list.unshift(report);
+    reports.set(sub, list.slice(0, 20));
+  }
+
+  const prefs = await getHlPrefs(sub);
+  await setHlPrefs(sub, { ...prefs, lastOndemandAt: report.createdAt });
 
   return report;
 }
 
 export async function latestHealthLensReport(sub: string) {
+  if (isDsqlEnabled()) return dsqlAi.latestHealthLensReport(sub);
   return (reports.get(sub) ?? [])[0] ?? null;
 }
 
@@ -306,14 +328,17 @@ export const ZARA_DISCLAIMER =
   "AI-generated wellness guidance — not a diagnosis or medical advice. Speak with a clinician for personal medical decisions.";
 
 export async function countHealthLensReports(sub: string): Promise<number> {
+  if (isDsqlEnabled()) return dsqlAi.countHealthLensReports(sub);
   return (reports.get(sub) ?? []).length;
 }
 
 export async function listHealthLensReportsForExport(sub: string) {
+  if (isDsqlEnabled()) return dsqlAi.listHealthLensReports(sub);
   return reports.get(sub) ?? [];
 }
 
 export async function purgeUserAi(sub: string): Promise<void> {
+  if (isDsqlEnabled()) await dsqlAi.purgeUserAi(sub);
   reports.delete(sub);
   hlPrefs.delete(sub);
   for (const key of [...quota.keys()]) {
