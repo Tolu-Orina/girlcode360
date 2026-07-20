@@ -124,57 +124,64 @@ function isAsyncIndexDdl(stmt) {
 
 async function waitForJob(client, jobId) {
   if (!jobId) return;
-  console.log(`  wait for async job ${jobId}`);
+  const id = String(jobId);
+  console.log(`  wait for async job ${id}`);
+
+  // job_id is text (base-32 style), not uuid — see sys.jobs docs.
+  // https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-create-index-async.html
   try {
-    // Official waiter: https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-create-index-async.html
-    const waited = await client.query("SELECT sys.wait_for_job($1) AS ok", [jobId]);
+    const waited = await client.query("SELECT sys.wait_for_job($1::text) AS ok", [id]);
     const ok = waited.rows[0]?.ok;
     if (ok === false) {
-      throw new Error(`Async index job failed: ${jobId}`);
+      throw new Error(`Async index job failed: ${id}`);
     }
+    console.log(`  job ${id} finished (wait_for_job)`);
     return;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (!/wait_for_job|function.*does not exist|syntax/i.test(msg)) {
+    // Fall through to sys.jobs poll only if waiter is unavailable
+    if (!/wait_for_job|function.*does not exist|syntax|does not exist/i.test(msg)) {
       throw err;
     }
+    console.log(`  wait_for_job unavailable (${msg}); polling sys.jobs`);
   }
 
-  // Fallback poll sys.jobs
   const deadline = Date.now() + 15 * 60_000;
   while (Date.now() < deadline) {
     const { rows } = await client.query(
-      "SELECT status FROM sys.jobs WHERE job_id::text = $1 OR job_id = $1::uuid",
-      [jobId],
+      "SELECT status, details FROM sys.jobs WHERE job_id = $1",
+      [id],
     );
     if (rows.length === 0) {
-      // Job may have been purged after completion (>30 min) or completed immediately
-      console.log(`  job ${jobId} no longer in sys.jobs (treat as done)`);
+      // Completed/failed jobs are purged from sys.jobs after ~30 minutes
+      console.log(`  job ${id} no longer in sys.jobs (treat as done)`);
       return;
     }
     const status = String(rows[0].status || "").toLowerCase();
-    if (status === "completed" || status === "complete" || status === "succeeded") {
-      console.log(`  job ${jobId} ${status}`);
+    if (status === "completed") {
+      console.log(`  job ${id} completed`);
       return;
     }
-    if (status === "failed" || status === "error") {
-      throw new Error(`Async index job ${jobId} status=${status}`);
+    if (status === "failed") {
+      throw new Error(
+        `Async index job ${id} failed: ${rows[0].details || "no details"}`,
+      );
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
-  throw new Error(`Timed out waiting for async job ${jobId}`);
+  throw new Error(`Timed out waiting for async job ${id}`);
 }
 
 function extractJobId(result) {
   if (!result?.rows?.length) return null;
   const row = result.rows[0];
-  return (
-    row.job_id ||
-    row.job_uuid ||
-    row.jobid ||
-    Object.values(row).find((v) => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v)) ||
-    null
-  );
+  if (row.job_id != null) return String(row.job_id);
+  if (row.job_uuid != null) return String(row.job_uuid);
+  // DSQL job ids look like base-32 strings, not RFC UUIDs
+  for (const v of Object.values(row)) {
+    if (typeof v === "string" && /^[a-z0-9]{20,}$/i.test(v)) return v;
+  }
+  return null;
 }
 
 const endpoint = awsOut([
