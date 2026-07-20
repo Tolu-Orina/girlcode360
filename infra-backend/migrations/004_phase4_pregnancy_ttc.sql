@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS appointments_user_idx ON appointments (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS appointments_user_idx ON appointments (user_sub);
 
 CREATE TABLE IF NOT EXISTS ttc_profiles (
   user_sub    TEXT PRIMARY KEY,

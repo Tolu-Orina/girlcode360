@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS cycles (
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS cycles_user_sub_idx ON cycles (user_sub);
-CREATE INDEX IF NOT EXISTS cycles_user_start_idx ON cycles (user_sub, start_date);
+CREATE INDEX ASYNC IF NOT EXISTS cycles_user_sub_idx ON cycles (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS cycles_user_start_idx ON cycles (user_sub, start_date);
 
 CREATE TABLE IF NOT EXISTS cycle_days (
   user_sub     TEXT NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS cycle_days (
   PRIMARY KEY (user_sub, day_date)
 );
 
-CREATE INDEX IF NOT EXISTS cycle_days_user_idx ON cycle_days (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS cycle_days_user_idx ON cycle_days (user_sub);
 
 CREATE TABLE IF NOT EXISTS sync_idempotency (
   user_sub         TEXT NOT NULL,

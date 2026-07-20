@@ -4,4 +4,4 @@
 
 ALTER TABLE wallet_shares ADD COLUMN IF NOT EXISTS id TEXT;
 
-CREATE UNIQUE INDEX IF NOT EXISTS wallet_shares_id_uidx ON wallet_shares (id);
+CREATE UNIQUE INDEX ASYNC IF NOT EXISTS wallet_shares_id_uidx ON wallet_shares (id);

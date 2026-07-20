@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS pcos_medications (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS pcos_meds_user_idx ON pcos_medications (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS pcos_meds_user_idx ON pcos_medications (user_sub);
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id          TEXT PRIMARY KEY,
@@ -35,4 +35,4 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS push_subs_user_idx ON push_subscriptions (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS push_subs_user_idx ON push_subscriptions (user_sub);

@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS healthlens_reports (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS healthlens_reports_user_idx ON healthlens_reports (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS healthlens_reports_user_idx ON healthlens_reports (user_sub);
 
 CREATE TABLE IF NOT EXISTS healthlens_prefs (
   user_sub TEXT PRIMARY KEY,

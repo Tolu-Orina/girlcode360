@@ -23,4 +23,4 @@ CREATE TABLE IF NOT EXISTS consents (
   recorded_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS consents_user_sub_idx ON consents (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS consents_user_sub_idx ON consents (user_sub);

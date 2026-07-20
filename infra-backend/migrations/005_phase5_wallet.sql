@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS wallet_docs (
   purge_after      TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS wallet_docs_user_idx ON wallet_docs (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS wallet_docs_user_idx ON wallet_docs (user_sub);
 
 CREATE TABLE IF NOT EXISTS wallet_shares (
   token       TEXT PRIMARY KEY,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS wallet_shares (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS wallet_shares_doc_idx ON wallet_shares (doc_id);
+CREATE INDEX ASYNC IF NOT EXISTS wallet_shares_doc_idx ON wallet_shares (doc_id);
 
 -- Purge policy (FR-050): soft-delete sets deleted_at; purge_after = deleted_at + 30 days.
 -- Async worker deletes S3 object + row when NOW() >= purge_after.

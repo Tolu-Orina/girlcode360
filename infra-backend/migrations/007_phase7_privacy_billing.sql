@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS export_jobs (
   payload_uri TEXT
 );
 
-CREATE INDEX IF NOT EXISTS export_jobs_user_idx ON export_jobs (user_sub);
+CREATE INDEX ASYNC IF NOT EXISTS export_jobs_user_idx ON export_jobs (user_sub);
 
 CREATE TABLE IF NOT EXISTS deletion_requests (
   id           TEXT PRIMARY KEY,
