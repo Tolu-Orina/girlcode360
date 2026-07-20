@@ -963,8 +963,6 @@ Resources:
         EnvironmentVariables:
           - Name: AWS_DEFAULT_REGION
             Value: !Ref AWS::Region
-          - Name: NODE_ENV
-            Value: production
           - Name: ENVIRONMENT
             Value: dev
           - Name: TF_VAR_environment
@@ -1007,8 +1005,6 @@ Resources:
         EnvironmentVariables:
           - Name: AWS_DEFAULT_REGION
             Value: !Ref AWS::Region
-          - Name: NODE_ENV
-            Value: production
           - Name: ENVIRONMENT
             Value: test
           - Name: TF_VAR_environment
@@ -1051,8 +1047,6 @@ Resources:
         EnvironmentVariables:
           - Name: AWS_DEFAULT_REGION
             Value: !Ref AWS::Region
-          - Name: NODE_ENV
-            Value: production
           - Name: ENVIRONMENT
             Value: prod
           - Name: TF_VAR_environment

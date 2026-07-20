@@ -19,7 +19,9 @@ phases:
   build:
     commands:
       - cd apps/web
-      - npm ci
+      # CodeBuild sets NODE_ENV=production, which would skip Vite/TS in
+      # devDependencies; --include=dev keeps the production install complete.
+      - npm ci --include=dev
       - npm run build
       - aws s3 sync dist/ "s3://girlcode360-web-${ENVIRONMENT}/" --delete
       - |
