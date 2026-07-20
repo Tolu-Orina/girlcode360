@@ -347,12 +347,23 @@ Resources:
                 Action:
                   - acm:*
                 Resource: '*'
+              # Terraform AWS provider calls DescribeParameters (resource must be *)
+              - Sid: SsmDescribeParametersDev
+                Effect: Allow
+                Action:
+                  - ssm:DescribeParameters
+                Resource: '*'
               - Sid: SsmParametersDev
                 Effect: Allow
                 Action:
                   - ssm:PutParameter
                   - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:DescribeParameter
+                  - ssm:DeleteParameter
                   - ssm:AddTagsToResource
+                  - ssm:ListTagsForResource
+                  - ssm:RemoveTagsFromResource
                 Resource: !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/girlcode360/dev/web/*'
               - Effect: Allow
                 Action:
@@ -436,12 +447,23 @@ Resources:
                 Action:
                   - acm:*
                 Resource: '*'
+              # Terraform AWS provider calls DescribeParameters (resource must be *)
+              - Sid: SsmDescribeParametersTest
+                Effect: Allow
+                Action:
+                  - ssm:DescribeParameters
+                Resource: '*'
               - Sid: SsmParametersTest
                 Effect: Allow
                 Action:
                   - ssm:PutParameter
                   - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:DescribeParameter
+                  - ssm:DeleteParameter
                   - ssm:AddTagsToResource
+                  - ssm:ListTagsForResource
+                  - ssm:RemoveTagsFromResource
                 Resource: !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/girlcode360/test/web/*'
               - Effect: Allow
                 Action:
@@ -525,12 +547,23 @@ Resources:
                 Action:
                   - acm:*
                 Resource: '*'
+              # Terraform AWS provider calls DescribeParameters (resource must be *)
+              - Sid: SsmDescribeParametersProd
+                Effect: Allow
+                Action:
+                  - ssm:DescribeParameters
+                Resource: '*'
               - Sid: SsmParametersProd
                 Effect: Allow
                 Action:
                   - ssm:PutParameter
                   - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:DescribeParameter
+                  - ssm:DeleteParameter
                   - ssm:AddTagsToResource
+                  - ssm:ListTagsForResource
+                  - ssm:RemoveTagsFromResource
                 Resource: !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/girlcode360/prod/web/*'
               - Effect: Allow
                 Action:
