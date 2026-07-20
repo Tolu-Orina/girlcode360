@@ -127,20 +127,15 @@ async function waitForJob(client, jobId) {
   const id = String(jobId);
   console.log(`  wait for async job ${id}`);
 
-  // job_id is text (base-32 style), not uuid — see sys.jobs docs.
+  // job_id is text (base-32 style). wait_for_job is a PROCEDURE (CALL), not SELECT.
   // https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-create-index-async.html
   try {
-    const waited = await client.query("SELECT sys.wait_for_job($1::text) AS ok", [id]);
-    const ok = waited.rows[0]?.ok;
-    if (ok === false) {
-      throw new Error(`Async index job failed: ${id}`);
-    }
+    await client.query("CALL sys.wait_for_job($1)", [id]);
     console.log(`  job ${id} finished (wait_for_job)`);
     return;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Fall through to sys.jobs poll only if waiter is unavailable
-    if (!/wait_for_job|function.*does not exist|syntax|does not exist/i.test(msg)) {
+    if (!/wait_for_job|procedure|function.*does not exist|syntax|does not exist/i.test(msg)) {
       throw err;
     }
     console.log(`  wait_for_job unavailable (${msg}); polling sys.jobs`);
@@ -153,7 +148,6 @@ async function waitForJob(client, jobId) {
       [id],
     );
     if (rows.length === 0) {
-      // Completed/failed jobs are purged from sys.jobs after ~30 minutes
       console.log(`  job ${id} no longer in sys.jobs (treat as done)`);
       return;
     }
@@ -307,13 +301,46 @@ try {
   }
 
   console.log(`grant table privileges to ${appRole}`);
-  await client.query(`GRANT USAGE ON SCHEMA public TO ${roleIdent}`);
-  await client.query(
-    `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${roleIdent}`,
+  // DSQL treats some catalog/schema objects as system entities — GRANT USAGE ON
+  // SCHEMA public can fail with "feature not supported on system entity".
+  // Prefer per-table grants (AWS sample pattern for app roles).
+  try {
+    await client.query(`GRANT USAGE ON SCHEMA public TO ${roleIdent}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/system entity|not supported/i.test(msg)) {
+      console.log(`  skip GRANT USAGE ON SCHEMA public (${msg})`);
+    } else {
+      throw err;
+    }
+  }
+
+  const { rows: tables } = await client.query(
+    `SELECT tablename
+     FROM pg_tables
+     WHERE schemaname = 'public'
+     ORDER BY tablename`,
   );
-  await client.query(
-    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${roleIdent}`,
-  );
+  for (const { tablename } of tables) {
+    const tableIdent = quoteIdent(tablename);
+    console.log(`  GRANT DML ON ${tablename}`);
+    await client.query(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${tableIdent} TO ${roleIdent}`,
+    );
+  }
+
+  try {
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${roleIdent}`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/system entity|not supported/i.test(msg)) {
+      console.log(`  skip ALTER DEFAULT PRIVILEGES (${msg})`);
+    } else {
+      throw err;
+    }
+  }
 
   console.log(`App role bootstrap complete (${appRole})`);
 } finally {
