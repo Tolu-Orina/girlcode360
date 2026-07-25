@@ -41,7 +41,7 @@ variable "kms_key_arn" {
   type = string
 }
 
-variable "zara_model_id" {
+variable "alena_model_id" {
   type = string
 }
 
@@ -156,7 +156,7 @@ resource "aws_lambda_function" "api" {
       DSQL_USER              = "girlcode360_app"
       DATA_BUCKET            = var.data_bucket_name
       CONSENT_POLICY_VERSION = "2026-07-v1"
-      ZARA_MODEL_ID          = var.zara_model_id
+      ALENA_MODEL_ID         = var.alena_model_id
     }
   }
 }

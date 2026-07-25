@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import type {
   HealthLensReport,
   HealthLensStatus,
-  ZaraMode,
+  AlenaMode,
 } from "../../../../packages/api-types/src/index";
 import {
   ApiError,
@@ -11,14 +11,14 @@ import {
   generateHealthLensReport,
   getHealthLensStatus,
   getLatestHealthLensReport,
-  getZaraQuota,
-  postZaraChat,
+  getAlenaQuota,
+  postAlenaChat,
   setHealthLensPopulationConsent,
 } from "../lib/api";
 import { track } from "../lib/analytics";
 import { apiBaseUrl } from "../lib/config";
 import "./health.css";
-import "./zara.css";
+import "./alena.css";
 
 type ChatMsg = { role: "user" | "assistant"; text: string; crisis?: boolean };
 
@@ -34,12 +34,12 @@ function downloadText(filename: string, text: string) {
   URL.revokeObjectURL(url);
 }
 
-export function ZaraPage() {
+export function AlenaPage() {
   const [params] = useSearchParams();
   const [panel, setPanel] = useState<Panel>(
     params.get("panel") === "lens" ? "lens" : "chat",
   );
-  const [mode, setMode] = useState<ZaraMode>("context");
+  const [mode, setMode] = useState<AlenaMode>("context");
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [quota, setQuota] = useState<{
@@ -78,7 +78,7 @@ export function ZaraPage() {
       if (!apiBaseUrl) return;
       try {
         const [q, status] = await Promise.all([
-          getZaraQuota(),
+          getAlenaQuota(),
           getHealthLensStatus(),
         ]);
         if (cancelled) return;
@@ -92,7 +92,7 @@ export function ZaraPage() {
         }
       } catch (err) {
         if (!cancelled && !(err instanceof ApiError && err.code === "api_base_url_missing")) {
-          setError(err instanceof Error ? err.message : "Could not load Zara");
+          setError(err instanceof Error ? err.message : "Could not load Alena");
         }
       }
     })();
@@ -115,12 +115,12 @@ export function ZaraPage() {
           ...m,
           {
             role: "assistant",
-            text: "Connect the API to chat with Zara. Offline mode only shows this shell.",
+            text: "Connect the API to chat with Alena. Offline mode only shows this shell.",
           },
         ]);
         return;
       }
-      const res = await postZaraChat({ message, mode });
+      const res = await postAlenaChat({ message, mode });
       setQuota(res.quota);
       setDisclaimer(res.disclaimer);
       setMsgs((m) => [
@@ -129,9 +129,9 @@ export function ZaraPage() {
       ]);
     } catch (err) {
       const code = err instanceof ApiError ? err.code : null;
-      if (code === "zara_consent_required") {
+      if (code === "alena_consent_required") {
         setError(
-          "Zara consent is required for Context mode. Update consents in Account, or switch to Anonymous.",
+          "Alena consent is required for Context mode. Update consents in Account, or switch to Anonymous.",
         );
       } else {
         setError(err instanceof Error ? err.message : "Chat failed");
@@ -209,12 +209,12 @@ export function ZaraPage() {
   const showPaywall = quota?.limit != null && (quota.remaining ?? 0) <= 0;
 
   useEffect(() => {
-    if (showPaywall) track({ name: "paywall_shown", props: { surface: "zara" } });
+    if (showPaywall) track({ name: "paywall_shown", props: { surface: "alena" } });
   }, [showPaywall]);
 
   return (
-    <section className="health-page zara-page">
-      <h1>Zara</h1>
+    <section className="health-page alena-page">
+      <h1>Alena</h1>
       <p className="health-lead">
         Wellness companion powered by Amazon Nova. Never diagnoses — helps you
         prepare for clinician conversations.
@@ -240,25 +240,25 @@ export function ZaraPage() {
       {error ? <p className="health-error">{error}</p> : null}
 
       {panel === "chat" ? (
-        <div className="health-section zara-chat">
-          <div className="zara-toolbar">
+        <div className="health-section alena-chat">
+          <div className="alena-toolbar">
             <label>
               Mode{" "}
               <select
                 value={mode}
-                onChange={(e) => setMode(e.target.value as ZaraMode)}
+                onChange={(e) => setMode(e.target.value as AlenaMode)}
               >
                 <option value="context">Context (uses your logs)</option>
                 <option value="anonymous">Anonymous</option>
               </select>
             </label>
-            <span className="zara-quota">{quotaLabel}</span>
+            <span className="alena-quota">{quotaLabel}</span>
           </div>
 
           {showPaywall ? (
-            <div className="zara-paywall" role="status">
+            <div className="alena-paywall" role="status">
               <p>
-                Free Zara chats are used up for today. Premium unlocks unlimited
+                Free Alena chats are used up for today. Premium unlocks unlimited
                 conversations.
               </p>
               <Link className="btn primary" to="/app/account">
@@ -267,7 +267,7 @@ export function ZaraPage() {
             </div>
           ) : null}
 
-          <div className="zara-thread" aria-live="polite">
+          <div className="alena-thread" aria-live="polite">
             {msgs.length === 0 ? (
               <p className="health-lead">
                 Ask about symptoms, cycles, or how to talk to your clinician.
@@ -276,7 +276,7 @@ export function ZaraPage() {
             {msgs.map((m, i) => (
               <div
                 key={`${i}-${m.role}`}
-                className={`zara-bubble ${m.role}${m.crisis ? " crisis" : ""}`}
+                className={`alena-bubble ${m.role}${m.crisis ? " crisis" : ""}`}
               >
                 <pre>{m.text}</pre>
               </div>
@@ -284,23 +284,23 @@ export function ZaraPage() {
             <div ref={bottomRef} />
           </div>
 
-          <p className="zara-disclaimer">{disclaimer}</p>
+          <p className="alena-disclaimer">{disclaimer}</p>
 
           <div className="cycle-actions">
             <button type="button" disabled={busy} onClick={() => void onPrepCard()}>
               Generate Prep Card
             </button>
             {report ? (
-              <Link to="/app/zara?ask=report">Ask Zara about report</Link>
+              <Link to="/app/alena?ask=report">Ask Alena about report</Link>
             ) : null}
           </div>
 
-          <form className="zara-compose" onSubmit={(e) => void onSend(e)}>
-            <label className="sr-only" htmlFor="zara-input">
-              Message Zara
+          <form className="alena-compose" onSubmit={(e) => void onSend(e)}>
+            <label className="sr-only" htmlFor="alena-input">
+              Message Alena
             </label>
             <textarea
-              id="zara-input"
+              id="alena-input"
               rows={3}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -337,7 +337,7 @@ export function ZaraPage() {
                 </li>
               </ul>
 
-              <label className="zara-consent">
+              <label className="alena-consent">
                 <input
                   type="checkbox"
                   checked={hlStatus.populationLearningConsent}
@@ -364,13 +364,13 @@ export function ZaraPage() {
               </div>
 
               {report ? (
-                <article className="zara-report">
+                <article className="alena-report">
                   <h2>Latest report</h2>
                   <p className="health-lead">
                     Confidence: {report.confidence}
                     {report.stub ? " · stub model" : ""}
                   </p>
-                  <pre className="zara-narrative">{report.narrative}</pre>
+                  <pre className="alena-narrative">{report.narrative}</pre>
                   <ul className="med-list">
                     {report.findings.map((f) => (
                       <li key={f.id}>
@@ -382,8 +382,8 @@ export function ZaraPage() {
                       </li>
                     ))}
                   </ul>
-                  <Link className="btn primary" to="/app/zara?ask=report">
-                    Ask Zara about this report
+                  <Link className="btn primary" to="/app/alena?ask=report">
+                    Ask Alena about this report
                   </Link>
                 </article>
               ) : null}

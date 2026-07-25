@@ -40,8 +40,8 @@ export function HomePage() {
         <p className="page-eyebrow">GirlCode360</p>
         <h1>{name ? `Hello, ${name}` : "Welcome"}</h1>
         <p className="page-lead">
-          Private wellness for cycle, PCOS, pregnancy, and TTC — on desktop and
-          your home screen.
+          Your cycle, records, and what&apos;s near you — private wellness in one
+          place, on desktop and your home screen.
         </p>
       </header>
 
@@ -54,8 +54,8 @@ export function HomePage() {
           <span className="home-tile-label">Health</span>
           <span className="home-tile-copy">PCOS, pregnancy, TTC, wallet</span>
         </Link>
-        <Link className="home-tile" to="/app/zara">
-          <span className="home-tile-label">Zara</span>
+        <Link className="home-tile" to="/app/alena">
+          <span className="home-tile-label">Alena</span>
           <span className="home-tile-copy">Ask for wellness guidance</span>
         </Link>
         <Link className="home-tile" to="/app/library">

@@ -12,7 +12,7 @@ export type ConsentPurpose =
   | "analytics"
   | "marketing"
   | "location"
-  | "ai_zara"
+  | "ai_alena"
   | "ai_healthlens";
 
 export type UserProfile = {

@@ -39,11 +39,11 @@ const PURPOSE_COPY: Record<
   },
   location: {
     title: "Approximate location",
-    body: "Used only for jurisdiction and emergency number hints — not sold.",
+    body: "Used for emergency number hints and nearby pharmacy, clinic, and beauty suggestions — not sold.",
   },
-  ai_zara: {
-    title: "Zara AI companion",
-    body: "Allow Zara to use your prompts (and optional context you choose) via Amazon Bedrock.",
+  ai_alena: {
+    title: "Alena AI companion",
+    body: "Allow Alena to use your prompts (and optional context you choose) via Amazon Bedrock.",
   },
   ai_healthlens: {
     title: "HealthLens insights",
@@ -94,7 +94,7 @@ export function OnboardingPage() {
     analytics: false,
     marketing: false,
     location: false,
-    ai_zara: false,
+    ai_alena: false,
     ai_healthlens: false,
   });
   const [modules, setModules] = useState<HealthModule[]>(["period_tracker"]);

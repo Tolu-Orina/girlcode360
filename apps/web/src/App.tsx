@@ -1,8 +1,9 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { RequireAuth } from "./components/RequireAuth";
 import { RequireOnboarding } from "./components/RequireOnboarding";
 import { AppShell } from "./layout/AppShell";
 import { AccountPage } from "./pages/AccountPage";
+import { AlenaPage } from "./pages/AlenaPage";
 import { CyclePage } from "./pages/CyclePage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { HealthPage } from "./pages/HealthPage";
@@ -16,7 +17,6 @@ import { SignInPage } from "./pages/SignInPage";
 import { SignUpPage } from "./pages/SignUpPage";
 import { TermsPage } from "./pages/TermsPage";
 import { VerifyPage } from "./pages/VerifyPage";
-import { ZaraPage } from "./pages/ZaraPage";
 
 export default function App() {
   return (
@@ -52,7 +52,8 @@ export default function App() {
         <Route index element={<HomePage />} />
         <Route path="cycle" element={<CyclePage />} />
         <Route path="health" element={<HealthPage />} />
-        <Route path="zara" element={<ZaraPage />} />
+        <Route path="alena" element={<AlenaPage />} />
+        <Route path="zara" element={<Navigate to="/app/alena" replace />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="account" element={<AccountPage />} />
       </Route>

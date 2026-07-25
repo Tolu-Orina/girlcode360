@@ -65,7 +65,7 @@ module "lambda" {
   dsql_enabled         = var.enable_dsql
   data_bucket_name     = module.s3_data.bucket_id
   kms_key_arn          = module.kms.key_arn
-  zara_model_id        = var.zara_model_id
+  alena_model_id       = var.alena_model_id
 }
 
 module "apigw" {

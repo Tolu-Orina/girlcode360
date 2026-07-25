@@ -7,15 +7,15 @@ import { articlesForMarket, pcosInsightsForUser } from "../lib/pcos";
 import { contentArticles } from "../lib/content";
 import { allWeekContent, weekContent } from "../lib/weeks";
 import {
-  assembleZaraContext,
+  assembleAlenaContext,
   buildPrepCard,
   generateHealthLensReport,
   getHealthLensStatus,
-  getZaraQuota,
+  getAlenaQuota,
   latestHealthLensReport,
   setPopulationLearningConsent,
-  zaraChat,
-  ZARA_DISCLAIMER,
+  alenaChat,
+  ALENA_DISCLAIMER,
 } from "../store/ai";
 import {
   activatePremium,
@@ -810,14 +810,20 @@ export const handler = async (
     return json(200, { ok: true });
   }
 
-  /* ——— Phase 6: Zara + HealthLens ——— */
+  /* ——— Phase 6: Alena + HealthLens ——— */
 
-  if (method === "GET" && path === "/v1/zara/quota") {
+  // Legacy /v1/zara/* aliases (pre-rename)
+  const alenaPath =
+    path.startsWith("/v1/zara/")
+      ? path.replace("/v1/zara/", "/v1/alena/")
+      : path;
+
+  if (method === "GET" && alenaPath === "/v1/alena/quota") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
-    return json(200, { quota: await getZaraQuota(user.sub) });
+    return json(200, { quota: await getAlenaQuota(user.sub) });
   }
 
-  if (method === "POST" && path === "/v1/zara/chat") {
+  if (method === "POST" && alenaPath === "/v1/alena/chat") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
     const body = parseBody<{
       message?: string;
@@ -827,24 +833,26 @@ export const handler = async (
     const mode = body.mode === "anonymous" ? "anonymous" : "context";
     if (mode === "context") {
       const consents = await latestConsentsByPurpose(user.sub);
-      const zara = consents.find((c) => c.purpose === "ai_zara");
-      if (!zara?.granted) {
-        return json(403, { error: "zara_consent_required" });
+      const alena = consents.find(
+        (c) => c.purpose === "ai_alena" || (c.purpose as string) === "ai_zara",
+      );
+      if (!alena?.granted) {
+        return json(403, { error: "alena_consent_required" });
       }
     }
-    const result = await zaraChat(user.sub, body.message.trim(), mode);
+    const result = await alenaChat(user.sub, body.message.trim(), mode);
     return json(200, {
       ...result,
-      disclaimer: ZARA_DISCLAIMER,
+      disclaimer: ALENA_DISCLAIMER,
       actions: [{ id: "prep_card", label: "Generate appointment Prep Card" }],
       // Client may animate tokens from full reply until APIGW STREAM is enabled
       streamHint: "full_reply_v1",
     });
   }
 
-  if (method === "GET" && path === "/v1/zara/context-preview") {
+  if (method === "GET" && alenaPath === "/v1/alena/context-preview") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
-    return json(200, { context: await assembleZaraContext(user.sub) });
+    return json(200, { context: await assembleAlenaContext(user.sub) });
   }
 
   if (method === "GET" && path === "/v1/healthlens/status") {

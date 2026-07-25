@@ -7,7 +7,7 @@ All-inclusive women’s beauty and wellness platform (UK · Nigeria · Ghana).
 | Document | Description |
 | --- | --- |
 | [Product Requirements (PRD)](./docs/girlcode-prd.md) | Functional & non-functional requirements |
-| [AI Features Spec](./docs/girlcode-ai.md) | Zara, HealthLens (SheMatch deferred) |
+| [AI Features Spec](./docs/girlcode-ai.md) | Alena, HealthLens (SheMatch deferred) |
 | [Roadmap](./docs/girlcode-roadmap.md) | 14-day execution overlay + 6-month strategy |
 | [Implementation Plan](./docs/girlcode-implementation-plan.md) | Day-by-day AWS build plan |
 

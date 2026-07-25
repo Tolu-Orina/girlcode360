@@ -30,7 +30,7 @@ This PRD covers GirlCode360 **v1.0** — the full health platform (mobile + API 
 | Mobile-responsive **PWA** (installable; mobile bottom nav in standalone) | Native iOS/Android (Expo) — later if needed |
 | Backend API & AWS infrastructure | Location-based marketplace (FR-054–FR-064) |
 | Period, PCOS, Pregnancy, TTC, Health Wallet | SheMatch health-to-marketplace AI (FR-096–FR-103) |
-| Zara + HealthLens AI | Telemedicine / video consults |
+| Alena + HealthLens AI | Telemedicine / video consults |
 | Notifications, consent, privacy centre, Premium | Wearable device APIs |
 | Educational content library | White-label B2B (2027+) |
 
@@ -300,16 +300,16 @@ Aligned with existing WalkCroach-style split: **`infra-web`** (S3, CloudFront, D
 | Client | **Responsive PWA** (Vite + React) on S3 + CloudFront | One codebase; installable; no App Store tax for v1; matches `infra-web` |
 | Mobile UX | **Bottom tab bar** in standalone / narrow viewports; top nav on desktop — **no hamburger as primary mobile nav** | Add-to-Home-Screen feels app-like |
 | Auth | Amazon Cognito User Pools (**no Amplify, no Hosted UI**) | Custom sign-in / sign-up / forgot-password / verification pages; `amazon-cognito-identity-js` (SRP) + Cognito JWT to API Gateway |
-| API | Amazon API Gateway (REST) + AWS Lambda (Node.js / TypeScript) | Serverless; Cognito authorizer; response streaming for Zara |
+| API | Amazon API Gateway (REST) + AWS Lambda (Node.js / TypeScript) | Serverless; Cognito authorizer; response streaming for Alena |
 | Primary DB | **Amazon Aurora DSQL** | SQL for cycles/HealthLens; **scale-to-zero**; permanent free tier; no VPC/NAT/RDS Proxy |
-| Hot counters (optional) | DynamoDB on-demand | Zara daily quota only if cheaper than DSQL writes |
+| Hot counters (optional) | DynamoDB on-demand | Alena daily quota only if cheaper than DSQL writes |
 | File storage | S3 (SSE-KMS) + multipart | Wallet ciphertext; content assets |
 | Secrets | **AWS Secrets Manager** — JSON blobs per env | Stripe/Paystack, SMS (DSQL uses IAM auth tokens — no static DB password if using IAM) |
 | Config | **SSM Parameter Store** | Endpoints, feature flags, Nova model ID, VAPID public key |
 | Encryption keys | AWS KMS CMKs | Envelope encryption; bucket keys |
 | Push | Web Push (VAPID) + service worker | Generic notification bodies (FR-068) |
 | Payments | Stripe (UK) + Paystack (NG/GH) | Local card + mobile money |
-| AI | Amazon Nova 2 Lite (Bedrock) | Zara streaming; HealthLens narrative |
+| AI | Amazon Nova 2 Lite (Bedrock) | Alena streaming; HealthLens narrative |
 | Offline | IndexedDB (e.g. Dexie) + outbox sync | Offline health writes for flaky NG/GH networks |
 | Analytics | Mixpanel or Amplitude (PII/health-field excluded) | Product analytics only |
 | Monitoring | CloudWatch + Sentry | Logs + front-end errors |
@@ -367,7 +367,7 @@ girlcode360/
 | Context | Primary navigation |
 | --- | --- |
 | Desktop / wide viewport | Top (or side) nav — links, not a hamburger drawer as the only path |
-| Mobile browser / **Add to Home Screen** (`display: standalone`) | **Persistent bottom tab bar** (Home, Cycle, Health, Zara, Account) |
+| Mobile browser / **Add to Home Screen** (`display: standalone`) | **Persistent bottom tab bar** (Home, Cycle, Health, Alena, Account) |
 | Hamburger | Allowed only as overflow for secondary items — **never** as the sole mobile menu |
 ---
 
@@ -410,7 +410,7 @@ A FR is Done when **all** apply:
 | AT-006 | 2G throttle: period log syncs on reconnect | Must |
 | AT-007 | Period reminder Web Push does NOT display health content | Must |
 | AT-008 | Consent withdrawal stops analytics within 24h | Must |
-| AT-009 | Zara Context Mode streams first token <2s; full response P95 <5s | Must |
+| AT-009 | Alena Context Mode streams first token <2s; full response P95 <5s | Must |
 | AT-010 | HealthLens activates only after 3 cycles or 90 days | Must |
 
 ---
@@ -421,7 +421,7 @@ Full requirements **FR-079–FR-095** and **NFR-AI-01–NFR-AI-10** live in [gir
 
 | Feature | Role | v1.0 status |
 | --- | --- | --- |
-| **Zara** | Contextual health companion (Amazon Nova 2 Lite) | In scope |
+| **Alena** | Contextual health companion (Amazon Nova 2 Lite) | In scope |
 | **HealthLens** | Longitudinal pattern analyser + Doctor Prep Card | In scope |
 | **SheMatch** | Health → marketplace bridge | **Deferred** (marketplace dependency) |
 

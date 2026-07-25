@@ -1,4 +1,5 @@
--- Phase 6: Zara quota + HealthLens reports + population learning consent
+-- Phase 6: AI companion quota + HealthLens reports + population learning consent
+-- Note: companion later renamed Zara → Alena in 009_rename_zara_to_alena.sql
 
 CREATE TABLE IF NOT EXISTS zara_quota (
   user_sub   TEXT NOT NULL,

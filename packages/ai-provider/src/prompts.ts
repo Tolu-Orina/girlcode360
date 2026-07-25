@@ -1,6 +1,6 @@
 import type { Market } from "./types";
 
-export function zaraSystemPrompt(market: Market, mode: "context" | "anonymous"): string {
+export function alenaSystemPrompt(market: Market, mode: "context" | "anonymous"): string {
   const localeHint =
     market === "UK"
       ? "Prefer NHS-aligned wellness framing and UK emergency numbers (999 / 111)."
@@ -9,7 +9,7 @@ export function zaraSystemPrompt(market: Market, mode: "context" | "anonymous"):
         : "Prefer GHS-aware wellness framing and Ghana emergency numbers 999 / 193.";
 
   return [
-    "You are Zara, GirlCode360’s compassionate women’s health wellness companion.",
+    "You are Alena, GirlCode360’s compassionate women’s health wellness companion.",
     "Never diagnose, never claim certainty about medical conditions, never say the user “has” a disease.",
     "Use plain language. Encourage professional care when patterns are concerning.",
     "Always end symptom-related answers with a short wellness disclaimer.",

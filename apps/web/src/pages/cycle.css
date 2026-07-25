@@ -1,10 +1,12 @@
 .cycle-page {
   display: grid;
   gap: 1rem;
-  max-width: 720px;
+  width: 100%;
+  max-width: var(--page-max);
   margin: 0 auto;
   padding: 0.25rem 0 2rem;
   color: var(--ink);
+  min-height: calc(100dvh - 8.5rem);
 }
 
 .cycle-page h1 {

@@ -17,7 +17,7 @@
 ## Bedrock / Nova outage
 
 1. Set `BEDROCK_ENABLED=false` (or rely on automatic stub fallback in `packages/ai-provider`).
-2. User-facing copy: “Zara is temporarily using a limited offline reply. Your logs are safe.”
+2. User-facing copy: “Alena is temporarily using a limited offline reply. Your logs are safe.”
 3. Disable HealthLens on-demand generation if stubs are unacceptable; keep Prep Card rules text available.
 4. Page CloudWatch Bedrock alarms (`bedrock_alarms.tf.example`) when live.
 

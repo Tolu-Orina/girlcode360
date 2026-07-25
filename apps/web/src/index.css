@@ -61,8 +61,9 @@
   --surface-soft: #fbf4f7;
   --brand-rgb: 176, 18, 106;
   --tap: 48px;
-  --shell-max: 1080px;
+  --shell-max: 1180px;
   --auth-max: 420px;
+  --page-max: min(100%, 960px);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --shadow-soft: 0 12px 40px rgba(42, 21, 32, 0.1);
 

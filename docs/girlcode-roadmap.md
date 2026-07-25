@@ -24,7 +24,7 @@
 | **Strategic 6-month arc** | Retained below for GTM, compliance registrations, and post-MVP growth — **not** a constraint on the 14-day build |
 
 **North star (strategic, Month 6):** 50,000 registered users across UK, Nigeria, Ghana.  
-**North star (sprint):** Ship installable PWA on `test` with Must-priority health modules + Zara + HealthLens + privacy rights flows.
+**North star (sprint):** Ship installable PWA on `test` with Must-priority health modules + Alena + HealthLens + privacy rights flows.
 
 ---
 
@@ -49,7 +49,7 @@
 - Notifications (Web Push; privacy-safe bodies)
 - Educational content library (market-tagged)
 - Account privacy: My Data, export, delete
-- Zara + HealthLens
+- Alena + HealthLens
 - Premium entitlement plumbing (Stripe UK + Paystack NG/GH — can soft-launch)
 - AWS foundation: web + backend infra, CI/CD (DSQL, no NAT)
 
@@ -86,7 +86,7 @@
 | **P2** | 5–8 | Period + PCOS + offline engine + offline calendar | AT-001 pass on staging |
 | **P3** | 7–10 | Pregnancy + TTC + notifications | Modules selectable; reminders fire without PHI on lock screen |
 | **P4** | 8–11 | Health Wallet encryption + share links | AT-002 pass |
-| **P5** | 6–12 | Zara streaming + HealthLens rules/PDF | AT-009, AT-010 pass |
+| **P5** | 6–12 | Alena streaming + HealthLens rules/PDF | AT-009, AT-010 pass |
 | **P6** | 11–13 | Privacy centre, export/delete, Premium gates | AT-004, AT-005, AT-008 pass |
 | **P7** | 13–14 | Hardening, offline sync, store builds, clinical copy pass | Internal beta build distributed |
 
@@ -113,7 +113,7 @@ Ship v1.0 health platform (this sprint).
 
 - Nigeria soft/public launch
 - UK + Ghana public
-- Premium conversion optimisation (Zara / HealthLens as hooks)
+- Premium conversion optimisation (Alena / HealthLens as hooks)
 
 ### Phase D — Marketplace + SheMatch (Months 4–6)
 
@@ -127,7 +127,7 @@ Ship v1.0 health platform (this sprint).
 | Milestone | Sprint | +1–2 mo | +3–4 mo | +5–6 mo |
 | --- | --- | --- | --- | --- |
 | Core health modules | ✓ | Iterate | Live | Live |
-| Zara / HealthLens | ✓ | Beta | Live | Live |
+| Alena / HealthLens | ✓ | Beta | Live | Live |
 | Compliance registrations | Start | Complete | Maintain | Maintain |
 | UK closed beta | — | ✓ | Expand | — |
 | Public NG / UK / GH | — | — | ✓ | Scale |
@@ -187,7 +187,7 @@ Sprint infra should stay lean: **Aurora DSQL** (scale-to-zero + free tier), **no
 | Critical AT suite | All Must ATs green on `test` |
 | Internal testers on PWA (Add to Home Screen) | ≥10 |
 | Open P0 bugs | 0 |
-| Clinical sign-off on shipped copy | Complete for Period, PCOS, Zara, HealthLens |
+| Clinical sign-off on shipped copy | Complete for Period, PCOS, Alena, HealthLens |
 
 ### Strategic (Month 6)
 

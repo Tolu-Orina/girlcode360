@@ -2,14 +2,16 @@
 
 .page,
 .health-page,
-.zara-page {
+.alena-page {
   display: grid;
   gap: var(--space-5);
-  max-width: 720px;
+  width: 100%;
+  max-width: var(--page-max);
   margin: 0 auto;
   padding: 0.15rem 0 2rem;
   color: var(--ink);
   animation: rise-in 420ms var(--ease-out);
+  min-height: calc(100dvh - 8.5rem);
 }
 
 .page-header,
@@ -30,7 +32,7 @@
 
 .page h1,
 .health-page h1,
-.zara-page h1 {
+.alena-page h1 {
   margin: 0;
   font-size: clamp(1.65rem, 3vw, 2rem);
   color: var(--brand);
@@ -38,7 +40,7 @@
 
 .page h2,
 .health-page h2,
-.zara-page h2 {
+.alena-page h2 {
   margin: 0;
   font-size: 1.2rem;
   color: var(--ink);
@@ -68,6 +70,12 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-3);
+}
+
+@media (min-width: 900px) {
+  .home-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .home-tile {
@@ -202,7 +210,7 @@
 
 .health-form button,
 .health-page button:not(.btn),
-.zara-page button:not(.btn) {
+.alena-page button:not(.btn) {
   min-height: var(--tap);
   padding: 0.5rem 0.95rem;
   border: 1px solid var(--border-strong);
@@ -216,7 +224,7 @@
 
 .health-page button.primary,
 .health-form button.primary,
-.zara-page button.primary {
+.alena-page button.primary {
   background: var(--brand);
   color: #fff;
   border-color: var(--brand);

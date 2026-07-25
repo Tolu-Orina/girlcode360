@@ -47,7 +47,7 @@ const CONSENT_LABELS: Record<ConsentPurpose, string> = {
   analytics: "Product analytics",
   marketing: "Marketing messages",
   location: "Approximate location",
-  ai_zara: "Zara AI",
+  ai_alena: "Alena AI",
   ai_healthlens: "HealthLens",
 };
 
@@ -296,7 +296,7 @@ export function AccountPage() {
             </button>
           </div>
         ) : (
-          <p className="health-lead">Unlimited Zara + HealthLens on-demand.</p>
+          <p className="health-lead">Unlimited Alena + HealthLens on-demand.</p>
         )}
       </div>
 

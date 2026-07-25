@@ -51,26 +51,26 @@ function mapReport(row: ReportDbRow): HealthLensReportRow {
   };
 }
 
-export async function getZaraUsed(
+export async function getAlenaUsed(
   sub: string,
   dayKey: string,
 ): Promise<number> {
   const res = await query<QuotaRow>(
-    `SELECT * FROM zara_quota WHERE user_sub = $1 AND day_key = $2`,
+    `SELECT * FROM alena_quota WHERE user_sub = $1 AND day_key = $2`,
     [sub, dayKey],
   );
   return res.rows[0]?.used ?? 0;
 }
 
-export async function incrementZaraUsed(
+export async function incrementAlenaUsed(
   sub: string,
   dayKey: string,
 ): Promise<number> {
   const res = await query<QuotaRow>(
-    `INSERT INTO zara_quota (user_sub, day_key, used)
+    `INSERT INTO alena_quota (user_sub, day_key, used)
      VALUES ($1,$2,1)
      ON CONFLICT (user_sub, day_key) DO UPDATE SET
-       used = zara_quota.used + 1
+       used = alena_quota.used + 1
      RETURNING *`,
     [sub, dayKey],
   );
@@ -169,5 +169,5 @@ export async function countHealthLensReports(sub: string): Promise<number> {
 export async function purgeUserAi(sub: string): Promise<void> {
   await query(`DELETE FROM healthlens_reports WHERE user_sub = $1`, [sub]);
   await query(`DELETE FROM healthlens_prefs WHERE user_sub = $1`, [sub]);
-  await query(`DELETE FROM zara_quota WHERE user_sub = $1`, [sub]);
+  await query(`DELETE FROM alena_quota WHERE user_sub = $1`, [sub]);
 }

@@ -13,7 +13,7 @@ variable "enable_dsql" {
   default     = true
 }
 
-variable "zara_model_id" {
+variable "alena_model_id" {
   type    = string
   default = "global.amazon.nova-2-lite-v1:0"
 }

@@ -17,7 +17,7 @@
 
 ### 0.1 Goal
 
-Ship an **internal-beta-ready** GirlCode360 **PWA** + serverless AWS backend covering all **Must** health, privacy, and AI features (Zara + HealthLens), with production-shaped infrastructure (`infra-web` / `infra-backend`), **excluding marketplace and SheMatch**.
+Ship an **internal-beta-ready** GirlCode360 **PWA** + serverless AWS backend covering all **Must** health, privacy, and AI features (Alena + HealthLens), with production-shaped infrastructure (`infra-web` / `infra-backend`), **excluding marketplace and SheMatch**.
 
 ### 0.2 Non-negotiables
 
@@ -86,7 +86,7 @@ Example `girlcode360/dev/app` JSON:
                              │ Cognito JWT
                              ▼
                     API Gateway REST (Cognito authorizer)
-                             │  STREAM on POST /v1/zara/chat
+                             │  STREAM on POST /v1/alena/chat
                              ▼
                     Lambda (TypeScript) — no VPC required
                              │
@@ -107,7 +107,7 @@ Example `girlcode360/dev/app` JSON:
 | HealthLens / cycles | Excellent SQL | Awkward (single-table / many GSIs) | **SQL joins + aggregates** |
 | Integrity | Full Postgres FKs | App-level | App-level (no FKs — OK for greenfield) |
 
-**DynamoDB** remains optional for hot counters (Zara daily quota) only — not the system of record for health logs.
+**DynamoDB** remains optional for hot counters (Alena daily quota) only — not the system of record for health logs.
 
 ### 1.2 Recommended service choices
 
@@ -116,11 +116,11 @@ Example `girlcode360/dev/app` JSON:
 | Client | Vite + React **PWA** | One deploy via `infra-web`; installable |
 | Mobile nav | Bottom tabs in standalone / ≤768px | Explicit product requirement vs hamburger |
 | Auth | Cognito User Pool + **custom auth pages** (sign-in, sign-up, forgot password, verification). Client: `amazon-cognito-identity-js`. **No Amplify. No Cognito Hosted UI.** | Full UX control; tokens stored securely in browser |
-| API | REST API Gateway + Lambda | Streaming for Zara; no VPC |
+| API | REST API Gateway + Lambda | Streaming for Alena; no VPC |
 | DB | **Aurora DSQL** | Budget + SQL |
 | Offline | IndexedDB (Dexie) + outbox | Works in PWA; NG/GH flaky networks |
 | Wallet crypto | Web Crypto AES-GCM + Argon2id | Client-side before S3 |
-| Zara | APIGW STREAM + Bedrock ConverseStream | Nova 2 Lite |
+| Alena | APIGW STREAM + Bedrock ConverseStream | Nova 2 Lite |
 | Push | Web Push VAPID | Service worker |
 | Observability | CloudWatch + Sentry | Cheap Day 1 |
 
@@ -164,7 +164,7 @@ Implement in **Aurora DSQL** (PostgreSQL-compatible subset). Use UUIDs (`gen_ran
 | `wallet_documents` | S3 key, category, wrapped_dek metadata, mime, size — **no plaintext** |
 | `share_links` | token hash, expires_at, revoked_at |
 | `content_articles` | market tags, reviewed_at, body |
-| `zara_conversations` / `zara_messages` | encrypted or redacted storage policy |
+| `alena_conversations` / `alena_messages` | encrypted or redacted storage policy |
 | `healthlens_reports` | rules JSON, narrative, pdf_s3_key |
 | `subscriptions` | Stripe/Paystack customer ids, tier, status |
 | `audit_events` | append-only privacy/security events |
@@ -400,18 +400,18 @@ GET      /v1/wallet/share/:token/object   # public
 
 ---
 
-### Phase 6 — Zara + HealthLens (Day 6–12, parallel)
+### Phase 6 — Alena + HealthLens (Day 6–12, parallel)
 
 **Status: DONE (app + API code)** — `packages/ai-provider` (Nova 2 Lite Converse + stub), context assembler (~4KB), crisis detector, free quota (3/day), HealthLens rules + activation/report/prep card, chat + HealthLens UI, migration `006_phase6_ai.sql`, and CloudWatch/EventBridge Terraform stubs are in repo. Live Bedrock (`BEDROCK_ENABLED=true`) + APIGW STREAM + monthly cron await account wiring; replies are full-body until STREAM is enabled.
 
-#### 6.A Zara
+#### 6.A Alena
 
 | ID | Work | Owner | Maps to | Status |
 | --- | --- | --- | --- | --- |
 | 6A.1 | `packages/ai-provider` Bedrock `Converse` client for Nova 2 Lite (STREAM later) | B | NFR-AI-10 | **Done** (stub fallback) |
 | 6A.2 | Context assembler → pseudonymised JSON (size cap e.g. 4KB) | B | NFR-AI-05 | **Done** |
 | 6A.3 | System prompt pack + market localisation blocks; clinical review | D | FR-086 | **Done** (prompts; clinical review pending) |
-| 6A.4 | `POST /v1/zara/chat` Lambda (+ APIGW STREAM later) | B | FR-080 | **Done** (full reply; STREAM deferred) |
+| 6A.4 | `POST /v1/alena/chat` Lambda (+ APIGW STREAM later) | B | FR-080 | **Done** (full reply; STREAM deferred) |
 | 6A.5 | Chat UI + modes Context/Anonymous + consent | C | FR-079, FR-081 | **Done** |
 | 6A.6 | Quota in-memory / DSQL row later; Premium bypass via `PREMIUM_SUBS` | B | FR-082, NFR-AI-06 | **Done** |
 | 6A.7 | Crisis detector (phrase list) → emergency response template | B/D | FR-084 | **Done** |
@@ -428,7 +428,7 @@ GET      /v1/wallet/share/:token/object   # public
 | 6B.4 | EventBridge cron 1st 06:00 UTC + on-demand free/premium limits | B | FR-089 | **On-demand done**; cron **stub** |
 | 6B.5 | Prep Card download (text; PDF/S3 later) | B/C | FR-091 | **Done** (`.txt` client download) |
 | 6B.6 | Population learning consent flag | B | FR-095 | **Done** |
-| 6B.7 | Ask Zara about report deep link | C | FR-094 | **Done** (`?ask=report`) |
+| 6B.7 | Ask Alena about report deep link | C | FR-094 | **Done** (`?ask=report`) |
 
 **Exit notes:** AT-009/AT-010 need `test` env + Bedrock; free tier enforceable in-memory until DSQL apply.
 
@@ -436,7 +436,7 @@ GET      /v1/wallet/share/:token/object   # public
 
 ### Phase 7 — Privacy centre, Premium, content, hardening (Day 11–14)
 
-**Status: DONE (app + API code)** — Privacy Centre (My Data, JSON export, 24h deletion cooling-off + purge tick), billing stubs (Stripe/Paystack checkout + webhooks + dev activate), content library, analytics consent gate, Zara/HealthLens paywall CTAs, PWA install banner, k6 smoke, and ops runbooks are in repo. Live Stripe/Paystack secrets, Cognito Premium group sync, and formal clinical/legal sign-off remain pre-launch.
+**Status: DONE (app + API code)** — Privacy Centre (My Data, JSON export, 24h deletion cooling-off + purge tick), billing stubs (Stripe/Paystack checkout + webhooks + dev activate), content library, analytics consent gate, Alena/HealthLens paywall CTAs, PWA install banner, k6 smoke, and ops runbooks are in repo. Live Stripe/Paystack secrets, Cognito Premium group sync, and formal clinical/legal sign-off remain pre-launch.
 
 | ID | Work | Owner | Maps to | Status |
 | --- | --- | --- | --- | --- |
@@ -445,7 +445,7 @@ GET      /v1/wallet/share/:token/object   # public
 | 7.3 | Account deletion + 24h cooling-off + purge worker | B | FR-074, AT-005 | **Done** |
 | 7.4 | Analytics consent wiring (exclude health fields) | B/C | NFR-015, NFR-018, AT-008 | **Done** (client stub sink) |
 | 7.5 | Stripe + Paystack checkout/portal/webhooks; Premium entitlement | B | Monetisation | **Stub** (+ `PREMIUM_SUBS` / dev-activate) |
-| 7.6 | Paywall UI for Zara/HealthLens limits | C | AI free/premium table | **Done** |
+| 7.6 | Paywall UI for Alena/HealthLens limits | C | AI free/premium table | **Done** |
 | 7.7 | Educational library browser | C | FR-071 | **Done** (`/app/library`) |
 | 7.8 | Accessibility pass (targets, labels, alerts) | C | NFR-019–023 | **Partial** |
 | 7.9 | PWA install prompt + offline/bottom-tab QA notes | C | §5.4 PRD | **Done** |
@@ -467,7 +467,7 @@ Auth/Onboard ░░████████░░░░░░░░░░░░�
 Period/PCOS      ░░░░░░████████████░░░░░░
 Preg/TTC              ░░░░████████████░░░
 Wallet                   ░░░░████████████
-Zara            ░░░░████████████████████░
+Alena            ░░░░████████████████████░
 HealthLens         ░░░░████████████████░░
 Privacy/Premium              ░░░░████████
 QA/ Harden                     ░░░░██████
@@ -489,7 +489,7 @@ Clinical copy ██████████████████████
 | * | `/v1/pregnancy/**` | JWT | Pregnancy |
 | * | `/v1/ttc/**` | JWT | TTC |
 | * | `/v1/wallet/**` | JWT | Docs + shares |
-| POST | `/v1/zara/chat` | JWT | **STREAM** |
+| POST | `/v1/alena/chat` | JWT | **STREAM** |
 | GET | `/v1/healthlens/status` | JWT | Activation |
 | POST | `/v1/healthlens/report` | JWT | On-demand |
 | POST | `/v1/healthlens/prep-card` | JWT | PDF |
@@ -540,7 +540,7 @@ Cut in this order — **never** cut the items in the “do not cut” list.
 - Period log + prediction + disclaimer  
 - Offline outbox for health writes  
 - Health Wallet encryption before upload  
-- Zara streaming + rate limit + crisis path  
+- Alena streaming + rate limit + crisis path  
 - HealthLens activation gate + Prep Card  
 - Export + delete + My Data  
 - Generic Web Push bodies (no health content)  
@@ -558,7 +558,7 @@ Cut in this order — **never** cut the items in the “do not cut” list.
 | 3 | AT-001, 002, 004, 005, 006, 007, 008, 009, 010 pass on `test` | QA |
 | 4 | Clinical sign-off spreadsheet green for shipped modules | D |
 | 5 | Privacy policy + ToS URLs live on web | D |
-| 6 | Bedrock / Nova spend alarm + Zara quota verified | A/B |
+| 6 | Bedrock / Nova spend alarm + Alena quota verified | A/B |
 | 7 | Internal testers on PWA (Add to Home Screen) ≥10 | C |
 | 8 | Open P0 = 0; P1 have owners + dates | PM |
 | 9 | Marketplace/SheMatch absent from app navigation | PM |

@@ -8,7 +8,7 @@ import {
   type HealthLensFinding,
 } from "../../../../../../packages/domain/src/index";
 import { converseNova } from "../../../../../../packages/ai-provider/src/index";
-import { zaraSystemPrompt } from "../../../../../../packages/ai-provider/src/prompts";
+import { alenaSystemPrompt } from "../../../../../../packages/ai-provider/src/prompts";
 import { isDsqlEnabled } from "../db/client";
 import { listCycles, listDays, getUser } from "./memory";
 import { getPregnancy, listPregnancyDays, ttcStatus } from "./journey";
@@ -16,7 +16,7 @@ import type { Market } from "../types";
 import { isPremium } from "./billing";
 import * as dsqlAi from "./dsql/ai";
 
-const FREE_ZARA_LIMIT = 3;
+const FREE_ALENA_LIMIT = 3;
 const FREE_HL_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
 
 const quota = new Map<string, number>(); // `${sub}:${day}`
@@ -40,26 +40,26 @@ function dayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function getZaraQuota(sub: string) {
+export async function getAlenaQuota(sub: string) {
   const used = isDsqlEnabled()
-    ? await dsqlAi.getZaraUsed(sub, dayKey())
+    ? await dsqlAi.getAlenaUsed(sub, dayKey())
     : (quota.get(`${sub}:${dayKey()}`) ?? 0);
   if (await isPremium(sub)) {
     return { used, limit: null as number | null, remaining: null as number | null };
   }
   return {
     used,
-    limit: FREE_ZARA_LIMIT,
-    remaining: Math.max(0, FREE_ZARA_LIMIT - used),
+    limit: FREE_ALENA_LIMIT,
+    remaining: Math.max(0, FREE_ALENA_LIMIT - used),
   };
 }
 
-async function consumeZaraQuota(sub: string): Promise<boolean> {
+async function consumeAlenaQuota(sub: string): Promise<boolean> {
   if (await isPremium(sub)) return true;
-  const q = await getZaraQuota(sub);
+  const q = await getAlenaQuota(sub);
   if ((q.remaining ?? 0) <= 0) return false;
   if (isDsqlEnabled()) {
-    await dsqlAi.incrementZaraUsed(sub, dayKey());
+    await dsqlAi.incrementAlenaUsed(sub, dayKey());
   } else {
     const key = `${sub}:${dayKey()}`;
     quota.set(key, (quota.get(key) ?? 0) + 1);
@@ -67,7 +67,7 @@ async function consumeZaraQuota(sub: string): Promise<boolean> {
   return true;
 }
 
-export async function assembleZaraContext(
+export async function assembleAlenaContext(
   sub: string,
 ): Promise<Record<string, unknown>> {
   const profile = await getUser(sub);
@@ -116,7 +116,7 @@ export async function assembleZaraContext(
     : ctx;
 }
 
-export async function zaraChat(
+export async function alenaChat(
   sub: string,
   message: string,
   mode: "context" | "anonymous",
@@ -124,7 +124,7 @@ export async function zaraChat(
   reply: string;
   crisis: boolean;
   stub: boolean;
-  quota: Awaited<ReturnType<typeof getZaraQuota>>;
+  quota: Awaited<ReturnType<typeof getAlenaQuota>>;
 }> {
   const profile = await getUser(sub);
   const market = (profile?.market ?? "UK") as Market;
@@ -134,27 +134,27 @@ export async function zaraChat(
       reply: crisisMessage(market),
       crisis: true,
       stub: false,
-      quota: await getZaraQuota(sub),
+      quota: await getAlenaQuota(sub),
     };
   }
 
-  if (!(await consumeZaraQuota(sub))) {
+  if (!(await consumeAlenaQuota(sub))) {
     return {
       reply:
-        "You’ve reached today’s free Zara conversations (3). Premium unlocks unlimited chats, or try again tomorrow.",
+        "You’ve reached today’s free Alena conversations (3). Premium unlocks unlimited chats, or try again tomorrow.",
       crisis: false,
       stub: true,
-      quota: await getZaraQuota(sub),
+      quota: await getAlenaQuota(sub),
     };
   }
 
-  const system = zaraSystemPrompt(market, mode);
+  const system = alenaSystemPrompt(market, mode);
   const messages =
     mode === "context"
       ? [
           {
             role: "user" as const,
-            content: `Health summary (pseudonymised JSON):\n${JSON.stringify(await assembleZaraContext(sub))}\n\nQuestion: ${message}`,
+            content: `Health summary (pseudonymised JSON):\n${JSON.stringify(await assembleAlenaContext(sub))}\n\nQuestion: ${message}`,
           },
         ]
       : [{ role: "user" as const, content: message }];
@@ -164,7 +164,7 @@ export async function zaraChat(
     reply: result.text,
     crisis: false,
     stub: result.stub,
-    quota: await getZaraQuota(sub),
+    quota: await getAlenaQuota(sub),
   };
 }
 
@@ -324,7 +324,7 @@ export async function buildPrepCard(sub: string, questions: string[]) {
   };
 }
 
-export const ZARA_DISCLAIMER =
+export const ALENA_DISCLAIMER =
   "AI-generated wellness guidance — not a diagnosis or medical advice. Speak with a clinician for personal medical decisions.";
 
 export async function countHealthLensReports(sub: string): Promise<number> {

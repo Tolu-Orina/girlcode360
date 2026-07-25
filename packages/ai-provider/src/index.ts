@@ -16,7 +16,9 @@ export type ConverseResult = {
 };
 
 const DEFAULT_MODEL =
-  process.env.ZARA_MODEL_ID ?? "global.amazon.nova-2-lite-v1:0";
+  process.env.ALENA_MODEL_ID ??
+  process.env.ZARA_MODEL_ID ??
+  "global.amazon.nova-2-lite-v1:0";
 
 /**
  * Call Bedrock Converse when BEDROCK_ENABLED=true and AWS SDK is available.

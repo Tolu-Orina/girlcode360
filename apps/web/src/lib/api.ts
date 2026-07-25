@@ -418,25 +418,25 @@ export function getPublicWalletObject(token: string) {
   }>("GET", `/v1/wallet/share/${encodeURIComponent(token)}/object`);
 }
 
-/* ——— Phase 6: Zara + HealthLens ——— */
+/* ——— Phase 6: Alena + HealthLens ——— */
 
-export function getZaraQuota() {
+export function getAlenaQuota() {
   return request<{
     quota: {
       used: number;
       limit: number | null;
       remaining: number | null;
     };
-  }>("GET", "/v1/zara/quota");
+  }>("GET", "/v1/alena/quota");
 }
 
-export function postZaraChat(body: {
+export function postAlenaChat(body: {
   message: string;
   mode: "context" | "anonymous";
 }) {
   return request<
-    import("../../../../packages/api-types/src/index").ZaraChatResponse
-  >("POST", "/v1/zara/chat", body);
+    import("../../../../packages/api-types/src/index").AlenaChatResponse
+  >("POST", "/v1/alena/chat", body);
 }
 
 export function getHealthLensStatus() {

@@ -14,7 +14,7 @@ export type ConsentPurpose =
   | "analytics"
   | "marketing"
   | "location"
-  | "ai_zara"
+  | "ai_alena"
   | "ai_healthlens";
 
 export type HealthResponse = {
@@ -365,17 +365,17 @@ export type EmergencyNumber = {
   number: string;
 };
 
-/* ——— Phase 6: Zara + HealthLens ——— */
+/* ——— Phase 6: Alena + HealthLens ——— */
 
-export type ZaraMode = "context" | "anonymous";
+export type AlenaMode = "context" | "anonymous";
 
-export type ZaraChatRequest = {
+export type AlenaChatRequest = {
   message: string;
-  mode: ZaraMode;
+  mode: AlenaMode;
   moduleHint?: HealthModule;
 };
 
-export type ZaraChatResponse = {
+export type AlenaChatResponse = {
   reply: string;
   crisis: boolean;
   stub: boolean;

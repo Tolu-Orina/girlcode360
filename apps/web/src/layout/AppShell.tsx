@@ -20,8 +20,8 @@ const tabs: {
     icon: "M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.6-7 10-7 10z",
   },
   {
-    to: "/app/zara",
-    label: "Zara",
+    to: "/app/alena",
+    label: "Alena",
     icon: "M21 15a3 3 0 0 1-3 3H8l-4 3V6a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3z",
   },
   {
@@ -95,7 +95,7 @@ export function AppShell() {
       </header>
 
       <main
-        className="mx-auto w-full animate-[fade-in_350ms_var(--ease-out)] px-[clamp(1rem,3vw,1.5rem)] py-6 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:max-w-[var(--shell-max)] lg:pb-8"
+        className="mx-auto w-full max-w-[var(--shell-max)] animate-[fade-in_350ms_var(--ease-out)] px-[clamp(1rem,3vw,2rem)] py-6 pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-8"
         id="main-content"
       >
         <Outlet />

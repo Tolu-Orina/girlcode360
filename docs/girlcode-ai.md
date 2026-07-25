@@ -13,7 +13,7 @@
 
 | Feature | Name | v1.0 status |
 | --- | --- | --- |
-| AI-1 | **Zara** — Contextual Health Companion | In scope |
+| AI-1 | **Alena** — Contextual Health Companion | In scope |
 | AI-2 | **HealthLens** — Symptom Pattern Analyser | In scope |
 | AI-3 | **SheMatch** — Health-to-Marketplace Bridge | **Deferred** (marketplace out of scope) |
 
@@ -36,7 +36,7 @@ These features were selected from clinical research, competitor analysis, and us
 | AI predictions trained on regular cycles show ~18% accuracy for PCOS / irregular cycles | HealthLens must be PCOS-aware; never assume 28-day cycles |
 | Flo’s PCOS AI drove 9,000+ doctor visits from one feature | Doctor Appointment Prep Card is high-impact |
 | 54% of women distrust health chatbots; privacy is #1 barrier | Separate AI consent; no PII to LLM; data minimisation |
-| Context-aware chatbots beat generic LLM wrappers | Zara must read structured user health summaries |
+| Context-aware chatbots beat generic LLM wrappers | Alena must read structured user health summaries |
 
 ### 1.3 Design principles (all AI)
 
@@ -48,17 +48,17 @@ These features were selected from clinical research, competitor analysis, and us
 
 ---
 
-## 2. AI Feature 1 — Zara (Contextual Health Companion)
+## 2. AI Feature 1 — Alena (Contextual Health Companion)
 
-### 2.1 What Zara does
+### 2.1 What Alena does
 
-Zara is GirlCode360’s conversational health companion. It reads the user’s logged data (cycle history, symptoms, PCOS diary, pregnancy, TTC) and answers with contextual, personalised guidance — available 24/7 without an appointment.
+Alena is GirlCode360’s conversational health companion. It reads the user’s logged data (cycle history, symptoms, PCOS diary, pregnancy, TTC) and answers with contextual, personalised guidance — available 24/7 without an appointment.
 
-**Illustrated journey (Chiamaka, Lagos):** late cycle at Day 47 after 9 months TTC → Zara summarises her 8-cycle average (38 days, range 34–42), notes Day 47 is outside range, avoids diagnosing pregnancy, offers appointment brief + educational follow-up.
+**Illustrated journey (Chiamaka, Lagos):** late cycle at Day 47 after 9 months TTC → Alena summarises her 8-cycle average (38 days, range 34–42), notes Day 47 is outside range, avoids diagnosing pregnancy, offers appointment brief + educational follow-up.
 
 ### 2.2 Differentiation vs Flo “Ask Flo”
 
-| Flo Ask Flo | GirlCode360 Zara |
+| Flo Ask Flo | GirlCode360 Alena |
 | --- | --- |
 | General women’s health Q&A | Multi-module personal context every turn |
 | Limited use of user’s own data | Cycle + PCOS + pregnancy + TTC (+ wallet metadata, not docs) |
@@ -70,7 +70,7 @@ Zara is GirlCode360’s conversational health companion. It reads the user’s l
 
 ```text
 PWA (Vite + React)
-  → API Gateway REST (Cognito JWT)  [STREAM mode for /zara/chat]
+  → API Gateway REST (Cognito JWT)  [STREAM mode for /alena/chat]
     → Lambda (Node.js, streamifyResponse)
       → Context assembler (Aurora DSQL)  // pseudonymised summary only
       → Bedrock Runtime `ConverseStream` → Amazon Nova 2 Lite
@@ -93,7 +93,7 @@ Auth is **IAM on the Lambda execution role** (`bedrock:InvokeModel`, `bedrock:In
 - System prompt: compassionate companion; never diagnose; always recommend professional care when concerning; market-aware (UK/NG/GH).
 - User health context JSON: **no name, email, phone, DOB, or device IDs** — only aggregates and recent structured events.
 - Conversation history: encrypted at rest; deletable from Privacy Centre; excluded from analytics and model training datasets.
-- Separate consent for health-data → Zara linking.
+- Separate consent for health-data → Alena linking.
 
 **Example pseudonymised context**
 
@@ -163,7 +163,7 @@ Background longitudinal analyser over the user’s health logs. Once activated, 
 | FR-091 | Doctor Prep Card anytime; PDF share via native share sheet | Must | A4 + US Letter |
 | FR-092 | PCOS-aware irregular cycle handling; symptom co-occurrence weighted | Must | No 28-day assumption |
 | FR-093 | Flag “worth discussing with a provider” patterns (variance, worsening severity, PCOS cluster, reduced foetal movement) | Must | Advisory, never alarming |
-| FR-094 | “Ask Zara about this report” handoff | Should | — |
+| FR-094 | “Ask Alena about this report” handoff | Should | — |
 | FR-095 | Separate opt-in for anonymised population learning; opt-out does not block personal reports | Must | Art.9 research consent |
 
 ---
@@ -186,7 +186,7 @@ FR-096–FR-103 remain as specified in PRD history: dedicated consent, non-intru
 
 | NFR-ID | Category | Requirement | Acceptance |
 | --- | --- | --- | --- |
-| NFR-AI-01 | Accuracy | Quarterly clinical review of Zara/HealthLens outputs | Sign-off log + last-review stamps |
+| NFR-AI-01 | Accuracy | Quarterly clinical review of Alena/HealthLens outputs | Sign-off log + last-review stamps |
 | NFR-AI-02 | Hallucination | Prompt constraints; speculative content flagged as general | Bi-weekly red-team; injection tests |
 | NFR-AI-03 | Transparency | Visible “AI-generated” label + how-it-works link | Art.22 / ICO ADM guidance |
 | NFR-AI-04 | Bias & equity | Validate irregular-cycle + multi-market behaviour | Bias audit before major release |
@@ -203,12 +203,12 @@ FR-096–FR-103 remain as specified in PRD history: dedicated consent, non-intru
 
 ### 6.1 Two-week build mapping
 
-| Day window | Zara | HealthLens | SheMatch |
+| Day window | Alena | HealthLens | SheMatch |
 | --- | --- | --- | --- |
 | Days 1–3 | Consent UX, system prompt, Bedrock ConverseStream stub | Rules library authoring (clinical) | — |
 | Days 4–7 | Streaming chat Lambda + UI + rate limits | Rules engine + activation gate | — |
 | Days 8–11 | Crisis detection, localisation, Premium gate | Monthly job + on-demand + PDF Prep Card | — |
-| Days 12–14 | Hardening, red-team, cost alarms | Narrative polish + Zara handoff | Remains deferred |
+| Days 12–14 | Hardening, red-team, cost alarms | Narrative polish + Alena handoff | Remains deferred |
 
 Full day-by-day detail: [girlcode-implementation-plan.md](./girlcode-implementation-plan.md).
 
@@ -216,7 +216,7 @@ Full day-by-day detail: [girlcode-implementation-plan.md](./girlcode-implementat
 
 | Feature | Free | Premium |
 | --- | --- | --- |
-| Zara | 3 conversations / day | Unlimited |
+| Alena | 3 conversations / day | Unlimited |
 | HealthLens report | Monthly only | On-demand |
 | HealthLens Prep Card | 1 / month | Unlimited + branded PDF |
 | SheMatch | Deferred | Deferred |
@@ -227,9 +227,9 @@ Full day-by-day detail: [girlcode-implementation-plan.md](./girlcode-implementat
 
 - [ ] `packages/ai-provider` Bedrock Converse/ConverseStream client for Nova 2 Lite
 - [ ] IAM: Lambda role `bedrock:InvokeModel` + `bedrock:InvokeModelWithResponseStream` on Nova 2 Lite model ARNs
-- [ ] Lambda env `ZARA_MODEL_ID` from TF var (default `global.amazon.nova-2-lite-v1:0`); SSM `zara_daily_free_limit` when added
-- [ ] API routes: `POST /v1/zara/chat` (stream), `GET /v1/healthlens/status`, `POST /v1/healthlens/report`, `POST /v1/healthlens/prep-card`
-- [ ] DynamoDB **or** DSQL counters for daily Zara quota (idempotent per user/day)
+- [ ] Lambda env `ALENA_MODEL_ID` from TF var (default `global.amazon.nova-2-lite-v1:0`); SSM `alena_daily_free_limit` when added
+- [ ] API routes: `POST /v1/alena/chat` (stream), `GET /v1/healthlens/status`, `POST /v1/healthlens/report`, `POST /v1/healthlens/prep-card`
+- [ ] DynamoDB **or** DSQL counters for daily Alena quota (idempotent per user/day)
 - [ ] EventBridge cron: `healthlens-monthly`
 - [ ] CI: diagnosis-language denylist on prompts + static copy
 - [ ] CloudWatch alarms: Bedrock error rate, P95 TTFB, estimated token/cost metrics
