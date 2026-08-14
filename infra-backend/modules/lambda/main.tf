@@ -179,3 +179,8 @@ output "role_arn" {
 output "role_name" {
   value = aws_iam_role.lambda.name
 }
+
+moved {
+  from = aws_lambda_function.api
+  to   = aws_lambda_function.fn["identity"]
+}

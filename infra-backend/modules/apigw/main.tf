@@ -414,51 +414,15 @@ resource "aws_lambda_permission" "apigw" {
 resource "aws_api_gateway_deployment" "main" {
   rest_api_id = aws_api_gateway_rest_api.main.id
 
+  # Hash must be known at plan time. Integration .id values are unknown until
+  # apply; hashing them with create_before_destroy plus a deposed deployment
+  # from a failed apply is a Terraform cycle (Lambda destroy + DSQL + Cognito).
   triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.health.id,
-      aws_api_gateway_method.health_get.id,
-      aws_api_gateway_integration.health_get.id,
-      aws_api_gateway_resource.wallet_share_token.id,
-      aws_api_gateway_method.wallet_share_get.id,
-      aws_api_gateway_integration.wallet_share_get.id,
-      aws_api_gateway_resource.wallet_share_object.id,
-      aws_api_gateway_method.wallet_share_object_get.id,
-      aws_api_gateway_integration.wallet_share_object_get.id,
-      aws_api_gateway_resource.billing_webhooks_stripe.id,
-      aws_api_gateway_method.billing_webhooks_stripe_post.id,
-      aws_api_gateway_integration.billing_webhooks_stripe_post.id,
-      aws_api_gateway_resource.billing_webhooks_paystack.id,
-      aws_api_gateway_method.billing_webhooks_paystack_post.id,
-      aws_api_gateway_integration.billing_webhooks_paystack_post.id,
-      aws_api_gateway_resource.privacy_purge_tick.id,
-      aws_api_gateway_method.privacy_purge_tick_post.id,
-      aws_api_gateway_integration.privacy_purge_tick_post.id,
-      aws_api_gateway_resource.guest_alena.id,
-      aws_api_gateway_method.guest_alena_post.id,
-      aws_api_gateway_integration.guest_alena_post.id,
-      aws_api_gateway_method.guest_alena_options.id,
-      aws_api_gateway_integration.guest_alena_options.id,
-      aws_api_gateway_resource.webhooks_youcam.id,
-      aws_api_gateway_method.webhooks_youcam_post.id,
-      aws_api_gateway_integration.webhooks_youcam_post.id,
-      aws_api_gateway_resource.proxy.id,
-      aws_api_gateway_method.proxy_any.id,
-      aws_api_gateway_integration.proxy_any.id,
-      aws_api_gateway_method.proxy_options.id,
-      aws_api_gateway_integration.proxy_options.id,
-      aws_api_gateway_integration.healthlens_monthly_tick_post.id,
-      aws_api_gateway_integration.notifications_tick_post.id,
-      [for k, m in module.cognito_prefix : m.integration_ids],
-      module.wallet_auth.integration_ids,
-      module.billing_auth.integration_ids,
-      module.privacy_auth.integration_ids,
-      module.healthlens.integration_ids,
-      module.notifications.integration_ids,
-      module.mirror_studio.integration_ids,
-      module.wardrobe_intel.integration_ids,
-      module.resale.integration_ids,
-    ]))
+    redeployment = sha1(jsonencode({
+      revision = "capability-split-24"
+      invoke   = var.lambda_invoke_arns
+      stream   = var.lambda_streaming_invoke_arns
+    }))
   }
 
   lifecycle {

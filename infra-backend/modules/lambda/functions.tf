@@ -13,7 +13,12 @@ locals {
     BEDROCK_ENABLED        = tostring(var.bedrock_enabled)
   }
 
-  function_names = { for k, _ in local.functions : k => "girlcode360-${k}-${var.environment}" }
+  # identity keeps girlcode360-api-{env} so state can `moved` the monolith in place
+  # (rename would ForceNew and re-introduce destroy ↔ API Gateway CBD cycles).
+  function_names = {
+    for k, _ in local.functions :
+    k => k == "identity" ? "girlcode360-api-${var.environment}" : "girlcode360-${k}-${var.environment}"
+  }
 
   # Plan-time ARNs. Do not use aws_lambda_function.fn.invoke_arn — that edge plus
   # API Gateway deployment create_before_destroy plus env (DSQL/Cognito) is a cycle.

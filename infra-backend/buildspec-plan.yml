@@ -26,6 +26,30 @@ phases:
           -backend-config="key=backend/${TF_VAR_environment}/terraform.tfstate" \
           -backend-config="region=${AWS_DEFAULT_REGION}" \
           -backend-config="dynamodb_table=girlcode360-tf-lock"
+      - |
+        # Failed create_before_destroy leaves deposed deployments that cycle the graph.
+        python3 - <<'PY'
+        import json, subprocess, sys
+        raw = subprocess.check_output(["terraform", "state", "pull"])
+        state = json.loads(raw)
+        changed = False
+        for res in state.get("resources") or []:
+            if res.get("type") != "aws_api_gateway_deployment" or res.get("name") != "main":
+                continue
+            inst = res.get("instances") or []
+            kept = [i for i in inst if i.get("status") != "deposed"]
+            if len(kept) != len(inst):
+                print("Dropping %d deposed aws_api_gateway_deployment.main instance(s)" % (len(inst) - len(kept)))
+                res["instances"] = kept
+                changed = True
+        if not changed:
+            sys.exit(0)
+        state["serial"] = int(state.get("serial") or 0) + 1
+        path = "/tmp/tfstate-nodeposed.json"
+        with open(path, "w") as f:
+            json.dump(state, f)
+        subprocess.check_call(["terraform", "state", "push", "-force", path])
+        PY
       - terraform plan -var="enable_dsql=true" -out=tfplan
       - |
         # archive_file writes this during plan; apply needs the same zip on disk
