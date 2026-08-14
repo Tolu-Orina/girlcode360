@@ -173,6 +173,40 @@ export async function latestConsentsByPurpose(
   return [...map.values()];
 }
 
+export async function listHealthLensEligibleSubs(): Promise<string[]> {
+  const res = await query<{ user_sub: string }>(
+    `SELECT DISTINCT user_sub FROM consents WHERE purpose = 'ai_healthlens' AND granted = TRUE`,
+    [],
+  );
+  const out: string[] = [];
+  for (const row of res.rows) {
+    const latest = await latestConsentsByPurpose(row.user_sub);
+    if (latest.find((c) => c.purpose === "ai_healthlens")?.granted) {
+      out.push(row.user_sub);
+    }
+  }
+  return out;
+}
+
+export async function listMarketingSubsForMarket(
+  market: Market,
+): Promise<string[]> {
+  const res = await query<{ user_sub: string }>(
+    `SELECT DISTINCT user_sub FROM consents WHERE purpose = 'marketing' AND granted = TRUE`,
+    [],
+  );
+  const out: string[] = [];
+  for (const row of res.rows) {
+    const user = await getUser(row.user_sub);
+    if (!user || user.market !== market) continue;
+    const latest = await latestConsentsByPurpose(row.user_sub);
+    if (latest.find((c) => c.purpose === "marketing")?.granted) {
+      out.push(row.user_sub);
+    }
+  }
+  return out;
+}
+
 export async function purgeUser(sub: string): Promise<void> {
   await query(`DELETE FROM sync_idempotency WHERE user_sub = $1`, [sub]);
   await query(`DELETE FROM cycle_days WHERE user_sub = $1`, [sub]);

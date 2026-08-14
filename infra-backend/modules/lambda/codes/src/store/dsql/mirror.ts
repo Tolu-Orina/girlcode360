@@ -264,6 +264,52 @@ export async function getTryOn(
   };
 }
 
+export async function findPendingScanByTask(
+  taskId: string,
+): Promise<SkinScanRow | undefined> {
+  const res = await query(
+    `SELECT * FROM skin_scans
+     WHERE status = 'pending' AND deleted_at IS NULL
+       AND (youcam_task_id = $1 OR youcam_task_id LIKE $2)
+     LIMIT 1`,
+    [taskId, `${taskId}::yc::%`],
+  );
+  const row = res.rows[0];
+  return row ? mapScan(row as never) : undefined;
+}
+
+export async function findPendingTryOnByTask(
+  taskId: string,
+): Promise<TryOnRow | undefined> {
+  const res = await query<{
+    id: string;
+    user_sub: string;
+    youcam_task_id: string;
+    status: string;
+    catalogue_item_id: string;
+    result_s3_key: string | null;
+    created_at: unknown;
+  }>(
+    `SELECT * FROM apparel_tryons
+     WHERE status = 'pending' AND deleted_at IS NULL
+       AND (youcam_task_id = $1 OR youcam_task_id LIKE $2)
+     LIMIT 1`,
+    [taskId, `${taskId}::yc::%`],
+  );
+  const r = res.rows[0];
+  if (!r) return undefined;
+  return {
+    id: r.id,
+    userSub: r.user_sub,
+    youcamTaskId: r.youcam_task_id,
+    status: r.status as MirrorTaskStatus,
+    createdAt: toIso(r.created_at),
+    catalogueItemId: r.catalogue_item_id,
+    hasResultImage: Boolean(r.result_s3_key),
+    resultS3Key: r.result_s3_key,
+  };
+}
+
 export async function purgeUserMirror(userSub: string): Promise<void> {
   await query(`DELETE FROM skin_scans WHERE user_sub = $1`, [userSub]);
   await query(`DELETE FROM apparel_tryons WHERE user_sub = $1`, [userSub]);

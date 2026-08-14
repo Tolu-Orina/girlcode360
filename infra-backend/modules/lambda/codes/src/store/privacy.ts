@@ -31,7 +31,7 @@ import {
   pregnancyStatus,
   ttcStatus,
 } from "./journey";
-import { countWalletDocsAll, listWalletDocs, purgeUserWallet } from "./wallet";
+import { countWalletDocsAll, listWalletDocs, listWalletMedications, purgeUserWallet } from "./wallet";
 import {
   listSkinScansForExport,
   listTryOnsForExport,
@@ -39,10 +39,13 @@ import {
 } from "./mirror";
 import {
   getSheMatchPrefs,
+  listFavouriteIds,
   listMyListings,
   purgeUserMarketplace,
 } from "./marketplace";
 import { countMyReports, listMyReports, purgeUserReports } from "./contentReports";
+import { listGroups, purgeUserCommunity } from "./community";
+import { listInbox, purgeUserInbox } from "./inbox";
 import * as dsqlPrivacy from "./dsql/privacy";
 
 const COOLING_OFF_MS = 24 * 60 * 60 * 1000;
@@ -129,7 +132,11 @@ export async function getMyData(sub: string) {
       apparelTryons: (await listTryOnsForExport(sub)).length,
       appointments,
       marketplaceListingsOwned: marketplaceOwned,
+      marketplaceFavourites: (await listFavouriteIds(sub)).length,
+      walletMedications: (await listWalletMedications(sub)).length,
       reportsFiled,
+      communityGroupsJoined: (await listGroups(sub)).filter((g) => g.joined).length,
+      inAppNotifications: (await listInbox(sub)).length,
     },
     inventory: {
       email: profile.email ?? null,
@@ -186,7 +193,13 @@ export async function buildExportPayload(
     apparelTryons: await listTryOnsForExport(sub),
     shematch: await getSheMatchPrefs(sub),
     marketplaceListings: await listMyListings(sub),
+    marketplaceFavourites: await listFavouriteIds(sub),
+    walletMedications: await listWalletMedications(sub),
     contentReports: await listMyReports(sub),
+    community: {
+      groups: (await listGroups(sub)).filter((g) => g.joined),
+    },
+    inAppNotifications: await listInbox(sub),
   };
 }
 
@@ -336,6 +349,8 @@ async function wipeUser(sub: string) {
   await purgeUserMirror(sub);
   await purgeUserMarketplace(sub);
   await purgeUserReports(sub);
+  await purgeUserCommunity(sub);
+  await purgeUserInbox(sub);
   await purgeUserMemory(sub);
   if (isDsqlEnabled()) {
     await dsqlPrivacy.deleteExportJobsForUser(sub);

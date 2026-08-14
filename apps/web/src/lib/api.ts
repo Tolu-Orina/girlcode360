@@ -287,6 +287,15 @@ export function getPregnancy() {
   }>("GET", "/v1/pregnancy");
 }
 
+export function patchPregnancy(
+  body: import("../../../../packages/api-types/src/index").PatchPregnancyRequest,
+) {
+  return request<{
+    profile: import("../../../../packages/api-types/src/index").PregnancyProfile;
+    week: number;
+  }>("PATCH", "/v1/pregnancy", body);
+}
+
 export function initPregnancy(
   body: import("../../../../packages/api-types/src/index").InitPregnancyRequest,
 ) {
@@ -306,6 +315,12 @@ export function upsertPregnancyDay(
   body: import("../../../../packages/api-types/src/index").UpsertPregnancyDayRequest,
 ) {
   return request("PUT", "/v1/pregnancy/days", body);
+}
+
+export function getPregnancyDays() {
+  return request<{
+    days: import("../../../../packages/api-types/src/index").PregnancyDayLog[];
+  }>("GET", "/v1/pregnancy/days");
 }
 
 export function getAppointments() {
@@ -341,6 +356,12 @@ export function getFertileWindow() {
   return request<
     import("../../../../packages/api-types/src/index").FertileWindowResponse
   >("GET", "/v1/ttc/fertile-window");
+}
+
+export function getTtcDays() {
+  return request<{
+    days: import("../../../../packages/api-types/src/index").TtcDayLog[];
+  }>("GET", "/v1/ttc/days");
 }
 
 export function upsertTtcDay(
@@ -728,6 +749,74 @@ export function listMyBusinessListings() {
   }>("GET", "/v1/marketplace/mine");
 }
 
+export function patchMyBusinessListing(
+  id: string,
+  body: import("../../../../packages/api-types/src/index").PatchOwnedListingRequest,
+) {
+  return request<{
+    listing: import("../../../../packages/api-types/src/index").MarketplaceListing;
+  }>("PATCH", `/v1/marketplace/mine/${encodeURIComponent(id)}`, body);
+}
+
+export function listListingReviews(id: string) {
+  return request<{
+    reviews: import("../../../../packages/api-types/src/index").ListingReview[];
+  }>("GET", `/v1/marketplace/listings/${encodeURIComponent(id)}/reviews`);
+}
+
+export function createListingReview(
+  id: string,
+  body: import("../../../../packages/api-types/src/index").CreateListingReviewRequest,
+) {
+  return request<{
+    review: import("../../../../packages/api-types/src/index").ListingReview;
+    message: string;
+  }>("POST", `/v1/marketplace/listings/${encodeURIComponent(id)}/reviews`, body);
+}
+
+export function putListingFavourite(id: string) {
+  return request<{ ok: boolean }>(
+    "PUT",
+    `/v1/marketplace/listings/${encodeURIComponent(id)}/favourite`,
+  );
+}
+
+export function deleteListingFavourite(id: string) {
+  return request<{ ok: boolean }>(
+    "DELETE",
+    `/v1/marketplace/listings/${encodeURIComponent(id)}/favourite`,
+  );
+}
+
+export function requestListingSponsor(id: string) {
+  return request<{
+    checkoutUrl: string;
+    listingId: string;
+    message: string;
+  }>("POST", `/v1/marketplace/listings/${encodeURIComponent(id)}/sponsor`);
+}
+
+export function listWalletMedications() {
+  return request<{
+    medications: import("../../../../packages/api-types/src/index").WalletMedication[];
+  }>("GET", "/v1/wallet/medications");
+}
+
+export function createWalletMedication(
+  body: import("../../../../packages/api-types/src/index").CreateWalletMedicationRequest,
+) {
+  return request<{
+    medication: import("../../../../packages/api-types/src/index").WalletMedication;
+  }>("POST", "/v1/wallet/medications", body);
+}
+
+export function deleteWalletMedication(id: string) {
+  return request<{ ok: boolean }>(
+    "DELETE",
+    `/v1/wallet/medications/${encodeURIComponent(id)}`,
+  );
+}
+
 export function getSheMatchPrefs() {
   return request<import("../../../../packages/api-types/src/index").SheMatchPrefs>(
     "GET",
@@ -757,4 +846,63 @@ export function getSheMatchSuggest(
 
 export function getVapidPublicKey() {
   return request<{ publicKey: string | null }>("GET", "/v1/notifications/vapid");
+}
+
+export function getInAppInbox() {
+  return request<{
+    items: import("../../../../packages/api-types/src/index").InAppNotification[];
+    unread: number;
+    marketingOptIn: boolean;
+    note: string;
+  }>("GET", "/v1/in-app");
+}
+
+export function markInAppRead(id: string) {
+  return request<{
+    item: import("../../../../packages/api-types/src/index").InAppNotification;
+  }>("POST", `/v1/in-app/${encodeURIComponent(id)}/read`);
+}
+
+export function markInAppAllRead() {
+  return request<{ ok: boolean; unread: number }>("POST", "/v1/in-app/read-all");
+}
+
+export function getCommunityGroups() {
+  return request<{
+    groups: import("../../../../packages/api-types/src/index").CommunityGroupView[];
+    note: string;
+  }>("GET", "/v1/community/groups");
+}
+
+export function joinCommunityGroup(id: string) {
+  return request<{
+    group: import("../../../../packages/api-types/src/index").CommunityGroupView;
+  }>("POST", `/v1/community/groups/${encodeURIComponent(id)}/join`);
+}
+
+export function leaveCommunityGroup(id: string) {
+  return request<{ ok: boolean }>(
+    "DELETE",
+    `/v1/community/groups/${encodeURIComponent(id)}/membership`,
+  );
+}
+
+export function getCommunityPosts(groupId: string) {
+  return request<{
+    posts: import("../../../../packages/api-types/src/index").CommunityPost[];
+  }>("GET", `/v1/community/groups/${encodeURIComponent(groupId)}/posts`);
+}
+
+export function createCommunityPost(
+  groupId: string,
+  body: import("../../../../packages/api-types/src/index").CreateCommunityPostRequest,
+) {
+  return request<{
+    post: import("../../../../packages/api-types/src/index").CommunityPost;
+    message: string;
+  }>(
+    "POST",
+    `/v1/community/groups/${encodeURIComponent(groupId)}/posts`,
+    body,
+  );
 }

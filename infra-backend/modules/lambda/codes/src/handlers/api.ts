@@ -24,6 +24,7 @@ import {
   getHealthLensStatus,
   getAlenaQuota,
   latestHealthLensReport,
+  runMonthlyHealthLensTick,
   setPopulationLearningConsent,
   alenaChat,
   alenaGuestChat,
@@ -59,6 +60,9 @@ import {
   revokeWalletShare,
   runWalletPurge,
   softDeleteWalletDoc,
+  listWalletMedications,
+  createWalletMedication,
+  deleteWalletMedication,
 } from "../store/wallet";
 import {
   createAppointment,
@@ -71,6 +75,7 @@ import {
   initTtc,
   listAppointments,
   listPregnancyDays,
+  patchPregnancy,
   listTtcDays,
   patchNotificationPrefs,
   pregnancyStatus,
@@ -119,6 +124,7 @@ import type {
   PatchMedicationRequest,
   PatchModulesRequest,
   PatchNotificationPrefsRequest,
+  PatchPregnancyRequest,
   PatchUserRequest,
   PostConsentsRequest,
   PushSubscriptionRequest,
@@ -135,6 +141,10 @@ import { isDsqlEnabled } from "../db/client";
 import { isDataBucketEnabled } from "../db/s3";
 import { youcamApiKey } from "../lib/secrets";
 import {
+  extractYoucamTaskId,
+  verifyYoucamWebhookSignature,
+} from "../lib/youcam";
+import {
   createSkinScan,
   createTryOn,
   deleteSkinScan,
@@ -148,19 +158,50 @@ import {
   mirrorConsented,
   mirrorStatus,
   pregnancyWeek,
+  settleYoucamWebhook,
 } from "../store/mirror";
 import {
+  addFavourite,
+  createListingReview,
   getMarketplaceListing,
   getSheMatchPrefs,
+  listFavouriteIds,
+  listListingReviews,
   listMarketplace,
   listMyListings,
   moderateListing,
+  moderateReview,
+  patchOwnedListing,
   patchSheMatchPrefs,
+  removeFavourite,
   submitBusinessListing,
   suggestSheMatch,
 } from "../store/marketplace";
 import { runNotificationTick, vapidPublicKey } from "../store/notify";
-import type { CreateBusinessListingRequest, MarketplaceCategory } from "../types";
+import {
+  createPost,
+  joinGroup,
+  leaveGroup,
+  listGroups,
+  listPendingPosts,
+  listPosts,
+  moderatePost,
+} from "../store/community";
+import {
+  fanOutListingLive,
+  fanOutPromo,
+  inboxUnreadCount,
+  listInbox,
+  markInboxAllRead,
+  markInboxRead,
+} from "../store/inbox";
+import type {
+  CreateBusinessListingRequest,
+  CreateListingReviewRequest,
+  CreateWalletMedicationRequest,
+  MarketplaceCategory,
+  PatchOwnedListingRequest,
+} from "../types";
 import type { SheMatchTriggerId } from "../../../../../../packages/domain/src/index";
 import { sheMatchTrigger } from "../../../../../../packages/domain/src/index";
 
@@ -312,6 +353,27 @@ async function cycleSnapshot(sub: string) {
 export const handler = async (
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> => {
+  const scheduled = event as unknown as {
+    source?: string;
+    detail?: { kind?: string };
+  };
+  if (scheduled.source === "girlcode360.scheduler") {
+    const kind = scheduled.detail?.kind;
+    if (kind === "notifications") {
+      return json(200, await runNotificationTick());
+    }
+    if (kind === "healthlens_monthly") {
+      return json(200, await runMonthlyHealthLensTick());
+    }
+    if (kind === "purge") {
+      return json(200, {
+        purged: await runDeletionPurge(),
+        wallet: await runWalletPurge(),
+      });
+    }
+    return json(400, { error: "unknown_schedule" });
+  }
+
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: CORS, body: "" };
   }
@@ -390,10 +452,36 @@ export const handler = async (
       sub?: string;
       customerId?: string;
       event?: string;
+      listingId?: string;
     }>(event);
     const result = await handleBillingWebhook(provider, body);
     if (!result.ok) return json(400, { error: result.error });
     return json(200, result);
+  }
+
+  if (method === "POST" && path === "/v1/webhooks/youcam") {
+    const raw = event.body
+      ? event.isBase64Encoded
+        ? Buffer.from(event.body, "base64").toString("utf8")
+        : event.body
+      : "";
+    const sig =
+      header(event, "X-YouCam-Signature") ??
+      header(event, "webhook-signature") ??
+      header(event, "X-Hub-Signature-256");
+    if (!(await verifyYoucamWebhookSignature(raw, sig))) {
+      return json(401, { error: "invalid_signature" });
+    }
+    let payload: unknown = {};
+    try {
+      payload = raw ? JSON.parse(raw) : {};
+    } catch {
+      return json(400, { error: "invalid_json" });
+    }
+    const taskId = extractYoucamTaskId(payload);
+    if (!taskId) return json(400, { error: "task_id_required" });
+    const settled = await settleYoucamWebhook(taskId);
+    return json(200, { ok: true, settled });
   }
 
   // Internal purge tick (EventBridge later; open in local with header)
@@ -413,6 +501,14 @@ export const handler = async (
     return json(200, await runNotificationTick());
   }
 
+  if (method === "POST" && path === "/v1/healthlens/monthly-tick") {
+    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
+    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+      return json(401, { error: "unauthorized" });
+    }
+    return json(200, await runMonthlyHealthLensTick());
+  }
+
   if (method === "POST" && path === "/v1/marketplace/moderate") {
     const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
     if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
@@ -424,7 +520,58 @@ export const handler = async (
     }
     const listing = await moderateListing(body.id, body.action);
     if (!listing) return json(404, { error: "listing_not_found" });
-    return json(200, { listing });
+    let inAppNotified = 0;
+    if (body.action === "approve") {
+      inAppNotified = await fanOutListingLive(listing);
+    }
+    return json(200, { listing, inAppNotified });
+  }
+
+  if (method === "POST" && path === "/v1/marketplace/reviews/moderate") {
+    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
+    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+      return json(401, { error: "unauthorized" });
+    }
+    const body = parseBody<{ id?: string; action?: "approve" | "reject" }>(event);
+    if (!body.id || (body.action !== "approve" && body.action !== "reject")) {
+      return json(400, { error: "id_and_action_required" });
+    }
+    const review = await moderateReview(body.id, body.action);
+    if (!review) return json(404, { error: "review_not_found" });
+    return json(200, { review });
+  }
+
+  if (method === "POST" && path === "/v1/community/posts/moderate") {
+    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
+    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+      return json(401, { error: "unauthorized" });
+    }
+    const body = parseBody<{ id?: string; action?: "approve" | "reject" }>(event);
+    if (!body.id || (body.action !== "approve" && body.action !== "reject")) {
+      return json(400, { error: "id_and_action_required" });
+    }
+    const post = await moderatePost(body.id, body.action);
+    if (!post) return json(404, { error: "post_not_found" });
+    return json(200, { post });
+  }
+
+  if (method === "POST" && path === "/v1/in-app/promo") {
+    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
+    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+      return json(401, { error: "unauthorized" });
+    }
+    const body = parseBody<{ market?: "UK" | "NG" | "GH"; listingId?: string }>(
+      event,
+    );
+    if (body.market !== "UK" && body.market !== "NG" && body.market !== "GH") {
+      return json(400, { error: "market_required" });
+    }
+    return json(200, {
+      notified: await fanOutPromo({
+        market: body.market,
+        listingId: body.listingId ?? null,
+      }),
+    });
   }
 
   if (method === "GET" && path === "/v1/content/moderation-queue") {
@@ -440,6 +587,7 @@ export const handler = async (
       reports: await listModerationQueue(
         statusRaw && isReportStatus(statusRaw) ? statusRaw : undefined,
       ),
+      pendingCommunityPosts: await listPendingPosts(),
     });
   }
 
@@ -577,7 +725,9 @@ export const handler = async (
       path.startsWith("/v1/notifications") ||
       path.startsWith("/v1/emergency") ||
       path.startsWith("/v1/marketplace") ||
-      path.startsWith("/v1/shematch");
+      path.startsWith("/v1/shematch") ||
+      path.startsWith("/v1/community") ||
+      path.startsWith("/v1/in-app");
     if (sensitive && adult && !adult.ageConfirmed18) {
       return json(403, { error: "minor_blocked" });
     }
@@ -804,6 +954,14 @@ export const handler = async (
     return json(201, { profile: profilePreg, week });
   }
 
+  if (method === "PATCH" && path === "/v1/pregnancy") {
+    const body = parseBody<PatchPregnancyRequest>(event);
+    const profilePreg = await patchPregnancy(user.sub, body);
+    if (!profilePreg) return json(404, { error: "pregnancy_not_started" });
+    const week = (await pregnancyStatus(user.sub))?.week ?? 1;
+    return json(200, { profile: profilePreg, week });
+  }
+
   if (method === "GET" && path === "/v1/pregnancy/weeks") {
     const weekParam = event.queryStringParameters?.week;
     if (weekParam) {
@@ -903,6 +1061,25 @@ export const handler = async (
   if (method === "GET" && path === "/v1/wallet/docs") {
     await runWalletPurge();
     return json(200, { docs: await listWalletDocs(user.sub) });
+  }
+
+  if (method === "GET" && path === "/v1/wallet/medications") {
+    return json(200, { medications: await listWalletMedications(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/wallet/medications") {
+    const body = parseBody<CreateWalletMedicationRequest>(event);
+    const row = await createWalletMedication(user.sub, body);
+    if ("error" in row) return json(400, { error: row.error });
+    return json(201, { medication: row });
+  }
+
+  const walletMedMatch = path.match(/^\/v1\/wallet\/medications\/([^/]+)$/);
+  if (walletMedMatch && method === "DELETE") {
+    if (!(await deleteWalletMedication(user.sub, walletMedMatch[1]!))) {
+      return json(404, { error: "medication_not_found" });
+    }
+    return json(200, { ok: true });
   }
 
   if (method === "POST" && path === "/v1/wallet/uploads") {
@@ -1431,10 +1608,67 @@ export const handler = async (
       weekday: q.weekday != null ? Number(q.weekday) : new Date().getUTCDay(),
       hhmm: q.hhmm || "12:00",
       market: profile?.market,
+      viewerSub: user.sub,
     });
     return json(200, {
       listings,
-      note: "Seeded public directory plus listings that passed moderation. Confirm before you travel. Not a prescription.",
+      note: "Seeded public directory plus listings that passed moderation. Confirm before you travel. Not a prescription. Paid placements are labelled Sponsored.",
+    });
+  }
+
+  if (method === "GET" && path === "/v1/marketplace/favourites") {
+    const ids = await listFavouriteIds(user.sub);
+    return json(200, { listingIds: ids });
+  }
+
+  const listingReviewMatch = path.match(
+    /^\/v1\/marketplace\/listings\/([^/]+)\/reviews$/,
+  );
+  if (listingReviewMatch && method === "GET") {
+    return json(200, {
+      reviews: await listListingReviews(listingReviewMatch[1]!, user.sub),
+    });
+  }
+  if (listingReviewMatch && method === "POST") {
+    const body = parseBody<CreateListingReviewRequest>(event);
+    const review = await createListingReview(
+      user.sub,
+      listingReviewMatch[1]!,
+      body,
+    );
+    if ("error" in review) return json(400, { error: review.error });
+    return json(201, {
+      review,
+      message: "Held for moderation before it appears on the listing.",
+    });
+  }
+
+  const favMatch = path.match(/^\/v1\/marketplace\/listings\/([^/]+)\/favourite$/);
+  if (favMatch && method === "PUT") {
+    if (!(await addFavourite(user.sub, favMatch[1]!))) {
+      return json(404, { error: "listing_not_found" });
+    }
+    return json(200, { ok: true });
+  }
+  if (favMatch && method === "DELETE") {
+    await removeFavourite(user.sub, favMatch[1]!);
+    return json(200, { ok: true });
+  }
+
+  const sponsorMatch = path.match(
+    /^\/v1\/marketplace\/listings\/([^/]+)\/sponsor$/,
+  );
+  if (sponsorMatch && method === "POST") {
+    const mine = await listMyListings(user.sub);
+    if (!mine.some((l) => l.id === sponsorMatch[1])) {
+      return json(403, { error: "not_listing_owner" });
+    }
+    const checkout = await createCheckoutSession(user.sub, "paystack");
+    return json(200, {
+      ...checkout,
+      listingId: sponsorMatch[1],
+      message:
+        "Sponsored placement checkout is a stub until live Paystack/Stripe keys. POST /v1/billing/webhooks/paystack with listingId to mark Sponsored in this environment.",
     });
   }
 
@@ -1450,6 +1684,7 @@ export const handler = async (
       origin,
       q.weekday != null ? Number(q.weekday) : new Date().getUTCDay(),
       q.hhmm || "12:00",
+      user.sub,
     );
     if (!listing || listing.status !== "live") {
       return json(404, { error: "listing_not_found" });
@@ -1483,6 +1718,15 @@ export const handler = async (
 
   if (method === "GET" && path === "/v1/marketplace/mine") {
     return json(200, { listings: await listMyListings(user.sub) });
+  }
+
+  const minePatch = path.match(/^\/v1\/marketplace\/mine\/([^/]+)$/);
+  if (minePatch && method === "PATCH") {
+    const body = parseBody<PatchOwnedListingRequest>(event);
+    const listing = await patchOwnedListing(user.sub, minePatch[1]!, body);
+    if (listing && "error" in listing) return json(400, { error: listing.error });
+    if (!listing) return json(404, { error: "listing_not_found" });
+    return json(200, { listing });
   }
 
   if (method === "GET" && path === "/v1/shematch/prefs") {
@@ -1527,6 +1771,85 @@ export const handler = async (
         label: "Suggested based on your health activity" as const,
         sponsoredLabel: listing.sponsored ? ("Sponsored" as const) : null,
       })),
+    });
+  }
+
+  /* ——— Phase 2.3 community + in-app marketing inbox ——— */
+
+  if (!profile && (path.startsWith("/v1/community") || path.startsWith("/v1/in-app"))) {
+    return json(404, { error: "user_not_bootstrapped" });
+  }
+
+  if (method === "GET" && path === "/v1/in-app") {
+    const consents = await latestConsentsByPurpose(user.sub);
+    const marketing =
+      consents.find((c) => c.purpose === "marketing")?.granted === true;
+    const items = await listInbox(user.sub);
+    return json(200, {
+      items,
+      unread: await inboxUnreadCount(user.sub),
+      marketingOptIn: marketing,
+      note: marketing
+        ? "Listing and partner notices stay in-app. They are never sent as lock-screen push."
+        : "Marketing inbox is empty unless you opt in under Account. Health reminders stay on the Notifications toggles.",
+    });
+  }
+
+  if (method === "POST" && path === "/v1/in-app/read-all") {
+    await markInboxAllRead(user.sub);
+    return json(200, { ok: true, unread: 0 });
+  }
+
+  const inAppRead = path.match(/^\/v1\/in-app\/([^/]+)\/read$/);
+  if (inAppRead && method === "POST") {
+    const item = await markInboxRead(user.sub, inAppRead[1]!);
+    if (!item) return json(404, { error: "not_found" });
+    return json(200, { item });
+  }
+
+  if (method === "GET" && path === "/v1/community/groups") {
+    return json(200, {
+      groups: await listGroups(user.sub),
+      note: "Opt-in peer groups. Text only. Anonymised names. Leave any time. Not a diagnosis space.",
+    });
+  }
+
+  const communityJoin = path.match(/^\/v1\/community\/groups\/([^/]+)\/join$/);
+  if (communityJoin && method === "POST") {
+    const group = await joinGroup(user.sub, communityJoin[1]!);
+    if ("error" in group) return json(400, { error: group.error });
+    return json(200, { group });
+  }
+
+  const communityLeave = path.match(
+    /^\/v1\/community\/groups\/([^/]+)\/membership$/,
+  );
+  if (communityLeave && method === "DELETE") {
+    const left = await leaveGroup(user.sub, communityLeave[1]!);
+    if ("error" in left) return json(400, { error: left.error });
+    return json(200, { ok: true });
+  }
+
+  const communityPosts = path.match(/^\/v1\/community\/groups\/([^/]+)\/posts$/);
+  if (communityPosts && method === "GET") {
+    const posts = await listPosts(user.sub, communityPosts[1]!);
+    if ("error" in posts) {
+      const status = posts.error === "not_a_member" ? 403 : 400;
+      return json(status, { error: posts.error });
+    }
+    return json(200, { posts });
+  }
+  if (communityPosts && method === "POST") {
+    const body = parseBody<{ body?: string }>(event);
+    const post = await createPost(
+      user.sub,
+      communityPosts[1]!,
+      body.body ?? "",
+    );
+    if ("error" in post) return json(400, { error: post.error });
+    return json(201, {
+      post,
+      message: "Held for moderation. No photos or links.",
     });
   }
 

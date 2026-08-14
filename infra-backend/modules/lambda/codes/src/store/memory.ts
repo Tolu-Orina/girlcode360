@@ -104,6 +104,33 @@ export async function latestConsentsByPurpose(
   return [...map.values()];
 }
 
+export async function listHealthLensEligibleSubs(): Promise<string[]> {
+  if (isDsqlEnabled()) return dsqlUsers.listHealthLensEligibleSubs();
+  const out: string[] = [];
+  for (const [sub, rows] of consents) {
+    const map = new Map<ConsentPurpose, ConsentRecord>();
+    for (const row of rows) map.set(row.purpose, row);
+    if (map.get("ai_healthlens")?.granted) out.push(sub);
+  }
+  return out;
+}
+
+/** Latest marketing consent + profile market. GPS is never stored for this. */
+export async function listMarketingSubsForMarket(
+  market: Market,
+): Promise<string[]> {
+  if (isDsqlEnabled()) return dsqlUsers.listMarketingSubsForMarket(market);
+  const out: string[] = [];
+  for (const [sub, profile] of users) {
+    if (profile.market !== market) continue;
+    const rows = consents.get(sub) ?? [];
+    const map = new Map<ConsentPurpose, ConsentRecord>();
+    for (const row of rows) map.set(row.purpose, row);
+    if (map.get("marketing")?.granted) out.push(sub);
+  }
+  return out;
+}
+
 function sortCycles(list: Cycle[]): Cycle[] {
   return [...list].sort((a, b) => a.startDate.localeCompare(b.startDate));
 }

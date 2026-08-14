@@ -15,7 +15,7 @@ export const PURPOSE_COPY: Record<
   },
   marketing: {
     title: "Marketing messages",
-    body: "Occasional product updates. Never health content in notification bodies.",
+    body: "In-app notices about new marketplace listings in your market and partner offers. Never lock-screen push. Never health content in the body. Separate from period and medication reminders.",
   },
   location: {
     title: "Approximate location",

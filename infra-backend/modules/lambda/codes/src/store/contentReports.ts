@@ -4,6 +4,7 @@ import {
 } from "../../../../../../packages/domain/src/index";
 import { isDsqlEnabled } from "../db/client";
 import * as dsql from "./dsql/contentReports";
+import { postExists } from "./community";
 
 export type ContentReportTargetType = "article" | "post" | "listing" | "review";
 export type ContentReportReason =
@@ -65,6 +66,9 @@ export async function createContentReport(input: {
   if (!targetId) return { ok: false, error: "target_id_required" };
   if (input.targetType === "article" && !libraryArticleById(targetId)) {
     return { ok: false, error: "unknown_article" };
+  }
+  if (input.targetType === "post" && !(await postExists(targetId))) {
+    return { ok: false, error: "unknown_post" };
   }
   const report: ContentReport = {
     id: crypto.randomUUID(),

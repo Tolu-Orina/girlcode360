@@ -19,6 +19,7 @@ import {
 } from "@/components/blocks/states";
 import { FieldSelect, FieldTextarea } from "@/components/primitives/field";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
+import { PageTip } from "@/components/blocks/page-tip";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -347,6 +348,7 @@ export function AlenaPage() {
         title="Ask Alena"
         lead="Wellness guidance from Amazon Nova. Never a diagnosis. Help for clinician conversations."
       />
+      <PageTip id="alena" />
 
       {!online ? (
         <OfflineBanner message="You are offline. Send is paused until you reconnect." />

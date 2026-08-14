@@ -3,6 +3,7 @@ import type {
   Appointment,
   CreateAppointmentRequest,
   InitPregnancyRequest,
+  PatchPregnancyRequest,
   MucusType,
   NotificationPrefs,
   PatchNotificationPrefsRequest,
@@ -13,7 +14,7 @@ import type {
   UpsertPregnancyDayRequest,
   UpsertTtcDayRequest,
 } from "../../types";
-import { calculateEdd } from "../../../../../../../packages/domain/src/index";
+import { calculateEdd, clampPeriodLeadDays } from "../../../../../../../packages/domain/src/index";
 
 type PregRow = {
   user_sub: string;
@@ -22,6 +23,8 @@ type PregRow = {
   edd: string;
   edd_early: string;
   edd_late: string;
+  pre_pregnancy_weight_kg: number | null;
+  height_cm: number | null;
   created_at: unknown;
   updated_at: unknown;
 };
@@ -33,6 +36,7 @@ type PregDayRow = {
   wellbeing: number | null;
   weight_kg: number | null;
   kicks: number | null;
+  kick_session_minutes: number | null;
   note: string | null;
   updated_at: unknown;
 };
@@ -63,6 +67,8 @@ type TtcDayRow = {
   bbt_c: number | null;
   mucus: string | null;
   intimacy: boolean;
+  intimacy_ciphertext: string | null;
+  intimacy_iv: string | null;
   note: string | null;
   updated_at: unknown;
 };
@@ -75,6 +81,7 @@ type NotifRow = {
   appointments_enabled: boolean;
   medication_enabled: boolean;
   weekly_insights_enabled: boolean;
+  period_lead_days: number | null;
   quiet_hours_start: string;
   quiet_hours_end: string;
   updated_at: unknown;
@@ -87,6 +94,8 @@ function mapPreg(row: PregRow): PregnancyProfile {
     edd: row.edd,
     eddEarly: row.edd_early,
     eddLate: row.edd_late,
+    prePregnancyWeightKg: row.pre_pregnancy_weight_kg ?? null,
+    heightCm: row.height_cm ?? null,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   };
@@ -99,6 +108,7 @@ function mapPregDay(row: PregDayRow): PregnancyDayLog {
     wellbeing: (row.wellbeing as PregnancyDayLog["wellbeing"]) ?? null,
     weightKg: row.weight_kg,
     kicks: row.kicks,
+    kickSessionMinutes: row.kick_session_minutes ?? null,
     note: row.note,
     updatedAt: toIso(row.updated_at),
   };
@@ -131,7 +141,9 @@ function mapTtcDay(row: TtcDayRow): TtcDayLog {
     date: row.day_date,
     bbtC: row.bbt_c,
     mucus: (row.mucus as MucusType | null) ?? null,
-    intimacy: row.intimacy,
+    intimacy: Boolean(row.intimacy) && !row.intimacy_ciphertext,
+    intimacyCiphertext: row.intimacy_ciphertext ?? null,
+    intimacyIv: row.intimacy_iv ?? null,
     note: row.note,
     updatedAt: toIso(row.updated_at),
   };
@@ -145,6 +157,7 @@ function mapNotif(row: NotifRow): NotificationPrefs {
     appointments: row.appointments_enabled,
     medication: row.medication_enabled,
     weeklyInsights: row.weekly_insights_enabled,
+    periodLeadDays: clampPeriodLeadDays(row.period_lead_days),
     quietHoursStart: row.quiet_hours_start,
     quietHoursEnd: row.quiet_hours_end,
     updatedAt: toIso(row.updated_at),
@@ -195,6 +208,31 @@ export async function initPregnancy(
   return mapPreg(res.rows[0]!);
 }
 
+export async function patchPregnancy(
+  sub: string,
+  body: PatchPregnancyRequest,
+): Promise<PregnancyProfile | null> {
+  const existing = await getPregnancy(sub);
+  if (!existing) return null;
+  const next = {
+    prePregnancyWeightKg:
+      body.prePregnancyWeightKg !== undefined
+        ? body.prePregnancyWeightKg
+        : (existing.prePregnancyWeightKg ?? null),
+    heightCm:
+      body.heightCm !== undefined ? body.heightCm : (existing.heightCm ?? null),
+  };
+  const res = await query<PregRow>(
+    `UPDATE pregnancy_profiles
+     SET pre_pregnancy_weight_kg = $2, height_cm = $3, updated_at = NOW()
+     WHERE user_sub = $1
+     RETURNING *`,
+    [sub, next.prePregnancyWeightKg, next.heightCm],
+  );
+  const row = res.rows[0];
+  return row ? mapPreg(row) : null;
+}
+
 export async function listPregnancyDays(
   sub: string,
 ): Promise<PregnancyDayLog[]> {
@@ -229,18 +267,23 @@ export async function upsertPregnancyDay(
         ? body.weightKg
         : (existing?.weightKg ?? null),
     kicks: body.kicks !== undefined ? body.kicks : (existing?.kicks ?? null),
+    kickSessionMinutes:
+      body.kickSessionMinutes !== undefined
+        ? body.kickSessionMinutes
+        : (existing?.kickSessionMinutes ?? null),
     note: body.note !== undefined ? body.note : (existing?.note ?? null),
     updatedAt: now,
   };
   const res = await query<PregDayRow>(
     `INSERT INTO pregnancy_days (
-       user_sub, day_date, symptoms, wellbeing, weight_kg, kicks, note, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::timestamptz)
+       user_sub, day_date, symptoms, wellbeing, weight_kg, kicks, kick_session_minutes, note, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz)
      ON CONFLICT (user_sub, day_date) DO UPDATE SET
        symptoms = EXCLUDED.symptoms,
        wellbeing = EXCLUDED.wellbeing,
        weight_kg = EXCLUDED.weight_kg,
        kicks = EXCLUDED.kicks,
+       kick_session_minutes = EXCLUDED.kick_session_minutes,
        note = EXCLUDED.note,
        updated_at = EXCLUDED.updated_at
      RETURNING *`,
@@ -251,6 +294,7 @@ export async function upsertPregnancyDay(
       next.wellbeing,
       next.weightKg,
       next.kicks,
+      next.kickSessionMinutes,
       next.note,
       next.updatedAt,
     ],
@@ -352,6 +396,7 @@ export async function upsertTtcDay(
     ? mapTtcDay(existingRows.rows[0])
     : undefined;
   const now = new Date().toISOString();
+  const hasCipher = Boolean(body.intimacyCiphertext && body.intimacyIv);
   const next: TtcDayLog = {
     date: body.date,
     bbtC: body.bbtC !== undefined ? body.bbtC : (existing?.bbtC ?? null),
@@ -359,20 +404,32 @@ export async function upsertTtcDay(
       body.mucus !== undefined
         ? (body.mucus as MucusType | null)
         : (existing?.mucus ?? null),
-    intimacy:
-      body.intimacy !== undefined ? body.intimacy : (existing?.intimacy ?? false),
+    intimacy: false,
+    intimacyCiphertext:
+      body.intimacyCiphertext !== undefined
+        ? body.intimacyCiphertext
+        : (existing?.intimacyCiphertext ?? null),
+    intimacyIv:
+      body.intimacyIv !== undefined
+        ? body.intimacyIv
+        : (existing?.intimacyIv ?? null),
     note: body.note !== undefined ? body.note : (existing?.note ?? null),
     updatedAt: now,
   };
-  if (body.intimacy === false) next.intimacy = false;
+  if (hasCipher) {
+    next.intimacyCiphertext = body.intimacyCiphertext ?? null;
+    next.intimacyIv = body.intimacyIv ?? null;
+  }
   const res = await query<TtcDayRow>(
     `INSERT INTO ttc_days (
-       user_sub, day_date, bbt_c, mucus, intimacy, note, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz)
+       user_sub, day_date, bbt_c, mucus, intimacy, intimacy_ciphertext, intimacy_iv, note, updated_at
+     ) VALUES ($1,$2,$3,$4,FALSE,$5,$6,$7,$8::timestamptz)
      ON CONFLICT (user_sub, day_date) DO UPDATE SET
        bbt_c = EXCLUDED.bbt_c,
        mucus = EXCLUDED.mucus,
-       intimacy = EXCLUDED.intimacy,
+       intimacy = FALSE,
+       intimacy_ciphertext = EXCLUDED.intimacy_ciphertext,
+       intimacy_iv = EXCLUDED.intimacy_iv,
        note = EXCLUDED.note,
        updated_at = EXCLUDED.updated_at
      RETURNING *`,
@@ -381,7 +438,8 @@ export async function upsertTtcDay(
       next.date,
       next.bbtC,
       next.mucus,
-      next.intimacy,
+      next.intimacyCiphertext,
+      next.intimacyIv,
       next.note,
       next.updatedAt,
     ],
@@ -394,7 +452,7 @@ export async function deleteTtcIntimacy(
   date: string,
 ): Promise<boolean> {
   const res = await query(
-    `UPDATE ttc_days SET intimacy = FALSE, updated_at = NOW()
+    `UPDATE ttc_days SET intimacy = FALSE, intimacy_ciphertext = NULL, intimacy_iv = NULL, updated_at = NOW()
      WHERE user_sub = $1 AND day_date = $2
      RETURNING day_date`,
     [sub, date],
@@ -421,14 +479,17 @@ export async function patchNotificationPrefs(
   const next: NotificationPrefs = {
     ...cur,
     ...patch,
+    periodLeadDays: clampPeriodLeadDays(
+      patch.periodLeadDays ?? cur.periodLeadDays,
+    ),
     updatedAt: new Date().toISOString(),
   };
   const res = await query<NotifRow>(
     `INSERT INTO notification_prefs (
        user_sub, master_enabled, period_enabled, ovulation_enabled,
        appointments_enabled, medication_enabled, weekly_insights_enabled,
-       quiet_hours_start, quiet_hours_end, updated_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::timestamptz)
+       period_lead_days, quiet_hours_start, quiet_hours_end, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::timestamptz)
      ON CONFLICT (user_sub) DO UPDATE SET
        master_enabled = EXCLUDED.master_enabled,
        period_enabled = EXCLUDED.period_enabled,
@@ -436,6 +497,7 @@ export async function patchNotificationPrefs(
        appointments_enabled = EXCLUDED.appointments_enabled,
        medication_enabled = EXCLUDED.medication_enabled,
        weekly_insights_enabled = EXCLUDED.weekly_insights_enabled,
+       period_lead_days = EXCLUDED.period_lead_days,
        quiet_hours_start = EXCLUDED.quiet_hours_start,
        quiet_hours_end = EXCLUDED.quiet_hours_end,
        updated_at = EXCLUDED.updated_at
@@ -448,6 +510,7 @@ export async function patchNotificationPrefs(
       next.appointments,
       next.medication,
       next.weeklyInsights,
+      clampPeriodLeadDays(next.periodLeadDays),
       next.quietHoursStart,
       next.quietHoursEnd,
       next.updatedAt,

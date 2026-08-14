@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  filterOwnerTags,
   fuzzyListingHay,
   GENERIC_PUSH_BODY,
   haversineKm,
@@ -11,6 +12,8 @@ import {
   pushBodyIsLockSafe,
   resolveArea,
   SHEMATCH_MAX_KM,
+  sortMarketplaceBrowse,
+  validateListingReview,
   type OpeningHours,
   type SheMatchCandidate,
 } from "./shematch.ts";
@@ -102,6 +105,42 @@ describe("area gazetteer", () => {
     const a = resolveArea("Ikeja");
     assert.ok(a);
     assert.ok(Math.abs(a!.lat - 6.6018) < 0.01);
+  });
+});
+
+describe("sortMarketplaceBrowse (MKT-F-07)", () => {
+  it("puts sponsored listings first with organic still present", () => {
+    const rows = sortMarketplaceBrowse([
+      { name: "Near organic", sponsored: false, distanceKm: 0.2 },
+      { name: "Far sponsored", sponsored: true, distanceKm: 4 },
+    ]);
+    assert.equal(rows[0]!.name, "Far sponsored");
+    assert.equal(rows[1]!.name, "Near organic");
+  });
+});
+
+describe("validateListingReview (MKT-F-05)", () => {
+  it("requires 20 characters and blocks links", () => {
+    assert.equal(validateListingReview({ stars: 5, body: "too short" }).ok, false);
+    const ok = validateListingReview({
+      stars: 4,
+      body: "Quiet staff and clear opening hours when I visited last week.",
+    });
+    assert.equal(ok.ok, true);
+    assert.equal(
+      validateListingReview({
+        stars: 3,
+        body: "See more at https://example.com for this clinic visit notes.",
+      }).ok,
+      false,
+    );
+  });
+});
+
+describe("filterOwnerTags (SM-F-05)", () => {
+  it("keeps SheMatch tags and drops unknown labels", () => {
+    const tags = filterOwnerTags(["Acne", "invented_tag", "maternity"]);
+    assert.deepEqual(tags, ["acne", "maternity"]);
   });
 });
 

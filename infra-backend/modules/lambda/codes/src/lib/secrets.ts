@@ -55,3 +55,12 @@ export async function youcamApiKey(): Promise<string | null> {
   const key = s.youcam_api_key?.trim();
   return key && key.length > 8 ? key : null;
 }
+
+export async function youcamWebhookSecret(): Promise<string | null> {
+  const s = await appSecrets();
+  const key =
+    s.youcam_webhook_secret?.trim() ||
+    process.env.YOUCAM_WEBHOOK_SECRET?.trim() ||
+    "";
+  return key.length > 8 ? key : null;
+}

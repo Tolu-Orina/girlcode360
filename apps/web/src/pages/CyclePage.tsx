@@ -24,6 +24,7 @@ import {
   FieldSelect,
   FieldTextarea,
 } from "@/components/primitives/field";
+import { PageTip } from "@/components/blocks/page-tip";
 import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { useOnline } from "@/hooks/use-online";
@@ -36,6 +37,7 @@ import type {
   PredictionResponse,
 } from "../../../../packages/api-types/src/index";
 import { ApiError, getCycles, getFertileWindow, getMe } from "../lib/api";
+import { downloadText } from "../lib/download";
 import { apiBaseUrl } from "../lib/config";
 import {
   enqueueAndStore,
@@ -45,6 +47,7 @@ import {
   type CycleState,
 } from "../lib/sync";
 import symptoms from "../data/symptoms.json";
+import { buildCycleMonthSummary } from "../../../../packages/domain/src/index";
 
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const FLOW_OPTIONS: FlowLevel[] = [
@@ -345,6 +348,21 @@ export function CyclePage() {
   const monthDays = (state?.days ?? []).filter((d) =>
     d.date.startsWith(`${viewYear}-${String(viewMonth + 1).padStart(2, "0")}`),
   );
+  const monthSummary = buildCycleMonthSummary({
+    year: viewYear,
+    monthIndex: viewMonth,
+    cycles: (state?.cycles ?? []).map((c) => ({
+      startDate: c.startDate,
+      endDate: c.endDate,
+    })),
+    days: (state?.days ?? []).map((d) => ({
+      date: d.date,
+      flow: d.flow,
+      mood: d.mood,
+      symptomIds: d.symptomIds,
+    })),
+    symptomLabels: Object.fromEntries(CYCLE_SYMPTOMS.map((s) => [s.id, s.label])),
+  });
   const empty =
     state !== null &&
     (state.cycles?.length ?? 0) === 0 &&
@@ -363,6 +381,7 @@ export function CyclePage() {
         title="Log today"
         lead="See the month, then save the day you tap. Predictions are estimates, not a diagnosis."
       />
+      <PageTip id="cycle" />
       <AskAlenaLink from="cycle" />
       {periodBanner || (dayLogs.get(ymd(today))?.flow && dayLogs.get(ymd(today))!.flow !== "none") ? (
         <SheMatchBanner trigger="period_start" />
@@ -440,17 +459,41 @@ export function CyclePage() {
           <strong className="text-foreground">
             {monthLabel(viewYear, viewMonth)}
           </strong>
-          <span>Days logged: {monthDays.length}</span>
           <span>
-            Symptom entries:{" "}
-            {monthDays.reduce((n, d) => n + d.symptomIds.length, 0)}
+            Average cycle length:{" "}
+            {monthSummary.averageCycleLength != null
+              ? `${monthSummary.averageCycleLength} days`
+              : "Need two logged periods"}
           </span>
           <span>
-            Next predicted start: {prediction?.nextStarts[0] ?? "Need ≥2 cycles"}
-            {prediction?.enoughData
-              ? ` (±${prediction.confidenceBandDays}d)`
-              : ""}
+            Average period length:{" "}
+            {monthSummary.averagePeriodLength != null
+              ? `${monthSummary.averagePeriodLength} days`
+              : "Need two logged periods"}
           </span>
+          <span>Days logged this month: {monthDays.length}</span>
+          <span>
+            Most common symptoms:{" "}
+            {monthSummary.mostCommonSymptoms.length
+              ? monthSummary.mostCommonSymptoms
+                  .map((s) => `${s.label} (${s.count})`)
+                  .join(", ")
+              : "None this month"}
+          </span>
+          <span>{monthSummary.moodPattern}</span>
+          <PredictionDisclaimer message="This is a wellness estimate, not medical advice. Consult a healthcare provider for diagnosis." />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              downloadText(
+                `girlcode360-cycle-${monthSummary.monthKey}.txt`,
+                monthSummary.text,
+              )
+            }
+          >
+            Download summary
+          </Button>
         </div>
       ) : null}
 

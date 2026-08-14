@@ -341,6 +341,87 @@ export async function countWalletDocsAll(sub: string): Promise<number> {
 export async function purgeUserWallet(sub: string): Promise<string[]> {
   const docs = await listWalletDocsAll(sub);
   await query(`DELETE FROM wallet_shares WHERE user_sub = $1`, [sub]);
+  await query(`DELETE FROM wallet_medications WHERE user_sub = $1`, [sub]);
   await query(`DELETE FROM wallet_docs WHERE user_sub = $1`, [sub]);
   return docs.map((d) => d.id);
+}
+
+type WalletMedRow = {
+  id: string;
+  user_sub: string;
+  name_ciphertext: string;
+  name_iv: string;
+  dose_ciphertext: string | null;
+  dose_iv: string | null;
+  time_local: string;
+  frequency: string;
+  enabled: boolean;
+  created_at: unknown;
+  updated_at: unknown;
+};
+
+function mapWalletMed(
+  row: WalletMedRow,
+): import("../../types").WalletMedication {
+  return {
+    id: row.id,
+    nameCiphertext: row.name_ciphertext,
+    nameIv: row.name_iv,
+    doseCiphertext: row.dose_ciphertext,
+    doseIv: row.dose_iv,
+    timeLocal: row.time_local,
+    frequency: row.frequency as "daily" | "weekdays",
+    enabled: row.enabled,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+  };
+}
+
+export async function listWalletMedications(
+  sub: string,
+): Promise<import("../../types").WalletMedication[]> {
+  const res = await query<WalletMedRow>(
+    `SELECT * FROM wallet_medications WHERE user_sub = $1 ORDER BY created_at ASC`,
+    [sub],
+  );
+  return res.rows.map(mapWalletMed);
+}
+
+export async function insertWalletMedication(
+  sub: string,
+  body: import("../../types").CreateWalletMedicationRequest,
+): Promise<import("../../types").WalletMedication> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const res = await query<WalletMedRow>(
+    `INSERT INTO wallet_medications (
+       id, user_sub, name_ciphertext, name_iv, dose_ciphertext, dose_iv,
+       time_local, frequency, enabled, created_at, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::timestamptz,$10::timestamptz)
+     RETURNING *`,
+    [
+      id,
+      sub,
+      body.nameCiphertext,
+      body.nameIv,
+      body.doseCiphertext ?? null,
+      body.doseIv ?? null,
+      body.timeLocal,
+      body.frequency === "weekdays" ? "weekdays" : "daily",
+      body.enabled !== false,
+      now,
+    ],
+  );
+  return mapWalletMed(res.rows[0]!);
+}
+
+export async function deleteWalletMedication(
+  sub: string,
+  id: string,
+): Promise<boolean> {
+  const res = await query(
+    `DELETE FROM wallet_medications WHERE id = $1 AND user_sub = $2`,
+    [id, sub],
+  );
+  return (res.rowCount ?? 0) > 0;
 }

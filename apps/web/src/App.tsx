@@ -4,7 +4,9 @@ import { RequireOnboarding } from "./components/RequireOnboarding";
 import { AppShell } from "./layout/AppShell";
 import { AccountPage } from "./pages/AccountPage";
 import { AlenaPage } from "./pages/AlenaPage";
+import { CommunityPage } from "./pages/CommunityPage";
 import { CyclePage } from "./pages/CyclePage";
+import { InboxPage } from "./pages/InboxPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { HealthPage } from "./pages/HealthPage";
 import { HomePage } from "./pages/HomePage";
@@ -63,6 +65,8 @@ export default function App() {
         <Route path="alena" element={<AlenaPage />} />
         <Route path="zara" element={<Navigate to="/app/alena" replace />} />
         <Route path="library" element={<LibraryPage />} />
+        <Route path="community" element={<CommunityPage />} />
+        <Route path="inbox" element={<InboxPage />} />
         <Route path="marketplace" element={<MarketplacePage />} />
         <Route path="marketplace/:id" element={<ListingDetailPage />} />
         <Route path="account" element={<AccountPage />} />

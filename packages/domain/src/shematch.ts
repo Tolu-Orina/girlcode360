@@ -304,6 +304,59 @@ export function matchSheMatch(opts: {
   return out;
 }
 
+/** Tags a business may self-declare for SheMatch / Mirror (SM-F-05). */
+export const BUSINESS_HEALTH_TAGS = [
+  ...new Set([
+    ...SHEMATCH_TRIGGERS.flatMap((t) => t.tags),
+    "maternity",
+    "pmos",
+    "boutique",
+  ]),
+].sort();
+
+export function filterOwnerTags(tags: string[]): string[] {
+  const allow = new Set(BUSINESS_HEALTH_TAGS.map((t) => t.toLowerCase()));
+  return [
+    ...new Set(
+      tags
+        .map((t) => t.trim().toLowerCase())
+        .filter((t) => allow.has(t)),
+    ),
+  ];
+}
+
+/** FR-061: sponsored rows first in category browse, then distance. SheMatch stays organic-first. */
+export function sortMarketplaceBrowse<
+  T extends { sponsored?: boolean; distanceKm: number | null; name: string },
+>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    if (a.sponsored && !b.sponsored) return -1;
+    if (!a.sponsored && b.sponsored) return 1;
+    if (a.distanceKm != null && b.distanceKm != null) {
+      const d = a.distanceKm - b.distanceKm;
+      if (d) return d;
+    }
+    return a.name.localeCompare(b.name);
+  });
+}
+
+const REVIEW_URL = /https?:\/\/|www\./i;
+const REVIEW_PROFANITY = /\b(fuck|shit|cunt|nigger|rape)\b/i;
+
+export function validateListingReview(opts: {
+  stars: number;
+  body: string;
+}): { ok: true; body: string; stars: number } | { ok: false; error: string } {
+  const stars = Math.round(opts.stars);
+  if (stars < 1 || stars > 5) return { ok: false, error: "stars_1_to_5" };
+  const body = opts.body.trim().replace(/\s+/g, " ");
+  if (body.length < 20) return { ok: false, error: "review_too_short" };
+  if (body.length > 2000) return { ok: false, error: "review_too_long" };
+  if (REVIEW_URL.test(body)) return { ok: false, error: "links_not_allowed" };
+  if (REVIEW_PROFANITY.test(body)) return { ok: false, error: "profanity" };
+  return { ok: true, body, stars };
+}
+
 export function fuzzyListingHay(q: string, hay: string): boolean {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;

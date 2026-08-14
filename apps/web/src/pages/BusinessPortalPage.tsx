@@ -7,14 +7,18 @@ import { Field, FieldInput, FieldSelect } from "@/components/primitives/field";
 import { Button } from "@/components/ui/button";
 import { RequireAuth } from "@/components/RequireAuth";
 import {
+  getMirrorCatalogue,
   listMyBusinessListings,
+  patchMyBusinessListing,
+  requestListingSponsor,
   submitBusinessListing,
 } from "@/lib/api";
-import { resolveArea } from "../../../../packages/domain/src/index";
+import { BUSINESS_HEALTH_TAGS, resolveArea } from "../../../../packages/domain/src/index";
 import type {
   Market,
   MarketplaceCategory,
   MarketplaceListing,
+  MirrorCatalogueItem,
 } from "../../../../packages/api-types/src/index";
 
 function PortalInner() {
@@ -27,6 +31,7 @@ function PortalInner() {
   const [reg, setReg] = useState("");
   const [services, setServices] = useState("");
   const [mine, setMine] = useState<MarketplaceListing[]>([]);
+  const [catalogue, setCatalogue] = useState<MirrorCatalogueItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,6 +47,9 @@ function PortalInner() {
 
   useEffect(() => {
     void refresh();
+    void getMirrorCatalogue()
+      .then((res) => setCatalogue(res.items))
+      .catch(() => setCatalogue([]));
   }, []);
 
   async function onSubmit(e: FormEvent) {
@@ -193,7 +201,65 @@ function PortalInner() {
                     <strong>{l.name}</strong>
                     <p className="m-0 text-[length:var(--text-label)] text-muted-foreground">
                       {l.status} · {l.category}
+                      {l.sponsored ? " · Sponsored" : ""}
                     </p>
+                    <p className="m-0 text-[length:var(--text-label)] text-muted-foreground">
+                      Tags: {l.tags.join(", ") || "none"} · Catalogue{" "}
+                      {l.catalogueItemId ?? "none"}
+                    </p>
+                    <Field id={`tags-${l.id}`} label="Health tags (SheMatch)">
+                      <FieldInput
+                        id={`tags-${l.id}`}
+                        defaultValue={l.tags.join(", ")}
+                        onBlur={(e) => {
+                          const tags = e.target.value
+                            .split(",")
+                            .map((t) => t.trim())
+                            .filter(Boolean);
+                          void patchMyBusinessListing(l.id, { tags }).then(
+                            () => void refresh(),
+                          );
+                        }}
+                      />
+                    </Field>
+                    <p className="m-0 text-[length:var(--text-label)] text-muted-foreground">
+                      Allowed: {BUSINESS_HEALTH_TAGS.join(", ")}
+                    </p>
+                    <Field id={`cat-${l.id}`} label="Mirror catalogue item">
+                      <FieldSelect
+                        id={`cat-${l.id}`}
+                        value={l.catalogueItemId ?? ""}
+                        onChange={(e) =>
+                          void patchMyBusinessListing(l.id, {
+                            catalogueItemId: e.target.value || null,
+                          }).then(() => void refresh())
+                        }
+                      >
+                        <option value="">None</option>
+                        {catalogue.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.title}
+                          </option>
+                        ))}
+                      </FieldSelect>
+                    </Field>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        void requestListingSponsor(l.id)
+                          .then((res) => setOk(res.message))
+                          .catch((err) =>
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Could not start sponsored checkout",
+                            ),
+                          )
+                      }
+                    >
+                      Request sponsored placement
+                    </Button>
                   </li>
                 ))}
               </ul>

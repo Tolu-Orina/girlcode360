@@ -16,6 +16,7 @@ import type {
   UserProfile,
   WalletCategory,
   WalletDocMeta,
+  WalletMedication,
   WalletShareListItem,
 } from "../../../../packages/api-types/src/index";
 import {
@@ -25,9 +26,12 @@ import {
 import {
   createWalletShare,
   createWalletUpload,
+  createWalletMedication,
   deleteWalletDoc,
+  deleteWalletMedication,
   getWalletObject,
   listWalletDocs,
+  listWalletMedications,
   listWalletShares,
   patchModules,
   putWalletCiphertext,
@@ -101,6 +105,13 @@ export function WalletPanel({
     {},
   );
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [walletMeds, setWalletMeds] = useState<
+    Array<WalletMedication & { name?: string; dosage?: string }>
+  >([]);
+  const [medName, setMedName] = useState("");
+  const [medDose, setMedDose] = useState("");
+  const [medTime, setMedTime] = useState("08:00");
+  const [medFreq, setMedFreq] = useState<"daily" | "weekdays">("daily");
 
   const visible = useMemo(
     () => (filter === "all" ? docs : docs.filter((d) => d.category === filter)),
@@ -111,6 +122,24 @@ export function WalletPanel({
     if (!apiBaseUrl || !on) return;
     const res = await listWalletDocs();
     setDocs(res.docs);
+  }
+
+  async function loadMeds(key: CryptoKey) {
+    if (!apiBaseUrl) return;
+    const { medications } = await listWalletMedications();
+    const decoded = await Promise.all(
+      medications.map(async (m) => ({
+        ...m,
+        name: await decryptNote(key, m.nameCiphertext, m.nameIv).catch(
+          () => "Encrypted on another device",
+        ),
+        dosage:
+          m.doseCiphertext && m.doseIv
+            ? await decryptNote(key, m.doseCiphertext, m.doseIv).catch(() => "")
+            : "",
+      })),
+    );
+    setWalletMeds(decoded);
   }
 
   useEffect(() => {
@@ -154,7 +183,10 @@ export function WalletPanel({
       setKek(key);
       setUnlocked(true);
       setPassphrase("");
-      if (apiBaseUrl) await loadDocs();
+      if (apiBaseUrl) {
+        await loadDocs();
+        await loadMeds(key);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unlock failed");
     } finally {
@@ -640,6 +672,125 @@ export function WalletPanel({
           <code className="break-all text-foreground">{shareLink}</code>
         </p>
       ) : null}
+
+      <section className="grid gap-3">
+        <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+          Medication reminders
+        </h2>
+        <p className={leadClass}>
+          Separate from PMOS Manager. Names and doses stay encrypted with your
+          vault key. The server only sees the clock time so it can send a
+          generic lock-screen note.
+        </p>
+        <form
+          className={formStackClass}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!kek || !medName.trim()) return;
+            setBusy(true);
+            void (async () => {
+              try {
+                const nameEnc = await encryptNote(kek, medName.trim());
+                if (!nameEnc) return;
+                const doseEnc = medDose.trim()
+                  ? await encryptNote(kek, medDose.trim())
+                  : null;
+                await createWalletMedication({
+                  nameCiphertext: nameEnc.noteCiphertext,
+                  nameIv: nameEnc.noteIv,
+                  doseCiphertext: doseEnc?.noteCiphertext ?? null,
+                  doseIv: doseEnc?.noteIv ?? null,
+                  timeLocal: medTime,
+                  frequency: medFreq,
+                });
+                setMedName("");
+                setMedDose("");
+                const { medications } = await listWalletMedications();
+                const decoded = await Promise.all(
+                  medications.map(async (m) => ({
+                    ...m,
+                    name: await decryptNote(kek, m.nameCiphertext, m.nameIv),
+                    dosage:
+                      m.doseCiphertext && m.doseIv
+                        ? await decryptNote(kek, m.doseCiphertext, m.doseIv)
+                        : "",
+                  })),
+                );
+                setWalletMeds(decoded);
+              } catch (err) {
+                setError(
+                  err instanceof Error ? err.message : "Could not save reminder",
+                );
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        >
+          <Field id="wmed-name" label="Medicine name">
+            <FieldInput
+              id="wmed-name"
+              required
+              value={medName}
+              onChange={(e) => setMedName(e.target.value)}
+            />
+          </Field>
+          <Field id="wmed-dose" label="Dose (optional)">
+            <FieldInput
+              id="wmed-dose"
+              value={medDose}
+              onChange={(e) => setMedDose(e.target.value)}
+            />
+          </Field>
+          <Field id="wmed-time" label="Time">
+            <FieldInput
+              id="wmed-time"
+              type="time"
+              value={medTime}
+              onChange={(e) => setMedTime(e.target.value)}
+            />
+          </Field>
+          <Field id="wmed-freq" label="Frequency">
+            <FieldSelect
+              id="wmed-freq"
+              value={medFreq}
+              onChange={(e) =>
+                setMedFreq(e.target.value as "daily" | "weekdays")
+              }
+            >
+              <option value="daily">Every day</option>
+              <option value="weekdays">Weekdays</option>
+            </FieldSelect>
+          </Field>
+          <Button type="submit" disabled={busy}>
+            Save encrypted reminder
+          </Button>
+        </form>
+        <ul className={listClass}>
+          {walletMeds.map((m) => (
+            <li key={m.id} className={listItemClass}>
+              <strong className="text-foreground">
+                {m.name ?? "Reminder"} {m.dosage ? `· ${m.dosage}` : ""}
+              </strong>
+              <p className={leadClass}>
+                {m.timeLocal} · {m.frequency}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void deleteWalletMedication(m.id).then(() =>
+                    setWalletMeds((prev) => prev.filter((x) => x.id !== m.id)),
+                  )
+                }
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {viewerUrl ? (
         <div className="grid gap-4 rounded-[var(--radius)] border border-border bg-card p-4">

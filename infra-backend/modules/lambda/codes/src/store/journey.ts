@@ -10,10 +10,12 @@ import { isDsqlEnabled } from "../db/client";
 import { listCycles } from "./memory";
 import { buildPrediction } from "../lib/prediction";
 import * as dsqlJourney from "./dsql/journey";
+import { clampPeriodLeadDays } from "../../../../../../packages/domain/src/index";
 import type {
   Appointment,
   CreateAppointmentRequest,
   InitPregnancyRequest,
+  PatchPregnancyRequest,
   Market,
   MucusType,
   NotificationPrefs,
@@ -58,11 +60,34 @@ export async function initPregnancy(
     edd: edd.edd,
     eddEarly: edd.eddEarly,
     eddLate: edd.eddLate,
+    prePregnancyWeightKg: existing?.prePregnancyWeightKg ?? null,
+    heightCm: existing?.heightCm ?? null,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
   pregnancyByUser.set(sub, profile);
   return profile;
+}
+
+export async function patchPregnancy(
+  sub: string,
+  body: PatchPregnancyRequest,
+): Promise<PregnancyProfile | null> {
+  if (isDsqlEnabled()) return dsqlJourney.patchPregnancy(sub, body);
+  const existing = pregnancyByUser.get(sub);
+  if (!existing) return null;
+  const next: PregnancyProfile = {
+    ...existing,
+    prePregnancyWeightKg:
+      body.prePregnancyWeightKg !== undefined
+        ? body.prePregnancyWeightKg
+        : (existing.prePregnancyWeightKg ?? null),
+    heightCm:
+      body.heightCm !== undefined ? body.heightCm : (existing.heightCm ?? null),
+    updatedAt: new Date().toISOString(),
+  };
+  pregnancyByUser.set(sub, next);
+  return next;
 }
 
 export async function pregnancyStatus(sub: string) {
@@ -112,6 +137,10 @@ export async function upsertPregnancyDay(
         ? body.weightKg
         : (existing?.weightKg ?? null),
     kicks: body.kicks !== undefined ? body.kicks : (existing?.kicks ?? null),
+    kickSessionMinutes:
+      body.kickSessionMinutes !== undefined
+        ? body.kickSessionMinutes
+        : (existing?.kickSessionMinutes ?? null),
     note: body.note !== undefined ? body.note : (existing?.note ?? null),
     updatedAt: now,
   };
@@ -224,9 +253,12 @@ export async function upsertTtcDay(
   sub: string,
   body: UpsertTtcDayRequest,
 ): Promise<TtcDayLog | { error: string }> {
-  const intimacy = body.intimacy ?? false;
-  if (intimacy && body.intimacyConsent !== true) {
+  const hasCipher = Boolean(body.intimacyCiphertext && body.intimacyIv);
+  if ((body.intimacy || hasCipher) && body.intimacyConsent !== true) {
     return { error: "intimacy_consent_required" };
+  }
+  if (body.intimacy && !hasCipher) {
+    return { error: "intimacy_ciphertext_required" };
   }
   if (isDsqlEnabled()) return dsqlJourney.upsertTtcDay(sub, body);
   const map = ttcDayMap(sub);
@@ -239,12 +271,22 @@ export async function upsertTtcDay(
       body.mucus !== undefined
         ? (body.mucus as MucusType | null)
         : (existing?.mucus ?? null),
-    intimacy:
-      body.intimacy !== undefined ? body.intimacy : (existing?.intimacy ?? false),
+    intimacy: false,
+    intimacyCiphertext:
+      body.intimacyCiphertext !== undefined
+        ? body.intimacyCiphertext
+        : (existing?.intimacyCiphertext ?? null),
+    intimacyIv:
+      body.intimacyIv !== undefined
+        ? body.intimacyIv
+        : (existing?.intimacyIv ?? null),
     note: body.note !== undefined ? body.note : (existing?.note ?? null),
     updatedAt: now,
   };
-  if (body.intimacy === false) next.intimacy = false;
+  if (hasCipher) {
+    next.intimacyCiphertext = body.intimacyCiphertext ?? null;
+    next.intimacyIv = body.intimacyIv ?? null;
+  }
   map.set(body.date, next);
   return next;
 }
@@ -260,6 +302,8 @@ export async function deleteTtcIntimacy(
   map.set(date, {
     ...existing,
     intimacy: false,
+    intimacyCiphertext: null,
+    intimacyIv: null,
     updatedAt: new Date().toISOString(),
   });
   return true;
@@ -307,6 +351,7 @@ export async function defaultNotifPrefs(): Promise<NotificationPrefs> {
     appointments: true,
     medication: true,
     weeklyInsights: true,
+    periodLeadDays: 1,
     quietHoursStart: "22:00",
     quietHoursEnd: "07:00",
     updatedAt: new Date().toISOString(),
@@ -336,6 +381,9 @@ export async function patchNotificationPrefs(
   const next: NotificationPrefs = {
     ...cur,
     ...patch,
+    periodLeadDays: clampPeriodLeadDays(
+      patch.periodLeadDays ?? cur.periodLeadDays,
+    ),
     updatedAt: new Date().toISOString(),
   };
   notifByUser.set(sub, next);

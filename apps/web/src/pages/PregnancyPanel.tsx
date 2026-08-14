@@ -14,6 +14,7 @@ import {
 import type {
   Appointment,
   HealthModule,
+  PregnancyDayLog,
   PregnancyProfile,
   UserProfile,
   WeekContent,
@@ -23,9 +24,11 @@ import {
   deleteAppointment,
   getAppointments,
   getPregnancy,
+  getPregnancyDays,
   getPregnancyWeek,
   initPregnancy,
   patchModules,
+  patchPregnancy,
   upsertPregnancyDay,
 } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
@@ -35,6 +38,10 @@ import {
   encodePregnancyDaily,
   EMERGENCY_BY_MARKET,
   gestationalWeek,
+  bmiKgM2,
+  PREGNANCY_WEIGHT_DISCLAIMER,
+  WHO_PREGNANCY_WEIGHT_GAIN,
+  whoBandForBmi,
 } from "../../../../packages/domain/src/index";
 
 const HOSPITAL_KEY = "gc360.pregHospitalPhone";
@@ -73,6 +80,13 @@ export function PregnancyPanel({
   const [movementFelt, setMovementFelt] = useState<boolean | null>(null);
   const [weight, setWeight] = useState("");
   const [kicks, setKicks] = useState("");
+  const [pregDays, setPregDays] = useState<PregnancyDayLog[]>([]);
+  const [baseWeight, setBaseWeight] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [sessionOn, setSessionOn] = useState(false);
+  const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
+  const [sessionKicks, setSessionKicks] = useState(0);
+  const [sessionElapsed, setSessionElapsed] = useState(0);
   const [apptTime, setApptTime] = useState("");
   const [apptLocation, setApptLocation] = useState("");
   const [apptNotes, setApptNotes] = useState("");
@@ -107,6 +121,18 @@ export function PregnancyPanel({
       setWeekContent(wc.week);
       const a = await getAppointments();
       setAppts(a.appointments);
+      try {
+        const days = await getPregnancyDays();
+        setPregDays(days.days);
+      } catch {
+        setPregDays([]);
+      }
+      if (status.profile.prePregnancyWeightKg != null) {
+        setBaseWeight(String(status.profile.prePregnancyWeightKg));
+      }
+      if (status.profile.heightCm != null) {
+        setHeightCm(String(status.profile.heightCm));
+      }
     } catch {
       /* not started */
     }
@@ -121,6 +147,14 @@ export function PregnancyPanel({
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, profile?.sub]);
+
+  useEffect(() => {
+    if (!sessionOn || sessionStartedAt == null) return;
+    const id = window.setInterval(() => {
+      setSessionElapsed(Math.floor((Date.now() - sessionStartedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [sessionOn, sessionStartedAt]);
 
   async function enable() {
     setBusy(true);
@@ -186,7 +220,10 @@ export function PregnancyPanel({
         date: todayYmd(),
         wellbeing,
         weightKg: weight ? Number(weight) : null,
-        kicks: kicks ? Number(kicks) : null,
+        kicks: kicks ? Number(kicks) : sessionKicks || null,
+        kickSessionMinutes: sessionOn
+          ? Math.max(1, Math.round(sessionElapsed / 60))
+          : undefined,
         symptoms: encodePregnancyDaily({
           nausea,
           fatigue,
@@ -194,6 +231,10 @@ export function PregnancyPanel({
           movementFelt: week >= 20 ? movementFelt : null,
         }),
       });
+      setSessionOn(false);
+      setSessionStartedAt(null);
+      const days = await getPregnancyDays();
+      setPregDays(days.days);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save log");
     } finally {
@@ -430,16 +471,144 @@ export function PregnancyPanel({
                 onChange={(e) => setWeight(e.target.value)}
               />
             </Field>
-            {week >= 24 ? (
-              <Field id="kicks" label="Kick count">
+            <div className={formStackClass}>
+              <h3 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                Weight gain guide
+              </h3>
+              <p className={leadClass}>{PREGNANCY_WEIGHT_DISCLAIMER}</p>
+              <Field id="preg-base-weight" label="Weight before pregnancy (kg)">
                 <FieldInput
-                  id="kicks"
+                  id="preg-base-weight"
                   type="number"
-                  min={0}
-                  value={kicks}
-                  onChange={(e) => setKicks(e.target.value)}
+                  step="0.1"
+                  value={baseWeight}
+                  onChange={(e) => setBaseWeight(e.target.value)}
                 />
               </Field>
+              <Field
+                id="preg-height"
+                label="Height (cm)"
+                hint="Optional. Used only to highlight one WHO BMI band."
+              >
+                <FieldInput
+                  id="preg-height"
+                  type="number"
+                  step="1"
+                  value={heightCm}
+                  onChange={(e) => setHeightCm(e.target.value)}
+                />
+              </Field>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || !apiBaseUrl}
+                onClick={() => {
+                  void patchPregnancy({
+                    prePregnancyWeightKg: baseWeight
+                      ? Number(baseWeight)
+                      : null,
+                    heightCm: heightCm ? Number(heightCm) : null,
+                  })
+                    .then((res) => {
+                      setPreg((p) => res.profile ?? p);
+                    })
+                    .catch((err) =>
+                      setError(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not save baseline",
+                      ),
+                    );
+                }}
+              >
+                Save baseline
+              </Button>
+            </div>
+            {(() => {
+              const bmi = bmiKgM2(Number(baseWeight), Number(heightCm));
+              const band = whoBandForBmi(bmi);
+              const latestW =
+                weight ||
+                [...pregDays].reverse().find((d) => d.weightKg != null)
+                  ?.weightKg;
+              const gain =
+                baseWeight && latestW
+                  ? Number(latestW) - Number(baseWeight)
+                  : null;
+              return (
+                <ul className={listClass}>
+                  {WHO_PREGNANCY_WEIGHT_GAIN.map((b) => (
+                    <li
+                      key={b.id}
+                      className={listItemClass}
+                    >
+                      <strong className="text-foreground">
+                        {b.label}
+                        {band?.id === b.id ? " · your BMI band" : ""}
+                      </strong>
+                      <p className={leadClass}>
+                        Guide: {b.gainMinKg}–{b.gainMaxKg} kg total across
+                        pregnancy
+                      </p>
+                    </li>
+                  ))}
+                  <li className={listItemClass}>
+                    Logged gain:{" "}
+                    {gain != null && Number.isFinite(gain)
+                      ? `${gain.toFixed(1)} kg from your baseline`
+                      : "Add a baseline and today’s weight to see gain"}
+                  </li>
+                </ul>
+              );
+            })()}
+            {week >= 24 ? (
+              <div className="grid gap-3">
+                <h3 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                  Kick session
+                </h3>
+                <p className={leadClass}>
+                  From week 24 you can time a movement session. If movements
+                  feel reduced or stop, contact maternity triage or emergency
+                  services. This timer is informational, not a clinical reading.
+                </p>
+                <p className={leadClass}>
+                  {sessionOn
+                    ? `Session ${Math.floor(sessionElapsed / 60)}:${String(sessionElapsed % 60).padStart(2, "0")} · kicks ${sessionKicks}`
+                    : "No session running"}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setSessionOn(true);
+                      setSessionStartedAt(Date.now());
+                      setSessionKicks(0);
+                      setSessionElapsed(0);
+                    }}
+                    disabled={sessionOn}
+                  >
+                    Start session
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSessionKicks((n) => n + 1)}
+                    disabled={!sessionOn}
+                  >
+                    Count a kick
+                  </Button>
+                </div>
+                <Field id="kicks" label="Kick count (day total)">
+                  <FieldInput
+                    id="kicks"
+                    type="number"
+                    min={0}
+                    value={kicks}
+                    onChange={(e) => setKicks(e.target.value)}
+                  />
+                </Field>
+              </div>
             ) : null}
             <Button type="submit" disabled={busy}>
               Save day

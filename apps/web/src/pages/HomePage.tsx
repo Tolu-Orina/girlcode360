@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import {
+  Bell,
   BookOpen,
   CalendarDays,
   HeartPulse,
@@ -7,7 +8,9 @@ import {
   Phone,
   ScanFace,
   Store,
+  Users,
 } from "lucide-react";
+import { AppTour } from "@/components/blocks/app-tour";
 import { PageHeader } from "@/components/blocks/page-header";
 import { AppPage } from "@/components/blocks/app-page";
 import {
@@ -18,6 +21,7 @@ import {
 import { useOnline } from "@/hooks/use-online";
 import { getEmergency, getMe } from "@/lib/api";
 import { apiBaseUrl } from "@/lib/config";
+import { tourSeen } from "@/lib/tips";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useState } from "react";
 import type { EmergencyNumber } from "../../../../packages/api-types/src/index";
@@ -66,6 +70,18 @@ const TILES: {
     copy: "Education articles",
     icon: BookOpen,
   },
+  {
+    to: "/app/community",
+    label: "Community",
+    copy: "Opt-in peer groups, text only",
+    icon: Users,
+  },
+  {
+    to: "/app/inbox",
+    label: "Inbox",
+    copy: "In-app listing notices",
+    icon: Bell,
+  },
 ];
 
 export function HomePage() {
@@ -74,6 +90,7 @@ export function HomePage() {
   const [name, setName] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showTour, setShowTour] = useState(() => !tourSeen());
   const online = useOnline();
 
   const load = useCallback(async () => {
@@ -105,6 +122,7 @@ export function HomePage() {
 
   return (
     <AppPage>
+      {showTour ? <AppTour onDone={() => setShowTour(false)} /> : null}
       <PageHeader
         eyebrow="Home"
         title={name ? `Hello, ${name}` : "Welcome"}

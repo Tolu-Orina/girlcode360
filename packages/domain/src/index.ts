@@ -404,6 +404,8 @@ export function crisisMessage(
 
 export * from "./shematch.ts";
 export * from "./library.ts";
+export * from "./tracking.ts";
+export * from "./community.ts";
 
 export type HealthLensInput = {
   cycleIntervalsDays: number[];

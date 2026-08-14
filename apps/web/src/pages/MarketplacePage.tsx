@@ -16,6 +16,7 @@ import {
 } from "@/components/blocks/states";
 import { Chip } from "@/components/primitives/chip";
 import { Field, FieldInput } from "@/components/primitives/field";
+import { PageTip } from "@/components/blocks/page-tip";
 import { Button } from "@/components/ui/button";
 import { useOnline } from "@/hooks/use-online";
 import { listMarketplace } from "@/lib/api";
@@ -43,6 +44,7 @@ type Filters = {
   minRating: number;
   openNow: boolean;
   q: string;
+  savedOnly: boolean;
 };
 
 function loadFilters(): Filters {
@@ -62,6 +64,7 @@ function defaultFilters(): Filters {
     minRating: 0,
     openNow: false,
     q: "",
+    savedOnly: false,
   };
 }
 
@@ -97,7 +100,11 @@ export function MarketplacePage() {
           q: filters.q.trim() || undefined,
         }),
       );
-      setListings(res.listings);
+      setListings(
+        filters.savedOnly
+          ? res.listings.filter((l) => l.favourite)
+          : res.listings,
+      );
       setNote(res.note);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load listings");
@@ -122,6 +129,7 @@ export function MarketplacePage() {
         title="Marketplace"
         lead="Pharmacies, clinics, beauty, and boutiques. Seeded directory plus moderated listings. Confirm before you travel."
       />
+      <PageTip id="marketplace" />
       {!online ? <OfflineBanner /> : null}
       <AreaPicker onChange={() => setOriginTick((n) => n + 1)} />
 
@@ -151,6 +159,12 @@ export function MarketplacePage() {
           onClick={() => persist({ ...filters, openNow: !filters.openNow })}
         >
           Open now
+        </Chip>
+        <Chip
+          pressed={filters.savedOnly}
+          onClick={() => persist({ ...filters, savedOnly: !filters.savedOnly })}
+        >
+          Saved
         </Chip>
         {[0, 4, 4.5].map((n) => (
           <Chip
@@ -198,9 +212,14 @@ export function MarketplacePage() {
                 <strong className="text-[length:var(--text-body)]">{l.name}</strong>
                 <span className={leadClass}>
                   {catLabel(l.category)}
+                  {l.sponsored ? " · Sponsored" : ""}
                   {l.distanceKm != null ? ` · ${l.distanceKm.toFixed(1)} km` : ""}
                   {` · Directory ${l.rating.toFixed(1)}`}
+                  {l.reviewCount
+                    ? ` · Reviews ${l.reviewAverage?.toFixed(1)} (${l.reviewCount})`
+                    : ""}
                   {l.openNow != null ? (l.openNow ? " · Open" : " · Closed") : ""}
+                  {l.favourite ? " · Saved" : ""}
                 </span>
                 <span className={leadClass}>{l.address}</span>
               </Link>

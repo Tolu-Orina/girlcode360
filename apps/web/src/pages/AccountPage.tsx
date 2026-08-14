@@ -37,6 +37,7 @@ import {
   setPin,
   webauthnAvailable,
 } from "@/lib/walletGate";
+import { resetTourAndTips } from "@/lib/tips";
 import type {
   BillingStatus,
   ConsentPurpose,
@@ -79,6 +80,7 @@ const DEFAULT_PREFS: NotificationPrefs = {
   appointments: true,
   medication: true,
   weeklyInsights: true,
+  periodLeadDays: 1,
   quietHoursStart: "22:00",
   quietHoursEnd: "07:00",
   updatedAt: new Date().toISOString(),
@@ -169,7 +171,12 @@ export function AccountPage() {
       }
       try {
         const res = await getNotificationPrefs();
-        if (!cancelled) setPrefs(res.prefs);
+        if (!cancelled) {
+          setPrefs({
+            ...res.prefs,
+            periodLeadDays: res.prefs.periodLeadDays ?? 1,
+          });
+        }
         await refreshPrivacy();
       } catch (err) {
         if (!cancelled && !(err instanceof ApiError)) {
@@ -201,7 +208,10 @@ export function AccountPage() {
         return;
       }
       const res = await patchNotificationPrefs(prefs);
-      setPrefs(res.prefs);
+      setPrefs({
+        ...res.prefs,
+        periodLeadDays: res.prefs.periodLeadDays ?? 1,
+      });
       setOk("Preferences saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -602,6 +612,12 @@ export function AccountPage() {
               Content reports you filed: {myData.counts.reportsFiled ?? 0}
             </li>
             <li className={listItemClass}>
+              Community groups joined: {myData.counts.communityGroupsJoined ?? 0}
+            </li>
+            <li className={listItemClass}>
+              In-app notices: {myData.counts.inAppNotifications ?? 0}
+            </li>
+            <li className={listItemClass}>
               Deletion: {myData.inventory?.deletionStatus ?? deletion?.status ?? "none"}
             </li>
           </ul>
@@ -867,12 +883,46 @@ export function AccountPage() {
         </Button>
       </section>
 
+      <section className="grid gap-4 border-t border-border pt-6">
+        <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+          Community
+        </h2>
+        <p className={leadClass}>
+          Optional peer groups. Text only. Anonymised names. Leave any time.
+        </p>
+        <Button asChild>
+          <Link to="/app/community">Open community</Link>
+        </Button>
+      </section>
+
+      <section className="grid gap-4 border-t border-border pt-6">
+        <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+          App tips
+        </h2>
+        <p className={leadClass}>
+          Replay the first-run tour and page tips on this device.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            resetTourAndTips();
+            setOk("Tips will show again on Home and each page.");
+          }}
+        >
+          Show tips again
+        </Button>
+      </section>
+
       <form className={formStackClass} onSubmit={(e) => void savePrefs(e)}>
         <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
           Notifications
         </h2>
         <p className={leadClass}>
-          Bodies stay generic. Quiet hours default 22:00–07:00 local.
+          Health reminder bodies stay generic. Quiet hours default 22:00–07:00
+          local. Listing and partner notices are in-app only — open{" "}
+          <Link to="/app/inbox">Inbox</Link>. They need Marketing messages on
+          and are not lock-screen push.
         </p>
         {(
           [
@@ -897,6 +947,29 @@ export function AccountPage() {
             {label}
           </Label>
         ))}
+        {prefs.period ? (
+          <Field
+            id="period-lead"
+            label="Period reminder"
+            hint="Days before the predicted start. Quiet hours still apply. Lock-screen text stays generic."
+          >
+            <select
+              id="period-lead"
+              className="h-12 min-h-[var(--tap)] w-full rounded-[var(--radius)] border border-input bg-card px-4 text-[length:var(--text-body)] text-foreground"
+              value={prefs.periodLeadDays ?? 1}
+              onChange={(e) =>
+                setPrefs((p) => ({
+                  ...p,
+                  periodLeadDays: Number(e.target.value) as 1 | 2 | 3,
+                }))
+              }
+            >
+              <option value={1}>1 day before</option>
+              <option value={2}>2 days before</option>
+              <option value={3}>3 days before</option>
+            </select>
+          </Field>
+        ) : null}
         <Field id="quiet-start" label="Quiet hours start">
           <FieldInput
             id="quiet-start"

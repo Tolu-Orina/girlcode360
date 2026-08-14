@@ -1,6 +1,6 @@
 # GirlCode360 — Master Technical Implementation Plan
 
-**Version 1.3 · Updated 13 August 2026 · UK · Nigeria · Ghana**  
+**Version 1.3 · Updated 14 August 2026 · UK · Nigeria · Ghana**  
 **Supersedes:** v1.2 (13 August 2026 UI/UX plan), v1.0 (7 August 2026 clean-build RDS + CDK + Anthropic).  
 **Stack (locked):** AWS Terraform · Aurora DSQL · Cognito custom auth · React PWA (mobile-shell) · Bedrock Nova 2 Lite · Perfect Corp. YouCam API  
 **Target domain:** `girlcode.conquerorfoundation.com`  
@@ -640,28 +640,36 @@ These land in the same phase because HealthLens' pattern-flagging logic (HL-F-05
 
 | Left by | Item | Why it was left | Pick up in | Code / contract to reuse |
 |---|---|---|---|---|
-| 1.2 | PT-F-06 month summary, PT-F-07 period reminders | Should | 2.1 | Cycle calendar already has a month-summary toggle; notification prefs rows exist |
-| 1.2 | PMOS-F-03 biometrics, PMOS-F-05 PMOS prep card | Should | 2.1 | Health PMOS tab already logs weight/sleep/water/stress; Prep Card is HealthLens (HL-F-04), not a second engine |
-| 1.3 | HW-F-06 wallet medication reminders | Should | 2.2 | Distinct from PMOS meds; Health Wallet encrypt pattern is the template |
-| 1.4 | Live SheMatch + Business Portal | **Closed in 1.7** — seeded directory + `/business`. SM-F-05 still Should | 2.2 | `catalogue_item_id` on listings; garment URLs stay in `mirrorCatalogue.ts` |
-| 1.4 | YouCam webhooks, DynamoDB limiter, HD scans | Wave 0 poller + in-process pace; SD default | 2.2 webhooks; HD in 3.5 | `youcam.ts` poller + circuit; Alena 3/day gating pattern for HD |
+| 1.2 | PT-F-06 month summary, PT-F-07 period reminders | **Closed in 2.1** | — | `buildCycleMonthSummary`; `period_lead_days` 1/2/3; tick uses `periodReminderDue` |
+| 1.2 | PMOS-F-03 biometrics, PMOS-F-05 PMOS prep card | **Closed in 2.1** | — | Dated biometric history; 3-month `.txt` report + existing HealthLens Prep Card (not a second engine) |
+| 1.3 | HW-F-06 wallet medication reminders | **Closed in 2.2** | — | `/v1/wallet/medications`; name/dose ciphertext; `time_local` plaintext for generic push. Distinct from `pcos_medications` |
+| 1.4 | Live SheMatch + Business Portal | **Closed in 1.7** — seeded directory + `/business`. SM-F-05 **closed in 2.2** | — | Owner PATCH tags from `BUSINESS_HEALTH_TAGS`; `catalogue_item_id` from Mirror catalogue |
+| 1.4 | YouCam webhooks, DynamoDB limiter, HD scans | **Webhooks closed in 2.2**; HD stays 3.5; DynamoDB limiter not added | 3.5 HD | `POST /v1/webhooks/youcam` HMAC; GET scan still polls |
 | 1.5 | Alena SSE / APIGW `STREAM` | Plan forbids fake token animation | When APIGW STREAM exists (not 1.8 fake-out) | `POST /v1/alena/chat` returns full reply; UI shows “Alena is writing…” |
-| 1.6 | HealthLens monthly **EventBridge** cron | Must monthly cadence is met by `maybeMonthlyHealthLensReport` on `GET /v1/healthlens/status` when `ai_healthlens` is granted | Prove with EventBridge once traffic is real (Tier 2 exit already requires one live monthly cycle) | `store/ai.ts` `generateHealthLensReport(sub, { monthly: true })` — monthly must **not** set `lastOndemandAt` |
-| 1.6 | Prep Card as **PDF** | FR-091 says PDF; ship is structured `.txt` (`buildPrepCard`) | 2.1 if print/share requires PDF | Same sections: cycle, symptoms, meds, wallet **titles only**, questions. Do not send Wallet ciphertext to the model |
+| 1.6 | HealthLens monthly **EventBridge** cron | **Closed in 2.2** | — | EventBridge `healthlens_monthly` → `runMonthlyHealthLensTick`; GET status path unchanged |
+| 1.7 | EventBridge cron + VAPID for push send | **Schedule closed in 2.2**; VAPID keys still ops | Ops VAPID | EventBridge `notifications` every 15 min → `runNotificationTick` |
+| 1.6 | Prep Card as **PDF** | FR-091 says PDF; ship is structured `.txt` (`buildPrepCard` / PMOS report) | Later if print/share requires PDF | Same sections. Do not send Wallet ciphertext to the model. Do not add jspdf in 2.1 |
 | 1.8 | FR-076 email / display-name / photo | Phone is out of scope; photo and display-name not in 1.8 Must list | Later account polish | Email already on profile when Cognito supplies it; My Data shows it. Do not add SMS. |
-| 1.6 | PG-F-05 WHO weight ranges | Should | 2.1 | Pregnancy day `weightKg`; do not treat as a prescription |
-| 1.6 | PG-F-06 kick **session** counter | Should (FR-035). Must logging is movement felt/reduced from week 20 | 2.1 | Symptoms `movement_felt` / `movement_reduced` via `encodePregnancyDaily`; kicks integer from week 24 |
-| 1.6 | TTC-F-03/04/06 as full Should | Fields already on TTC tab | 2.1 | Do not duplicate intimacy into Alena/Mirror context (already excluded) |
+| 1.6 | PG-F-05 WHO weight ranges | **Closed in 2.1** | — | Baseline kg/cm on pregnancy profile; IOM/WHO bands + exact midwife disclaimer |
+| 1.6 | PG-F-06 kick **session** counter | **Closed in 2.1** | — | Timed session + `kick_session_minutes` from week 24; seek-care copy; movement flags unchanged from week 20 |
+| 1.6 | TTC-F-03/04/06 as full Should | **Closed in 2.1** | — | BBT chart; mucus tooltips; AES-GCM intimacy ciphertext (device key). Delete path unchanged. Not in Alena context |
+| 2.1 | Intimacy decrypt on another device | Key is IndexedDB non-extractable AES-GCM | Honest: export has ciphertext only | Same pattern as Wallet: ciphertext travels; plaintext needs the original device |
 | 1.6 | PG-F-07 nearest hospital from marketplace | **Closed in 1.7** — silent if none within 5 km | — | `SheMatchBanner` `pregnancy_emergency`; optional `gc360.pregHospitalPhone` still valid |
-| 1.7 | EventBridge cron + VAPID for push send | Tick endpoint exists; prefs/quiet hours/generic body live | Ops / 2.2 | `POST /v1/notifications/tick` with `x-internal-key`; `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` |
+| 1.7 | VAPID keys for push send | Schedule is in Terraform; live web-push needs keys in the packed secret | Ops | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` |
 | 1.8 | Apply `013_phase18_content_reports.sql` on DSQL | Migration is in repo; queue works in memory without it | Ops with other DSQL migrations | Internal `GET/PATCH /v1/content/moderation-queue` — no `apps/admin` |
+| 2.1 | Apply `014_phase21_tracking.sql` on DSQL | In repo; CodeBuild `migrate-dsql.mjs` | Next **backend** deploy | `period_lead_days`, pregnancy baseline, `kick_session_minutes`, intimacy ciphertext columns |
+| 2.2 | Apply `015_phase22_marketplace.sql` on DSQL | In repo | Next **backend** deploy | reviews, favourites, wallet_medications |
+| 2.3 | Apply `016_phase23_community.sql` on DSQL | In repo | Next **backend** deploy | memberships, posts, in_app_notifications |
+| 2.3 | GPS “in your area” for marketing inbox | Location is session-only; we do not persist GPS | Honest: fan-out by **profile market** | Copy says so. Do not store coordinates for NTF-F-04 |
+| 2.2 | Live Paystack/Stripe sponsored checkout | Stub checkout URL + webhook `listingId` | When live keys exist | Do not fake a paid placement |
+| 2.2 | `youcam_webhook_secret` in packed secret | HMAC rejects unsigned posts | Ops | Poller remains if Perfect Corp is not pointed at `/v1/webhooks/youcam` |
 | 1.6 | HL-F-06 train a population model | Tier 1 = store opt-in only | 3.4 | `healthlens_prefs.population_learning_consent`; no training pipeline |
 
-**Honest empty / not-live (keep until the owning phase ships):** Alena STREAM, HD YouCam, Wallet meds-as-Must, user reviews, favourites, sponsored placement.
+**Honest empty / not-live (keep until the owning phase ships):** Alena STREAM, HD YouCam, live Paystack/Stripe checkout, YouCam webhook secret until ops fills it.
 
 #### Phase 1.7 — Marketplace, SheMatch & Notifications
 
-**Status (13 Aug 2026):** Must items above are in repo (seeded directory + pending business submissions + SheMatch banners + notification prefs/tick). Do not rebuild. EventBridge schedule for `/v1/notifications/tick` and VAPID keys are ops follow-through, not a second engine. Reviews, favourites, sponsored placement, and SM-F-05 stay 2.2.
+**Status (13 Aug 2026):** Must items above are in repo (seeded directory + pending business submissions + SheMatch banners + notification prefs/tick). Do not rebuild. Reviews, favourites, labelled sponsored sort, and SM-F-05 closed in 2.2. VAPID keys remain ops.
 
 - **MKT-F-01, F-02, F-03, F-04, F-06** (Must-priority marketplace: discovery, browsing, listing detail, search, Business Portal registration)
 - **SM-F-01 through F-04** (SheMatch engine — the trigger table, banner UI, consent, transparency — built generally enough that Phase 1.4's Mirror bridges plug into it as new rows, not new code)
@@ -671,7 +679,7 @@ These land in the same phase because HealthLens' pattern-flagging logic (HL-F-05
 
 #### Phase 1.8 — Remaining Must-priority closeout
 
-**Status (13 Aug 2026):** Must items below are in repo. Do not rebuild Cycle / Wallet / Mirror / Alena / HealthLens / Pregnancy / TTC / Marketplace. PMOS-F-05 remains Should (§12.1 → 2.1). Prep Card stays `.txt`. Alena STREAM stays out. FR-076 photo/display-name left in §12.1.
+**Status (13 Aug 2026):** Must items below are in repo. Do not rebuild Cycle / Wallet / Mirror / Alena / HealthLens / Pregnancy / TTC / Marketplace. Prep Card stays `.txt`. Alena STREAM stays out. FR-076 photo/display-name left in §12.1. PMOS-F-05 closed in Phase 2.1.
 
 **Pickup (done):** One library corpus in `packages/domain/src/library.ts` with `reviewedAt` and 24-month stale flag; Library UI + article reports; `content_reports` queue (`013_phase18_content_reports.sql`); My Data inventory, JSON export including SheMatch/listings/reports, deletion with 24h cooling-off and in-page confirm.
 
@@ -689,34 +697,40 @@ Brings in the 18 "Should"-priority features — the ones that make the product f
 
 #### Phase 2.1 — Tracking depth
 
-**Read §12.1.** Several Should UIs already exist as thin fields. Harden to spec; do not add a second diary.
+**Status (14 Aug 2026):** Must-harden Should items below are in repo. Do not rebuild Cycle / Health / Pregnancy / TTC / HealthLens. Migration `014_phase21_tracking.sql` applies on the next **backend** deploy. Prep Card and PMOS report stay `.txt`. Intimacy key is device-local.
 
-- **PT-F-06** (Monthly Cycle Summary & Reports)
-- **PT-F-07** (Period Reminders & Notifications)
-- **PMOS-F-03** (Biometric & Lifestyle Logging)
-- **PMOS-F-05** (PMOS Health Report & Doctor Prep Card)
-- **PG-F-05** (Pregnancy Weight Tracker) — weight kg field exists; add WHO range guide + midwife disclaimer
-- **PG-F-06** (Kick Counter) — integer kicks from week 24 exist; add timed sessions + “when to seek care” copy (HealthLens already flags `movement_reduced` from week 20)
-- **TTC-F-03** (BBT Logging) — BBT field exists; add chart
-- **TTC-F-04** (Cervical Mucus Tracking) — mucus select exists; keep educational tooltips
-- **TTC-F-06** (Intercourse Logging — zero-knowledge encrypted, §6.3) — consent + delete path exists; raise to wallet-grade client encrypt if still server-plaintext
+**Read §12.1.** Several Should UIs already existed as thin fields. Harden to spec; do not add a second diary.
+
+- **PT-F-06** (Monthly Cycle Summary & Reports) — averages, common symptoms, mood pattern, `.txt` export
+- **PT-F-07** (Period Reminders) — 1/2/3 days before predicted start, plus the predicted day
+- **PMOS-F-03** (Biometric & Lifestyle Logging) — date + last-14-day history on existing fields
+- **PMOS-F-05** (PMOS Health Report & Doctor Prep Card) — 3-month wellness `.txt`; Prep Card reuses HealthLens
+- **PG-F-05** (Pregnancy Weight Tracker) — WHO/IOM guide + “Consult your midwife or doctor for personalised guidance on pregnancy weight.”
+- **PG-F-06** (Kick Counter) — timed sessions from week 24 + when-to-seek-care copy
+- **TTC-F-03** (BBT Logging) — chart + plain interpretation (not proof of ovulation)
+- **TTC-F-04** (Cervical Mucus Tracking) — educational tooltips
+- **TTC-F-06** (Intercourse Logging) — client AES-GCM ciphertext; consent + delete; not in Alena context
 
 #### Phase 2.2 — Marketplace richness & webhook migration
 
-- **MKT-F-05** (User Reviews & Ratings)
-- **MKT-F-07** (Featured & Sponsored Listings — Paystack/Stripe integration)
-- **MKT-F-08** (Save to Favourites)
-- **HW-F-06** (Medication Reminders, Wallet context) — pickup from 1.3; not PMOS meds
-- **Migrate `youcam-gateway` from polling to webhooks** (§5.1) — pickup from 1.4; poller stays until this lands
-- Optional: EventBridge schedule calling the same `maybeMonthlyHealthLensReport` path as GET status (pickup from 1.6) so monthly reports exist even if the user never opens Alena that month
-- **SM-F-05** (Business Health Tagging — self-service in the Business Portal, upgrading Phase 1.4's manually-seeded MIR-F-06 tags to owner-managed)
+**Status (14 Aug 2026):** Items below are in repo. Do not rebuild Marketplace / Wallet / YouCam poller / billing. Migration `015_phase22_marketplace.sql` applies on the next **backend** deploy. Live Paystack/Stripe checkout and `youcam_webhook_secret` are ops. Poller stays until Perfect Corp posts to `/v1/webhooks/youcam`.
+
+- **MKT-F-05** (User Reviews & Ratings) — 1–5 stars, ≥20 characters, no links, pending moderation, report via content reports
+- **MKT-F-07** (Featured & Sponsored) — sponsored first in browse with **Sponsored** label; checkout stub; webhook `listingId` sets the flag. SheMatch stays organic-first
+- **MKT-F-08** (Save to Favourites) — server-side listing ids (public directory ids, not health ciphertext)
+- **HW-F-06** (Wallet medication reminders) — encrypted name/dose; clock time only on server; not PMOS meds
+- **YouCam webhooks** — `POST /v1/webhooks/youcam` HMAC; GET scan still polls
+- **EventBridge** — notifications 15 min, HealthLens monthly, daily purge
+- **SM-F-05** (Business health tagging) — owner-managed tags + catalogue item on `/business`
 
 #### Phase 2.3 — Communication & community
 
-- **NTF-F-04** (Marketing Notifications, opt-in)
-- **UOB-F-07** (Onboarding Tutorial & Contextual Tooltips)
-- **COM-F-01** (Peer Support Groups)
-- **COM-F-02** (Community Post Creation & Interaction)
+**Status (14 Aug 2026):** Items below are in repo. Do not rebuild Cycle / Wallet / Mirror / Alena / HealthLens / Marketplace / Library. Migration `016_phase23_community.sql` applies on the next **backend** deploy. Marketing stays **in-app**, never lock-screen push. Community is text-only, moderated, anonymised, opt-in. FR-076 photo/display-name stays later — handles are `Member-xxxxxx`.
+
+- **NTF-F-04** (Marketing Notifications, opt-in) — inbox at `/app/inbox`; fan-out on listing approve (same **market**, marketing consent); promo kind when sponsored; internal `POST /v1/in-app/promo`. Distinct from health `notification_prefs`.
+- **UOB-F-07** (Onboarding Tutorial & Contextual Tooltips) — skippable 5th onboarding screen (FR-008 max 5); first-run Home tour for existing users; page tips on Cycle / Health / Marketplace / Alena / Community; replay in Account
+- **COM-F-01** (Peer Support Groups) — TTC Circle, PCOS Warriors, Pregnancy Journey, Period Health; join/leave; anonymised display name
+- **COM-F-02** (Community Post Creation & Interaction) — 500 chars, no links, profanity filter, pending moderation; **FR-072** Report on every post → existing `content_reports` (`targetType: post`)
 
 **Tier 2 exit criteria:** all 94 HLR features (Tier 1 + Tier 2) live in production; full regression pass including "Edge Case" test cases; HealthLens monthly report cadence proven stable across at least one full monthly cycle in production.
 
@@ -1289,5 +1303,5 @@ These are **frontend waves**, not §11 hackathon waves and not §12 phases. Do t
 
 ---
 
-*GirlCode360 — Master Technical Implementation Plan v1.3 · Confidential · 13 August 2026*  
-*v1.0 superseded for stack. v1.1 added DSQL/Lambda/Alena/Mirror engineering. v1.2 adds §16 UI/UX production plan. v1.3 adds §12.1 carry-forward register after Phase 1.6. Phase 1.8 Must closed 13 Aug 2026. Phone/SMS auth remains out of scope.*
+*GirlCode360 — Master Technical Implementation Plan v1.3 · Confidential · 14 August 2026*  
+*v1.0 superseded for stack. v1.1 added DSQL/Lambda/Alena/Mirror engineering. v1.2 adds §16 UI/UX production plan. v1.3 adds §12.1 carry-forward register after Phase 1.6. Phase 1.8 Must closed 13 Aug 2026. Phase 2.1 tracking depth closed 14 Aug 2026. Phase 2.2 marketplace richness closed 14 Aug 2026. Phase 2.3 communication & community closed 14 Aug 2026. Phone/SMS auth remains out of scope.*

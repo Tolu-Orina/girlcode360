@@ -5,22 +5,31 @@ import {
   isOpenNow,
   matchSheMatch,
   sheMatchTrigger,
+  sortMarketplaceBrowse,
+  validateListingReview,
+  filterOwnerTags,
   type GeoPoint,
   type SheMatchTriggerId,
 } from "../../../../../../packages/domain/src/index";
 import { MARKETPLACE_SEED, seededAsListing } from "../lib/marketplaceSeed";
+import { catalogueById } from "../lib/mirrorCatalogue";
 import { latestConsentsByPurpose } from "./memory";
 import * as dsql from "./dsql/marketplace";
 import type {
   CreateBusinessListingRequest,
+  CreateListingReviewRequest,
   HealthModule,
+  ListingReview,
   MarketplaceCategory,
   MarketplaceListing,
+  PatchOwnedListingRequest,
 } from "../types";
 
 const memListings = new Map<string, MarketplaceListing>();
 const modulePrefs = new Map<string, Record<HealthModule, boolean>>();
 const sendLog = new Set<string>();
+const memReviews = new Map<string, ListingReview & { userSub: string }>();
+const memFavourites = new Map<string, Set<string>>();
 
 function seedMemory() {
   if (memListings.size) return;
@@ -52,6 +61,7 @@ export async function listMarketplace(opts: {
   weekday: number;
   hhmm: string;
   market?: MarketplaceListing["market"];
+  viewerSub?: string;
 }): Promise<MarketplaceListing[]> {
   const all = isDsqlEnabled()
     ? await dsql.listLive()
@@ -77,13 +87,22 @@ export async function listMarketplace(opts: {
       (l) => l.distanceKm != null && l.distanceKm <= opts.radiusKm!,
     );
   }
-  rows.sort((a, b) => {
-    if (a.distanceKm != null && b.distanceKm != null) {
-      return a.distanceKm - b.distanceKm;
-    }
-    return a.name.localeCompare(b.name);
+  const stats = isDsqlEnabled()
+    ? await dsql.listReviewStats(rows.map((r) => r.id))
+    : reviewStatsMemory(rows.map((r) => r.id));
+  const favs = opts.viewerSub
+    ? new Set(await listFavouriteIds(opts.viewerSub))
+    : null;
+  rows = rows.map((l) => {
+    const st = stats.get(l.id);
+    return {
+      ...l,
+      reviewCount: st?.count ?? 0,
+      reviewAverage: st ? Math.round(st.average * 10) / 10 : null,
+      favourite: favs ? favs.has(l.id) : undefined,
+    };
   });
-  return rows;
+  return sortMarketplaceBrowse(rows);
 }
 
 export async function getMarketplaceListing(
@@ -91,12 +110,24 @@ export async function getMarketplaceListing(
   origin: GeoPoint | null,
   weekday: number,
   hhmm: string,
+  viewerSub?: string,
 ): Promise<MarketplaceListing | undefined> {
   const row = isDsqlEnabled()
     ? await dsql.getListing(id)
     : (seedMemory(), memListings.get(id));
   if (!row || (row.status !== "live" && !row.ownerSub)) return undefined;
-  return decorate(row, origin, weekday, hhmm);
+  const decorated = decorate(row, origin, weekday, hhmm);
+  const stats = isDsqlEnabled()
+    ? await dsql.listReviewStats([id])
+    : reviewStatsMemory([id]);
+  const st = stats.get(id);
+  const favs = viewerSub ? new Set(await listFavouriteIds(viewerSub)) : null;
+  return {
+    ...decorated,
+    reviewCount: st?.count ?? 0,
+    reviewAverage: st ? Math.round(st.average * 10) / 10 : null,
+    favourite: favs ? favs.has(id) : undefined,
+  };
 }
 
 export async function listMyListings(sub: string): Promise<MarketplaceListing[]> {
@@ -257,7 +288,161 @@ export async function listAllPushSubscriptions() {
 export async function purgeUserMarketplace(sub: string): Promise<void> {
   if (isDsqlEnabled()) await dsql.purgeUserMarketplace(sub);
   modulePrefs.delete(sub);
+  memFavourites.delete(sub);
+  for (const [id, row] of memReviews) {
+    if (row.userSub === sub) memReviews.delete(id);
+  }
   for (const [id, row] of memListings) {
     if (row.ownerSub === sub && !row.seeded) memListings.delete(id);
   }
+}
+
+function reviewStatsMemory(
+  listingIds: string[],
+): Map<string, { count: number; average: number }> {
+  const out = new Map<string, { count: number; average: number }>();
+  for (const id of listingIds) {
+    const live = [...memReviews.values()].filter(
+      (r) => r.listingId === id && r.status === "live",
+    );
+    if (!live.length) continue;
+    const avg = live.reduce((s, r) => s + r.stars, 0) / live.length;
+    out.set(id, { count: live.length, average: avg });
+  }
+  return out;
+}
+
+export async function createListingReview(
+  sub: string,
+  listingId: string,
+  body: CreateListingReviewRequest,
+): Promise<ListingReview | { error: string }> {
+  const listing = isDsqlEnabled()
+    ? await dsql.getListing(listingId)
+    : (seedMemory(), memListings.get(listingId));
+  if (!listing || listing.status !== "live") return { error: "listing_not_found" };
+  const checked = validateListingReview({
+    stars: body.stars,
+    body: body.body ?? "",
+  });
+  if (!checked.ok) return { error: checked.error };
+  if (isDsqlEnabled()) {
+    return dsql.insertReview({
+      id: crypto.randomUUID(),
+      listingId,
+      userSub: sub,
+      stars: checked.stars,
+      body: checked.body,
+    });
+  }
+  const id = crypto.randomUUID();
+  const review: ListingReview & { userSub: string } = {
+    id,
+    listingId,
+    stars: checked.stars,
+    body: checked.body,
+    status: "pending",
+    mine: true,
+    createdAt: new Date().toISOString(),
+    userSub: sub,
+  };
+  for (const [rid, row] of memReviews) {
+    if (row.listingId === listingId && row.userSub === sub) memReviews.delete(rid);
+  }
+  memReviews.set(id, review);
+  return review;
+}
+
+export async function listListingReviews(
+  listingId: string,
+  viewer?: string,
+): Promise<ListingReview[]> {
+  if (isDsqlEnabled()) return dsql.listLiveReviews(listingId, viewer);
+  return [...memReviews.values()]
+    .filter((r) => r.listingId === listingId && r.status === "live")
+    .map((r) => ({ ...r, mine: viewer ? r.userSub === viewer : undefined }));
+}
+
+export async function moderateReview(
+  id: string,
+  action: "approve" | "reject",
+): Promise<ListingReview | undefined> {
+  if (isDsqlEnabled()) return dsql.moderateReview(id, action);
+  const row = memReviews.get(id);
+  if (!row) return undefined;
+  row.status = action === "approve" ? "live" : "rejected";
+  return row;
+}
+
+export async function listFavouriteIds(sub: string): Promise<string[]> {
+  if (isDsqlEnabled()) return dsql.listFavourites(sub);
+  return [...(memFavourites.get(sub) ?? [])];
+}
+
+export async function addFavourite(
+  sub: string,
+  listingId: string,
+): Promise<boolean> {
+  const listing = isDsqlEnabled()
+    ? await dsql.getListing(listingId)
+    : (seedMemory(), memListings.get(listingId));
+  if (!listing || listing.status !== "live") return false;
+  if (isDsqlEnabled()) {
+    await dsql.addFavourite(sub, listingId);
+    return true;
+  }
+  const set = memFavourites.get(sub) ?? new Set();
+  set.add(listingId);
+  memFavourites.set(sub, set);
+  return true;
+}
+
+export async function removeFavourite(
+  sub: string,
+  listingId: string,
+): Promise<boolean> {
+  if (isDsqlEnabled()) return dsql.removeFavourite(sub, listingId);
+  const set = memFavourites.get(sub);
+  if (!set?.has(listingId)) return false;
+  set.delete(listingId);
+  return true;
+}
+
+export async function patchOwnedListing(
+  sub: string,
+  id: string,
+  body: PatchOwnedListingRequest,
+): Promise<MarketplaceListing | { error: string } | undefined> {
+  const tags = body.tags ? filterOwnerTags(body.tags) : undefined;
+  if (body.catalogueItemId) {
+    if (!catalogueById(body.catalogueItemId)) {
+      return { error: "unknown_catalogue_item" };
+    }
+  }
+  if (isDsqlEnabled()) {
+    return dsql.patchOwnedListing(sub, id, {
+      tags,
+      services: body.services,
+      catalogueItemId: body.catalogueItemId,
+    });
+  }
+  seedMemory();
+  const row = memListings.get(id);
+  if (!row || row.ownerSub !== sub) return undefined;
+  if (tags) row.tags = tags;
+  if (body.services) row.services = body.services;
+  if (body.catalogueItemId !== undefined) row.catalogueItemId = body.catalogueItemId;
+  return row;
+}
+
+export async function setListingSponsored(
+  id: string,
+  sponsored: boolean,
+): Promise<MarketplaceListing | undefined> {
+  if (isDsqlEnabled()) return dsql.setSponsored(id, sponsored);
+  seedMemory();
+  const row = memListings.get(id);
+  if (!row) return undefined;
+  row.sponsored = sponsored;
+  return row;
 }

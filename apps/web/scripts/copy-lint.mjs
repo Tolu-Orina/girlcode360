@@ -22,6 +22,7 @@ const SKIP = new Set(["node_modules", "dist", ".git"]);
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     if (SKIP.has(name)) continue;
+    if (name.endsWith(".test.ts") || name.endsWith(".test.tsx")) continue;
     const p = join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) walk(p, out);

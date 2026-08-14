@@ -96,12 +96,28 @@ export async function createCheckoutSession(
 
 export async function handleBillingWebhook(
   provider: "stripe" | "paystack",
-  body: { sub?: string; customerId?: string; event?: string },
+  body: {
+    sub?: string;
+    customerId?: string;
+    event?: string;
+    listingId?: string;
+  },
 ): Promise<{
   ok: boolean;
   error?: string;
   status?: Awaited<ReturnType<typeof getBillingStatus>>;
+  listingId?: string;
+  sponsored?: boolean;
 }> {
+  if (body.listingId) {
+    const { setListingSponsored } = await import("./marketplace");
+    const listing = await setListingSponsored(
+      body.listingId,
+      body.event !== "subscription.deleted" && body.event !== "charge.failed",
+    );
+    if (!listing) return { ok: false, error: "listing_not_found" };
+    return { ok: true, listingId: listing.id, sponsored: listing.sponsored };
+  }
   const sub = body.sub ?? body.customerId;
   if (!sub) return { ok: false, error: "sub_required" };
   if (body.event === "subscription.deleted" || body.event === "charge.failed") {

@@ -2,11 +2,15 @@
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+export type ReasoningEffort = "low" | "medium" | "high";
+
 export type ConverseInput = {
   system: string;
   messages: ChatMessage[];
   modelId?: string;
   maxTokens?: number;
+  /** Nova 2 Lite extended thinking. Default on / low. */
+  reasoningEffort?: ReasoningEffort;
 };
 
 export type ConverseResult = {
@@ -19,6 +23,12 @@ const DEFAULT_MODEL =
   process.env.ALENA_MODEL_ID ??
   process.env.ZARA_MODEL_ID ??
   "global.amazon.nova-2-lite-v1:0";
+
+const DEFAULT_REASONING: ReasoningEffort = (() => {
+  const raw = (process.env.ALENA_REASONING_EFFORT ?? "low").toLowerCase();
+  if (raw === "medium" || raw === "high" || raw === "low") return raw;
+  return "low";
+})();
 
 /**
  * Call Bedrock Converse when BEDROCK_ENABLED=true and AWS SDK is available.
@@ -67,6 +77,7 @@ async function invokeBedrock(
   const client = new mod.BedrockRuntimeClient({
     region: process.env.AWS_REGION ?? "eu-west-2",
   });
+  const effort = input.reasoningEffort ?? DEFAULT_REASONING;
   const res = await client.send(
     new mod.ConverseCommand({
       modelId,
@@ -76,8 +87,16 @@ async function invokeBedrock(
         content: [{ text: m.content }],
       })),
       inferenceConfig: {
-        maxTokens: input.maxTokens ?? 800,
+        // Reasoning tokens count against maxTokens. Callers still pass 220–600 for
+        // short answers; floor so low thinking does not eat the whole budget.
+        maxTokens: Math.max(input.maxTokens ?? 2048, 2048),
         temperature: 0.4,
+      },
+      additionalModelRequestFields: {
+        reasoningConfig: {
+          type: "enabled",
+          maxReasoningEffort: effort,
+        },
       },
     }),
   );

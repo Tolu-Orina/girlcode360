@@ -1,12 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { MoreHorizontal } from "lucide-react";
+import { Bell, MoreHorizontal } from "lucide-react";
 import {
   DESKTOP_NAV_MORE,
   DESKTOP_NAV_PRIMARY,
   DESKTOP_TABS,
 } from "@/components/blocks/nav-config";
 import { useMediaQuery, useStandalone } from "@/hooks/use-media-query";
+import { getInAppInbox } from "@/lib/api";
+import { apiBaseUrl } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
 const navFocus =
@@ -54,6 +56,7 @@ export function AppHeader() {
         ))}
         {overflow.length > 0 ? <MoreNav items={overflow} /> : null}
       </nav>
+      <InboxBell />
     </header>
   );
 }
@@ -141,3 +144,44 @@ function MoreNav({ items }: { items: typeof DESKTOP_NAV_MORE }) {
     </div>
   );
 }
+
+function InboxBell() {
+  const [unread, setUnread] = useState(0);
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!apiBaseUrl) return;
+    let cancelled = false;
+    void getInAppInbox()
+      .then((res) => {
+        if (!cancelled) setUnread(res.unread);
+      })
+      .catch(() => {
+        /* stay quiet */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
+  return (
+    <Link
+      to="/app/inbox"
+      className={cn(
+        "relative inline-flex min-h-[var(--tap)] min-w-[var(--tap)] items-center justify-center rounded-[var(--radius)] text-muted-foreground no-underline",
+        navFocus,
+        "hover:bg-primary/10 hover:text-primary",
+      )}
+      aria-label={unread ? `Inbox, ${unread} unread` : "Inbox"}
+    >
+      <Bell size={20} strokeWidth={1.75} aria-hidden="true" />
+      {unread > 0 ? (
+        <span
+          className="absolute top-2 right-2 size-2 rounded-full bg-primary"
+          aria-hidden
+        />
+      ) : null}
+    </Link>
+  );
+}
+

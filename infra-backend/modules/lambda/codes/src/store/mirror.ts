@@ -614,4 +614,44 @@ export async function pregnancyWeek(sub: string): Promise<number | null> {
   return st?.week ?? null;
 }
 
+export async function settleYoucamWebhook(taskId: string): Promise<{
+  kind: "skin" | "tryon";
+  id: string;
+} | null> {
+  if (isDsqlEnabled()) {
+    const scan = await dsql.findPendingScanByTask(taskId);
+    if (scan) {
+      await settleScan(scan.userSub, scan);
+      return { kind: "skin", id: scan.id };
+    }
+    const tryon = await dsql.findPendingTryOnByTask(taskId);
+    if (tryon) {
+      await settleTryOn(tryon.userSub, tryon);
+      return { kind: "tryon", id: tryon.id };
+    }
+    return null;
+  }
+  for (const [sub, rows] of scans) {
+    const row = rows.find(
+      (s) =>
+        s.status === "pending" && unpackYoucamIds(s.youcamTaskId).taskId === taskId,
+    );
+    if (row) {
+      await settleScan(sub, row);
+      return { kind: "skin", id: row.id };
+    }
+  }
+  for (const [sub, rows] of tryons) {
+    const row = rows.find(
+      (s) =>
+        s.status === "pending" && unpackYoucamIds(s.youcamTaskId).taskId === taskId,
+    );
+    if (row) {
+      await settleTryOn(sub, row);
+      return { kind: "tryon", id: row.id };
+    }
+  }
+  return null;
+}
+
 export { MIRROR_CATALOGUE };

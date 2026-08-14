@@ -504,6 +504,22 @@ export async function maybeMonthlyHealthLensReport(sub: string): Promise<void> {
   await generateHealthLensReport(sub, { monthly: true });
 }
 
+export async function runMonthlyHealthLensTick(): Promise<{ users: number; generated: number }> {
+  const { listHealthLensEligibleSubs } = await import("./memory");
+  const subs = await listHealthLensEligibleSubs();
+  let generated = 0;
+  for (const sub of subs) {
+    const latest = await latestHealthLensReport(sub);
+    const ym = new Date().toISOString().slice(0, 7);
+    if (latest?.createdAt.startsWith(ym)) continue;
+    const before = latest?.createdAt;
+    await maybeMonthlyHealthLensReport(sub);
+    const after = (await latestHealthLensReport(sub))?.createdAt;
+    if (after && after !== before) generated += 1;
+  }
+  return { users: subs.length, generated };
+}
+
 export async function latestHealthLensReport(sub: string) {
   if (isDsqlEnabled()) return dsqlAi.latestHealthLensReport(sub);
   return (reports.get(sub) ?? [])[0] ?? null;

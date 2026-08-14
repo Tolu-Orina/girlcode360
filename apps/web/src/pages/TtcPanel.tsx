@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { BbtChart } from "@/components/blocks/bbt-chart";
 import { SheMatchBanner } from "@/components/blocks/shematch-banner";
 import { EmptyState } from "@/components/blocks/states";
 import { Field, FieldInput, FieldSelect } from "@/components/primitives/field";
@@ -20,6 +21,7 @@ import {
   getCycles,
   getFertileWindow,
   getTtc,
+  getTtcDays,
   initTtc,
   patchModules,
   upsertTtcDay,
@@ -31,7 +33,9 @@ import {
   predictNextPeriods,
   ttcMonthCount,
   ttcTwelveMonthPrompt,
+  MUCUS_TOOLTIPS,
 } from "../../../../packages/domain/src/index";
+import { encryptIntimacyFlag, decryptIntimacyFlag } from "../lib/intimacyCrypto";
 
 function todayYmd(): string {
   const d = new Date();
@@ -65,6 +69,9 @@ export function TtcPanel({
   const [lastPeriod, setLastPeriod] = useState<string | null>(null);
   const [nextPeriod, setNextPeriod] = useState<string | null>(null);
   const [articles, setArticles] = useState<ContentArticle[]>([]);
+  const [bbtPoints, setBbtPoints] = useState<Array<{ date: string; bbtC: number }>>([]);
+  const [intimacyLogged, setIntimacyLogged] = useState(false);
+  const [legacyIntimacy, setLegacyIntimacy] = useState(false);
 
   async function load() {
     if (!on) return;
@@ -80,6 +87,32 @@ export function TtcPanel({
       setMonths(status.monthsTrying);
       setPrompt(status.twelveMonthPrompt);
       setFertile(await getFertileWindow());
+      try {
+        const { days } = await getTtcDays();
+        const today = todayYmd();
+        setBbtPoints(
+          days
+            .filter((d) => d.bbtC != null)
+            .map((d) => ({ date: d.date, bbtC: d.bbtC as number })),
+        );
+        const todayRow = days.find((d) => d.date === today);
+        if (todayRow?.bbtC != null) setBbt(String(todayRow.bbtC));
+        if (todayRow?.mucus) setMucus(todayRow.mucus);
+        if (todayRow?.intimacyCiphertext && todayRow.intimacyIv) {
+          setIntimacyLogged(
+            await decryptIntimacyFlag(
+              todayRow.intimacyCiphertext,
+              todayRow.intimacyIv,
+            ),
+          );
+          setLegacyIntimacy(false);
+        } else {
+          setIntimacyLogged(false);
+          setLegacyIntimacy(Boolean(todayRow?.intimacy));
+        }
+      } catch {
+        setBbtPoints([]);
+      }
       try {
         const { cycles } = await getCycles();
         const starts = cycles.map((c) => c.startDate).sort();
@@ -174,13 +207,35 @@ export function TtcPanel({
     setBusy(true);
     setError(null);
     try {
+      let cipher: { intimacyCiphertext: string; intimacyIv: string } | undefined;
+      if (intimacy) {
+        if (!intimacyConsent) {
+          setError("Consent is required to store an intimacy log.");
+          setBusy(false);
+          return;
+        }
+        cipher = await encryptIntimacyFlag();
+      }
       await upsertTtcDay({
         date: todayYmd(),
         bbtC: bbt ? Number(bbt) : null,
         mucus: mucus || null,
-        intimacy,
-        intimacyConsent: intimacy ? intimacyConsent : undefined,
+        ...(cipher
+          ? {
+              intimacyCiphertext: cipher.intimacyCiphertext,
+              intimacyIv: cipher.intimacyIv,
+              intimacyConsent: true,
+            }
+          : {}),
       });
+      setIntimacyLogged(Boolean(cipher));
+      if (cipher) setLegacyIntimacy(false);
+      const { days } = await getTtcDays();
+      setBbtPoints(
+        days
+          .filter((d) => d.bbtC != null)
+          .map((d) => ({ date: d.date, bbtC: d.bbtC as number })),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save TTC day");
     } finally {
@@ -272,7 +327,11 @@ export function TtcPanel({
             <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
               Today’s fertility signs
             </h2>
-            <Field id="bbt" label="BBT (°C)">
+            <Field
+              id="bbt"
+              label="BBT (°C)"
+              hint="Optional. Take at the same time each morning if you can."
+            >
               <FieldInput
                 id="bbt"
                 type="number"
@@ -281,7 +340,12 @@ export function TtcPanel({
                 onChange={(e) => setBbt(e.target.value)}
               />
             </Field>
-            <Field id="mucus" label="Cervical mucus">
+            <BbtChart points={bbtPoints} />
+            <Field
+              id="mucus"
+              label="Cervical mucus"
+              hint={mucus ? MUCUS_TOOLTIPS[mucus] : "Optional. Educational labels only — not a fertility test."}
+            >
               <FieldSelect
                 id="mucus"
                 value={mucus}
@@ -301,8 +365,20 @@ export function TtcPanel({
                 checked={intimacy}
                 onCheckedChange={(v) => setIntimacy(v === true)}
               />
-              Log intimacy (encrypted; deletable)
+              Log intimacy (encrypted on this device; deletable)
             </Label>
+            {intimacyLogged ? (
+              <p className={leadClass}>
+                Today’s intimacy log is encrypted on this device. The server
+                stores ciphertext only.
+              </p>
+            ) : null}
+            {legacyIntimacy ? (
+              <p className={leadClass}>
+                Today has an older intimacy flag. Delete it to remove it. New
+                logs are encrypted on this device.
+              </p>
+            ) : null}
             {intimacy ? (
               <Label className="flex min-h-[var(--tap)] items-center gap-3 text-[length:var(--text-body)] font-normal">
                 <Checkbox
@@ -320,9 +396,15 @@ export function TtcPanel({
               type="button"
               variant="outline"
               onClick={() =>
-                void deleteTtcIntimacy(todayYmd()).catch((err) =>
-                  setError(err instanceof Error ? err.message : "Delete failed"),
-                )
+                void deleteTtcIntimacy(todayYmd())
+                  .then(() => {
+                    setIntimacyLogged(false);
+                    setLegacyIntimacy(false);
+                    setIntimacy(false);
+                  })
+                  .catch((err) =>
+                    setError(err instanceof Error ? err.message : "Delete failed"),
+                  )
               }
             >
               Delete today’s intimacy log

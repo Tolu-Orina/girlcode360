@@ -1,6 +1,7 @@
 import {
   inQuietHours,
   lockScreenSafePush,
+  periodReminderDue,
   pushBodyIsLockSafe,
 } from "../../../../../../packages/domain/src/index";
 import { tzForMarket } from "../lib/marketplaceSeed";
@@ -14,6 +15,7 @@ import {
   getNotificationPrefs,
   listAppointments,
 } from "./journey";
+import { dueWalletMedicationIds } from "./wallet";
 import {
   claimNotificationSend,
   listAllPushSubscriptions,
@@ -67,8 +69,10 @@ async function dueSlots(
   if (prefs.period) {
     const pred = await buildPrediction(sub);
     const next = pred.nextStarts[0];
-    if (next === date || next === addDays(date, 1)) {
-      out.push({ kind: "period", slot: `period:${next}` });
+    if (next) {
+      const due = periodReminderDue(next, date, prefs.periodLeadDays ?? 1);
+      if (due.lead) out.push({ kind: "period", slot: `period:${next}:lead` });
+      if (due.dayOf) out.push({ kind: "period", slot: `period:${next}:day` });
     }
   }
   if (prefs.ovulation) {
@@ -99,6 +103,10 @@ async function dueSlots(
     for (const m of due) {
       if (m.timeLocal.slice(0, 2) !== hour) continue;
       out.push({ kind: "medication", slot: `med:${m.id}:${date}:${hour}` });
+    }
+    const walletIds = await dueWalletMedicationIds(sub, hhmm, weekday);
+    for (const id of walletIds) {
+      out.push({ kind: "medication", slot: `wmed:${id}:${date}:${hour}` });
     }
   }
   if (prefs.weeklyInsights && weekday === 1 && hhmm >= "10:00" && hhmm < "11:00") {

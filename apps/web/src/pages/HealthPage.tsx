@@ -19,6 +19,7 @@ import {
 import { Chip } from "@/components/primitives/chip";
 import { Field, FieldInput, FieldSelect } from "@/components/primitives/field";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
+import { PageTip } from "@/components/blocks/page-tip";
 import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { useOnline } from "@/hooks/use-online";
@@ -30,11 +31,13 @@ import type {
   PcosInsight,
   UserProfile,
 } from "../../../../packages/api-types/src/index";
-import { libraryArticles } from "../../../../packages/domain/src/index";
+import { libraryArticles, buildPmosHealthReport } from "../../../../packages/domain/src/index";
 import {
   ApiError,
   createPcosMedication,
+  createPrepCard,
   deletePcosMedication,
+  getCycles,
   getMe,
   getPcosArticles,
   getPcosBiometrics,
@@ -46,6 +49,7 @@ import {
   upsertPcosBiometric,
 } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
+import { downloadText } from "../lib/download";
 import symptoms from "../data/symptoms.json";
 import { enqueueAndStore, loadLocalState } from "../lib/sync";
 import { PregnancyPanel } from "./PregnancyPanel";
@@ -90,6 +94,7 @@ export function HealthPage() {
   const [articles, setArticles] = useState<PcosArticle[]>([]);
   const [meds, setMeds] = useState<MedicationReminder[]>([]);
   const [bios, setBios] = useState<BiometricLog[]>([]);
+  const [bioDate, setBioDate] = useState(todayYmd);
 
   const [weight, setWeight] = useState("");
   const [sleep, setSleep] = useState("");
@@ -182,6 +187,14 @@ export function HealthPage() {
     };
   }, [diaryDate, pmosOn]);
 
+  useEffect(() => {
+    const row = bios.find((b) => b.date === bioDate);
+    setWeight(row?.weightKg != null ? String(row.weightKg) : "");
+    setSleep(row?.sleepHours != null ? String(row.sleepHours) : "");
+    setWater(row?.waterGlasses != null ? String(row.waterGlasses) : "");
+    setStress(row?.stress ?? null);
+  }, [bioDate, bios]);
+
   async function enablePcos() {
     setBusy(true);
     setError(null);
@@ -228,7 +241,7 @@ export function HealthPage() {
     setError(null);
     try {
       const { biometric } = await upsertPcosBiometric({
-        date: todayYmd(),
+        date: bioDate,
         weightKg: weight ? Number(weight) : null,
         sleepHours: sleep ? Number(sleep) : null,
         waterGlasses: water ? Number(water) : null,
@@ -346,6 +359,7 @@ export function HealthPage() {
         title="Modules you opt into"
         lead="Wellness tracking and education. Clinicians diagnose; we help you prepare."
       />
+      <PageTip id="health" />
       <AskAlenaLink from="health" />
 
       {!online ? (
@@ -453,6 +467,18 @@ export function HealthPage() {
                   <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
                     Biometrics (optional)
                   </h2>
+                  <p className={leadClass}>
+                    Weight, sleep, water, and stress — only if you want to. Skip
+                    any field.
+                  </p>
+                  <Field id="bio-date" label="Date">
+                    <FieldInput
+                      id="bio-date"
+                      type="date"
+                      value={bioDate}
+                      onChange={(e) => setBioDate(e.target.value)}
+                    />
+                  </Field>
                   <Field id="weight" label="Weight (kg)">
                     <FieldInput
                       id="weight"
@@ -503,14 +529,109 @@ export function HealthPage() {
                     </div>
                   </div>
                   <Button type="submit" disabled={busy}>
-                    Save today
+                    Save biometrics
                   </Button>
                   {bios.length > 0 ? (
-                    <p className={leadClass}>
-                      Last saved: {bios[bios.length - 1]!.date}
-                    </p>
-                  ) : null}
+                    <ul className={listClass}>
+                      {[...bios]
+                        .slice(-14)
+                        .reverse()
+                        .map((b) => (
+                          <li key={b.date} className={listItemClass}>
+                            {b.date}
+                            {b.weightKg != null ? ` · ${b.weightKg} kg` : ""}
+                            {b.sleepHours != null ? ` · ${b.sleepHours} h sleep` : ""}
+                            {b.stress != null ? ` · stress ${b.stress}` : ""}
+                          </li>
+                        ))}
+                    </ul>
+                  ) : (
+                    <p className={leadClass}>No biometric days yet.</p>
+                  )}
                 </form>
+
+                <section className="grid gap-4">
+                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+                    PMOS report
+                  </h2>
+                  <p className={leadClass}>
+                    A three-month wellness summary for a clinic visit. Not a
+                    diagnosis. Prep Card is the HealthLens appointment list.
+                  </p>
+                  <PredictionDisclaimer />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || !apiBaseUrl}
+                      onClick={() => {
+                        void (async () => {
+                          setBusy(true);
+                          try {
+                            const [{ cycles }, local] = await Promise.all([
+                              getCycles(),
+                              loadLocalState(),
+                            ]);
+                            const asOf = todayYmd();
+                            const from = new Date(`${asOf}T00:00:00Z`);
+                            from.setUTCDate(from.getUTCDate() - 90);
+                            const fromYmd = from.toISOString().slice(0, 10);
+                            const text = buildPmosHealthReport({
+                              market: profile?.market ?? "UK",
+                              cycles,
+                              symptomIds: local.days
+                                .filter(
+                                  (d) => d.date >= fromYmd && d.date <= asOf,
+                                )
+                                .flatMap((d) => d.symptomIds),
+                              biometrics: bios,
+                              insights,
+                              asOf,
+                            });
+                            downloadText(
+                              `girlcode360-pmos-report-${todayYmd()}.txt`,
+                              text,
+                            );
+                          } catch (err) {
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Could not build report",
+                            );
+                          } finally {
+                            setBusy(false);
+                          }
+                        })();
+                      }}
+                    >
+                      Download PMOS report
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || !apiBaseUrl}
+                      onClick={() => {
+                        void (async () => {
+                          setBusy(true);
+                          try {
+                            const card = await createPrepCard([]);
+                            downloadText(card.filename, card.text);
+                          } catch (err) {
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Prep Card failed",
+                            );
+                          } finally {
+                            setBusy(false);
+                          }
+                        })();
+                      }}
+                    >
+                      Download Prep Card
+                    </Button>
+                  </div>
+                </section>
 
                 <form className={formStackClass} onSubmit={addMedication}>
                   <h2 className="m-0 text-[length:var(--text-section)] text-foreground">

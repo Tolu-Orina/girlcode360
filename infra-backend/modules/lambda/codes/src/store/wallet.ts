@@ -9,10 +9,12 @@ import {
 } from "../db/s3";
 import * as dsqlWallet from "./dsql/wallet";
 import type {
+  CreateWalletMedicationRequest,
   CreateWalletShareRequest,
   CreateWalletUploadRequest,
   WalletCategory,
   WalletDocMeta,
+  WalletMedication,
 } from "../types";
 
 const WALLET_CATEGORIES: WalletCategory[] = [
@@ -515,6 +517,7 @@ export async function purgeUserWallet(sub: string): Promise<void> {
   const docs = docsByUser.get(sub) ?? [];
   for (const d of docs) await removeCiphertext(sub, d.id);
   docsByUser.delete(sub);
+  memWalletMeds.delete(sub);
   for (const [tokenHash, share] of [...sharesByTokenHash.entries()]) {
     if (share.userSub === sub) sharesByTokenHash.delete(tokenHash);
   }
@@ -524,4 +527,71 @@ export async function purgeUserWallet(sub: string): Promise<void> {
 export async function countWalletDocsAll(sub: string): Promise<number> {
   if (isDsqlEnabled()) return dsqlWallet.countWalletDocsAll(sub);
   return (docsByUser.get(sub) ?? []).length;
+}
+
+const memWalletMeds = new Map<string, WalletMedication[]>();
+
+export async function listWalletMedications(
+  sub: string,
+): Promise<WalletMedication[]> {
+  if (isDsqlEnabled()) return dsqlWallet.listWalletMedications(sub);
+  return memWalletMeds.get(sub) ?? [];
+}
+
+export async function createWalletMedication(
+  sub: string,
+  body: CreateWalletMedicationRequest,
+): Promise<WalletMedication | { error: string }> {
+  if (!body.nameCiphertext?.trim() || !body.nameIv?.trim()) {
+    return { error: "ciphertext_required" };
+  }
+  if (!/^\d{2}:\d{2}$/.test(body.timeLocal ?? "")) {
+    return { error: "time_local_required" };
+  }
+  if (isDsqlEnabled()) return dsqlWallet.insertWalletMedication(sub, body);
+  const now = new Date().toISOString();
+  const row: WalletMedication = {
+    id: crypto.randomUUID(),
+    nameCiphertext: body.nameCiphertext,
+    nameIv: body.nameIv,
+    doseCiphertext: body.doseCiphertext ?? null,
+    doseIv: body.doseIv ?? null,
+    timeLocal: body.timeLocal,
+    frequency: body.frequency === "weekdays" ? "weekdays" : "daily",
+    enabled: body.enabled !== false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  memWalletMeds.set(sub, [...(memWalletMeds.get(sub) ?? []), row]);
+  return row;
+}
+
+export async function deleteWalletMedication(
+  sub: string,
+  id: string,
+): Promise<boolean> {
+  if (isDsqlEnabled()) return dsqlWallet.deleteWalletMedication(sub, id);
+  const list = memWalletMeds.get(sub) ?? [];
+  const next = list.filter((m) => m.id !== id);
+  if (next.length === list.length) return false;
+  memWalletMeds.set(sub, next);
+  return true;
+}
+
+/** Times only — never decrypt names for the tick. */
+export async function dueWalletMedicationIds(
+  sub: string,
+  nowLocalHhMm: string,
+  weekday: number,
+): Promise<string[]> {
+  const meds = await listWalletMedications(sub);
+  return meds
+    .filter((m) => {
+      if (!m.enabled) return false;
+      if (m.frequency === "weekdays" && (weekday === 0 || weekday === 6)) {
+        return false;
+      }
+      return m.timeLocal.slice(0, 2) === nowLocalHhMm.slice(0, 2);
+    })
+    .map((m) => m.id);
 }

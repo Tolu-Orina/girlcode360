@@ -32,8 +32,10 @@ import {
   type Market,
   type UserProfile,
 } from "../lib/api";
+import { markTourSeen } from "@/lib/tips";
+import { ONBOARDING_TOUR } from "../../../../packages/domain/src/index";
 
-type Step = "age" | "jurisdiction" | "consent" | "modules" | "blocked";
+type Step = "age" | "jurisdiction" | "consent" | "modules" | "tour" | "blocked";
 
 const REQUIRED_PURPOSES = (Object.keys(PURPOSE_COPY) as ConsentPurpose[]).filter(
   (p) => PURPOSE_COPY[p].required,
@@ -238,11 +240,24 @@ export function OnboardingPage() {
     setError(null);
     try {
       await patchModules({ modules });
-      await patchMe({ onboardingComplete: true });
-      localStorage.setItem("gc_onboarding_complete", "1");
-      navigate("/app", { replace: true });
+      setStep("tour");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save modules");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishOnboarding() {
+    setBusy(true);
+    setError(null);
+    try {
+      await patchMe({ onboardingComplete: true });
+      localStorage.setItem("gc_onboarding_complete", "1");
+      markTourSeen();
+      navigate("/app", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not finish");
     } finally {
       setBusy(false);
     }
@@ -432,9 +447,48 @@ export function OnboardingPage() {
             </div>
             {error ? <ErrorBanner message={error} /> : null}
             <Button type="submit" disabled={busy}>
-              {busy ? "Finishing…" : "Enter GirlCode360"}
+              {busy ? "Saving…" : "Continue"}
             </Button>
           </form>
+        ) : null}
+
+        {step === "tour" ? (
+          <div className="grid gap-6">
+            <PageHeader
+              title="How GirlCode360 works"
+              lead="Five notes. You can skip and replay later in Account."
+            />
+            <ol className="m-0 grid list-none gap-4 p-0">
+              {ONBOARDING_TOUR.map((s, i) => (
+                <li
+                  key={s.id}
+                  className="rounded-[var(--radius)] border border-border bg-card p-4"
+                >
+                  <p className="m-0 text-[length:var(--text-caption)] font-semibold text-primary">
+                    {i + 1}
+                  </p>
+                  <p className="m-0 mt-1 text-[length:var(--text-body)] font-semibold text-foreground">
+                    {s.title}
+                  </p>
+                  <p className="m-0 mt-1 text-[length:var(--text-label)] text-muted-foreground">
+                    {s.body}
+                  </p>
+                </li>
+              ))}
+            </ol>
+            {error ? <ErrorBanner message={error} /> : null}
+            <Button type="button" disabled={busy} onClick={() => void finishOnboarding()}>
+              {busy ? "Finishing…" : "Enter GirlCode360"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void finishOnboarding()}
+            >
+              Skip
+            </Button>
+          </div>
         ) : null}
       </div>
     </main>
@@ -484,13 +538,15 @@ function stepLabel(step: Step, reconsent: boolean): string {
   if (reconsent) return "Policy update";
   switch (step) {
     case "age":
-      return "1 of 4";
+      return "1 of 5";
     case "jurisdiction":
-      return "2 of 4";
+      return "2 of 5";
     case "consent":
-      return "3 of 4";
+      return "3 of 5";
     case "modules":
-      return "4 of 4";
+      return "4 of 5";
+    case "tour":
+      return "5 of 5";
     case "blocked":
       return "";
   }

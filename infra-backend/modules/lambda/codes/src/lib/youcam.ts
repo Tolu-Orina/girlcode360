@@ -1,4 +1,5 @@
-import { youcamApiKey } from "./secrets";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { youcamApiKey, youcamWebhookSecret } from "./secrets";
 
 const BASE =
   process.env.YOUCAM_API_SERVER?.trim() || "https://yce-api-01.makeupar.com";
@@ -320,3 +321,30 @@ export async function downloadUrl(url: string): Promise<Buffer> {
 }
 
 export { SKIN_ACTIONS };
+
+export async function verifyYoucamWebhookSignature(
+  rawBody: string,
+  signatureHeader: string | undefined,
+): Promise<boolean> {
+  const secret = await youcamWebhookSecret();
+  if (!secret) return false;
+  const given = (signatureHeader ?? "").trim();
+  if (!given) return false;
+  const hex = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const prefixed = given.startsWith("sha256=") ? given.slice(7) : given;
+  const a = Buffer.from(prefixed, "hex");
+  const b = Buffer.from(hex, "hex");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+export function extractYoucamTaskId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const rec = payload as Record<string, unknown>;
+  const data =
+    rec.data && typeof rec.data === "object"
+      ? (rec.data as Record<string, unknown>)
+      : rec;
+  const id = data.task_id ?? data.taskId ?? rec.task_id ?? rec.taskId;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}

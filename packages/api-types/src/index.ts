@@ -244,6 +244,8 @@ export type PregnancyProfile = {
   edd: string;
   eddEarly: string;
   eddLate: string;
+  prePregnancyWeightKg?: number | null;
+  heightCm?: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -253,12 +255,18 @@ export type InitPregnancyRequest = {
   anchorDate: string;
 };
 
+export type PatchPregnancyRequest = {
+  prePregnancyWeightKg?: number | null;
+  heightCm?: number | null;
+};
+
 export type PregnancyDayLog = {
   date: string;
   symptoms: string[];
   wellbeing: 1 | 2 | 3 | 4 | 5 | null;
   weightKg: number | null;
   kicks: number | null;
+  kickSessionMinutes: number | null;
   note: string | null;
   updatedAt: string;
 };
@@ -269,6 +277,7 @@ export type UpsertPregnancyDayRequest = {
   wellbeing?: 1 | 2 | 3 | 4 | 5 | null;
   weightKg?: number | null;
   kicks?: number | null;
+  kickSessionMinutes?: number | null;
   note?: string | null;
 };
 
@@ -329,6 +338,8 @@ export type TtcDayLog = {
   bbtC: number | null;
   mucus: MucusType | null;
   intimacy: boolean;
+  intimacyCiphertext: string | null;
+  intimacyIv: string | null;
   note: string | null;
   updatedAt: string;
 };
@@ -338,6 +349,8 @@ export type UpsertTtcDayRequest = {
   bbtC?: number | null;
   mucus?: MucusType | null;
   intimacy?: boolean;
+  intimacyCiphertext?: string | null;
+  intimacyIv?: string | null;
   note?: string | null;
   intimacyConsent?: boolean;
 };
@@ -359,6 +372,8 @@ export type NotificationPrefs = {
   appointments: boolean;
   medication: boolean;
   weeklyInsights: boolean;
+  /** FR-019: 1, 2, or 3 days before predicted start */
+  periodLeadDays: 1 | 2 | 3;
   quietHoursStart: string;
   quietHoursEnd: string;
   updatedAt: string;
@@ -565,7 +580,11 @@ export type MyDataSnapshot = {
     apparelTryons?: number;
     appointments?: number;
     marketplaceListingsOwned?: number;
+    marketplaceFavourites?: number;
+    walletMedications?: number;
     reportsFiled?: number;
+    communityGroupsJoined?: number;
+    inAppNotifications?: number;
   };
   inventory?: {
     email: string | null;
@@ -664,6 +683,51 @@ export type CreateContentReportRequest = {
   targetId: string;
   reason: ContentReportReason;
   details?: string;
+};
+
+/* ——— Phase 2.3 community + in-app marketing ——— */
+
+export type CommunityGroupId =
+  | "ttc_circle"
+  | "pcos_warriors"
+  | "pregnancy_journey"
+  | "period_health";
+
+export type CommunityGroupView = {
+  id: CommunityGroupId;
+  name: string;
+  body: string;
+  joined: boolean;
+  displayName: string | null;
+  memberCount: number;
+};
+
+export type CommunityPostStatus = "pending" | "live" | "rejected";
+
+export type CommunityPost = {
+  id: string;
+  groupId: CommunityGroupId;
+  authorDisplay: string;
+  body: string;
+  status: CommunityPostStatus;
+  mine: boolean;
+  createdAt: string;
+};
+
+export type CreateCommunityPostRequest = {
+  body: string;
+};
+
+export type InAppKind = "new_listing" | "promo";
+
+export type InAppNotification = {
+  id: string;
+  kind: InAppKind;
+  title: string;
+  body: string;
+  listingId: string | null;
+  readAt: string | null;
+  createdAt: string;
 };
 
 /* ——— Phase 1.4 Mirror ——— */
@@ -770,6 +834,9 @@ export type MarketplaceListing = {
   sponsored: boolean;
   distanceKm: number | null;
   openNow: boolean | null;
+  reviewCount?: number;
+  reviewAverage?: number | null;
+  favourite?: boolean;
 };
 
 export type CreateBusinessListingRequest = {
@@ -784,6 +851,50 @@ export type CreateBusinessListingRequest = {
   tags?: string[];
   services?: string[];
   registrationNumber?: string | null;
+};
+
+export type PatchOwnedListingRequest = {
+  tags?: string[];
+  services?: string[];
+  catalogueItemId?: string | null;
+};
+
+export type ListingReview = {
+  id: string;
+  listingId: string;
+  stars: number;
+  body: string;
+  status: "pending" | "live" | "rejected";
+  mine?: boolean;
+  createdAt: string;
+};
+
+export type CreateListingReviewRequest = {
+  stars: number;
+  body: string;
+};
+
+export type WalletMedication = {
+  id: string;
+  nameCiphertext: string;
+  nameIv: string;
+  doseCiphertext: string | null;
+  doseIv: string | null;
+  timeLocal: string;
+  frequency: "daily" | "weekdays";
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateWalletMedicationRequest = {
+  nameCiphertext: string;
+  nameIv: string;
+  doseCiphertext?: string | null;
+  doseIv?: string | null;
+  timeLocal: string;
+  frequency?: "daily" | "weekdays";
+  enabled?: boolean;
 };
 
 export type SheMatchTriggerId =
