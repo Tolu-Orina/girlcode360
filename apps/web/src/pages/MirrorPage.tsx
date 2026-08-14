@@ -25,6 +25,7 @@ import { FieldSelect } from "@/components/primitives/field";
 import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { useOnline } from "@/hooks/use-online";
+import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
   ApparelTryOn,
@@ -74,14 +75,16 @@ const SCORE_LABELS: Record<string, string> = {
 
 function friendlyError(err: unknown): string {
   if (err instanceof Error && err.message === "image_too_small") {
-    return "That photo is too small. Use a clearer face or full-body shot.";
+    return "That photo is too small. Use a clearer face-on selfie (at least 480 pixels on the short side).";
   }
   const code = err instanceof ApiError ? err.code : "";
   switch (code) {
     case "image_too_large":
       return "That photo is too large. Use a closer, well-lit shot.";
     case "image_too_small":
-      return "That photo is too small. Use a clearer face or full-body shot.";
+      return "That photo is too small. Use a clearer face-on selfie (at least 480 pixels on the short side).";
+    case "photo_rejected":
+      return "YouCam could not read that photo. Use a well-lit, face-on selfie with hair off the face.";
     case "youcam_unconfigured":
       return "Mirror is not connected yet. Try again later.";
     case "youcam_unavailable":
@@ -135,39 +138,6 @@ function friendlyError(err: unknown): string {
     default:
       return err instanceof Error ? err.message : "Something went wrong. Try again.";
   }
-}
-
-function fileToJpegDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const minSide = Math.min(img.width, img.height);
-      if (minSide < 400) {
-        URL.revokeObjectURL(url);
-        reject(new Error("image_too_small"));
-        return;
-      }
-      const max = 1024;
-      const scale = Math.min(1, max / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(img.width * scale));
-      canvas.height = Math.max(1, Math.round(img.height * scale));
-      const ctx = canvas.getContext("2d");
-      URL.revokeObjectURL(url);
-      if (!ctx) {
-        reject(new Error("Could not prepare the photo"));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.82));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Could not read that photo"));
-    };
-    img.src = url;
-  });
 }
 
 function TrendRow({

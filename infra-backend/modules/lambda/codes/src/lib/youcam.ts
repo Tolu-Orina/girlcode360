@@ -55,7 +55,9 @@ export type MakeupCategory = (typeof MAKEUP_CATEGORIES)[number];
 export type AccessoryCategory = (typeof ACCESSORY_CATEGORIES)[number];
 
 let consecutiveFailures = 0;
+let circuitOpenedAt = 0;
 const recentCalls: number[] = [];
+const CIRCUIT_TTL_MS = 60_000;
 
 function paceOk(): boolean {
   const now = Date.now();
@@ -69,8 +71,19 @@ function noteCall(): void {
   recentCalls.push(Date.now());
 }
 
+function noteUpstreamFailure(): void {
+  consecutiveFailures += 1;
+  if (consecutiveFailures >= 5) circuitOpenedAt = Date.now();
+}
+
 export function youcamCircuitOpen(): boolean {
-  return consecutiveFailures >= 5;
+  if (consecutiveFailures < 5) return false;
+  if (Date.now() - circuitOpenedAt >= CIRCUIT_TTL_MS) {
+    consecutiveFailures = 0;
+    circuitOpenedAt = 0;
+    return false;
+  }
+  return true;
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -89,10 +102,17 @@ async function youcamFetch(
   if (youcamCircuitOpen()) throw new Error("YOUCAM_UNAVAILABLE");
   if (!paceOk()) throw new Error("YOUCAM_RATE_LIMIT");
   noteCall();
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { ...(await authHeaders()), ...(init.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: { ...(await authHeaders()), ...(init.headers ?? {}) },
+    });
+  } catch (err) {
+    noteUpstreamFailure();
+    console.error("youcam network", path, err);
+    throw new Error("YOUCAM_NETWORK");
+  }
   let json: unknown = {};
   try {
     json = await res.json();
@@ -100,16 +120,24 @@ async function youcamFetch(
     json = {};
   }
   if (res.status === 429) {
-    consecutiveFailures += 1;
+    noteUpstreamFailure();
     throw new Error("YOUCAM_RATE_LIMIT");
   }
+  if (res.status >= 500) {
+    noteUpstreamFailure();
+    console.error("youcam http", res.status, path, json);
+    const err = new Error(`YOUCAM_HTTP_${res.status}`);
+    (err as Error & { body?: unknown }).body = json;
+    throw err;
+  }
   if (!res.ok) {
-    consecutiveFailures += 1;
+    console.error("youcam http", res.status, path, json);
     const err = new Error(`YOUCAM_HTTP_${res.status}`);
     (err as Error & { body?: unknown }).body = json;
     throw err;
   }
   consecutiveFailures = 0;
+  circuitOpenedAt = 0;
   return { status: res.status, json };
 }
 
@@ -168,9 +196,14 @@ export async function uploadYoucamFile(
   if (!fileId || !uploadUrl) {
     throw new Error("YOUCAM_UPLOAD_INIT_FAILED");
   }
+  const putHeaders: Record<string, string> = { "Content-Type": contentType };
+  for (const [k, v] of Object.entries(extraHeaders)) {
+    if (/^content-length$/i.test(k)) continue;
+    putHeaders[k] = v;
+  }
   const put = await fetch(uploadUrl, {
     method: "PUT",
-    headers: { "Content-Type": contentType, ...extraHeaders },
+    headers: putHeaders,
     body: new Uint8Array(bytes),
   });
   if (!put.ok) throw new Error(`YOUCAM_PUT_${put.status}`);
@@ -454,6 +487,7 @@ export { SKIN_ACTIONS };
 /** Test-only: pace + circuit are module-scoped. */
 export function resetYoucamForTests(): void {
   consecutiveFailures = 0;
+  circuitOpenedAt = 0;
   recentCalls.length = 0;
 }
 
