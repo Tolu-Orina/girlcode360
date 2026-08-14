@@ -58,6 +58,9 @@ data "archive_file" "api" {
 
 # CI buildspec must run `npm run build` in codes/ before terraform apply.
 
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
 resource "aws_iam_role" "lambda" {
   name = "girlcode360-api-${var.environment}"
 
@@ -141,22 +144,15 @@ resource "aws_iam_role_policy" "app" {
 }
 
 output "invoke_arns" {
-  value = { for k, f in aws_lambda_function.fn : k => f.invoke_arn }
+  value = local.invoke_arns
 }
 
 output "streaming_invoke_arns" {
-  value = {
-    for k, f in aws_lambda_function.fn :
-    k => replace(
-      replace(f.invoke_arn, "2015-03-31", "2021-11-15"),
-      "/invocations",
-      "/response-streaming-invocations",
-    )
-  }
+  value = local.streaming_invoke_arns
 }
 
 output "function_names" {
-  value = { for k, f in aws_lambda_function.fn : k => f.function_name }
+  value = local.function_names
 }
 
 output "function_arns" {
@@ -165,7 +161,7 @@ output "function_arns" {
 
 # Identity is the leftover {proxy+} target and health check.
 output "invoke_arn" {
-  value = aws_lambda_function.fn["identity"].invoke_arn
+  value = local.invoke_arns["identity"]
 }
 
 output "function_name" {

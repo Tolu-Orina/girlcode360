@@ -13,6 +13,19 @@ locals {
     BEDROCK_ENABLED        = tostring(var.bedrock_enabled)
   }
 
+  function_names = { for k, _ in local.functions : k => "girlcode360-${k}-${var.environment}" }
+
+  # Plan-time ARNs. Do not use aws_lambda_function.fn.invoke_arn — that edge plus
+  # API Gateway deployment create_before_destroy plus env (DSQL/Cognito) is a cycle.
+  invoke_arns = {
+    for k, name in local.function_names :
+    k => "arn:aws:apigateway:${data.aws_region.current.region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${name}/invocations"
+  }
+  streaming_invoke_arns = {
+    for k, name in local.function_names :
+    k => "arn:aws:apigateway:${data.aws_region.current.region}:lambda:path/2021-11-15/functions/arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${name}/response-streaming-invocations"
+  }
+
   functions = {
     identity           = { memory = 256, timeout = 29 }
     cycles             = { memory = 256, timeout = 29 }
@@ -44,7 +57,7 @@ locals {
 resource "aws_lambda_function" "fn" {
   for_each = local.functions
 
-  function_name = "girlcode360-${each.key}-${var.environment}"
+  function_name = local.function_names[each.key]
   role          = aws_iam_role.lambda.arn
   handler       = "${each.key}.handler"
   runtime       = "nodejs22.x"
