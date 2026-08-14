@@ -9,6 +9,6 @@
 #
 # resource "aws_cloudwatch_event_target" "healthlens_monthly" {
 #   rule = aws_cloudwatch_event_rule.healthlens_monthly.name
-#   arn  = aws_lambda_function.api.arn
+#   arn  = aws_lambda_function.fn["healthlens-monthly"].arn
 #   input = jsonencode({ path = "/v1/healthlens/cron", source = "eventbridge" })
 # }

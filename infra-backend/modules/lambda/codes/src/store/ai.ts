@@ -18,7 +18,7 @@ import {
   type HealthLensFinding,
   type WardrobeCategory,
 } from "../../../../../../packages/domain/src/index";
-import { converseNova } from "../../../../../../packages/ai-provider/src/index";
+import { converseNova, converseNovaStream } from "../../../../../../packages/ai-provider/src/index";
 import { alenaGuestSystemPrompt, alenaSystemPrompt, healthLensNarrativeSystem } from "../../../../../../packages/ai-provider/src/prompts";
 import { isDsqlEnabled } from "../db/client";
 import { listCycles, listDays, getUser, listMedications } from "./memory";
@@ -97,53 +97,6 @@ function guestAllowed(ip: string): boolean {
   if (cur.n >= GUEST_LIMIT) return false;
   cur.n += 1;
   return true;
-}
-
-export async function alenaGuestChat(
-  message: string,
-  market: Market,
-  ip: string,
-): Promise<{
-  reply: string;
-  crisis: boolean;
-  stub: boolean;
-  remaining: number;
-}> {
-  const clean = redactPii(message).slice(0, 2000);
-  if (detectCrisis(clean)) {
-    return {
-      reply: crisisMessage(market),
-      crisis: true,
-      stub: false,
-      remaining: GUEST_LIMIT,
-    };
-  }
-  if (!guestAllowed(ip)) {
-    return {
-      reply:
-        "I’ve hit the guest chat limit for this hour. Create a free account to keep talking with Alena in the app.",
-      crisis: false,
-      stub: true,
-      remaining: 0,
-    };
-  }
-  const result = await converseNova({
-    system: alenaGuestSystemPrompt(market),
-    messages: [{ role: "user", content: clean }],
-    maxTokens: 400,
-  });
-  const cur = guestHits.get(ip);
-  let reply = result.text;
-  if (findDeniedPhrases(reply).length) {
-    reply =
-      "I need to stay on the wellness side of this. Create an account if you want Alena to use logs you allow — still not a diagnosis.";
-  }
-  return {
-    reply,
-    crisis: false,
-    stub: result.stub,
-    remaining: Math.max(0, GUEST_LIMIT - (cur?.n ?? 0)),
-  };
 }
 
 export async function assembleAlenaContext(
@@ -316,25 +269,43 @@ function noteAlenaGlobal(): void {
 const SAFE_ALENA_FALLBACK =
   "I need to stay on the wellness side of this. I can help you list what you have logged and questions for a clinician, but I cannot say what condition you have.";
 
-export async function alenaChat(
+export type AlenaQuota = Awaited<ReturnType<typeof getAlenaQuota>>;
+
+export type AlenaChatOpts = {
+  openedFrom?: string;
+  moduleHint?: string;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
+  lat?: number;
+  lng?: number;
+  climate?: string;
+};
+
+export type AlenaTurn =
+  | {
+      kind: "error";
+      error: "quota_exceeded" | "alena_busy";
+      quota: AlenaQuota;
+    }
+  | {
+      kind: "immediate";
+      reply: string;
+      crisis: boolean;
+      stub: boolean;
+      quota: AlenaQuota;
+    }
+  | {
+      kind: "model";
+      system: string;
+      messages: Array<{ role: "user" | "assistant"; content: string }>;
+      quota: AlenaQuota;
+    };
+
+export async function prepareAlenaChat(
   sub: string,
   message: string,
   mode: "context" | "anonymous",
-  opts?: {
-    openedFrom?: string;
-    moduleHint?: string;
-    history?: Array<{ role: "user" | "assistant"; content: string }>;
-    lat?: number;
-    lng?: number;
-    climate?: string;
-  },
-): Promise<{
-  reply: string;
-  crisis: boolean;
-  stub: boolean;
-  quota: Awaited<ReturnType<typeof getAlenaQuota>>;
-  error?: "quota_exceeded" | "alena_busy";
-}> {
+  opts?: AlenaChatOpts,
+): Promise<AlenaTurn> {
   const profile = await getUser(sub);
   const market = (profile?.market ?? "UK") as Market;
   const cleanMessage = redactPii(message).slice(0, 2000);
@@ -355,6 +326,7 @@ export async function alenaChat(
       }
     }
     return {
+      kind: "immediate",
       reply: crisisMessage(market, nearby),
       crisis: true,
       stub: false,
@@ -364,21 +336,17 @@ export async function alenaChat(
 
   if (!alenaGlobalOk()) {
     return {
-      reply: "",
-      crisis: false,
-      stub: true,
-      quota: await getAlenaQuota(sub),
+      kind: "error",
       error: "alena_busy",
+      quota: await getAlenaQuota(sub),
     };
   }
 
   if (!(await consumeAlenaQuota(sub))) {
     return {
-      reply: "",
-      crisis: false,
-      stub: true,
-      quota: await getAlenaQuota(sub),
+      kind: "error",
       error: "quota_exceeded",
+      quota: await getAlenaQuota(sub),
     };
   }
 
@@ -416,15 +384,177 @@ export async function alenaChat(
         ]
       : [...history, { role: "user" as const, content: question }];
 
-  const result = await converseNova({ system, messages });
+  return { kind: "model", system, messages, quota: await getAlenaQuota(sub) };
+}
+
+export async function alenaChat(
+  sub: string,
+  message: string,
+  mode: "context" | "anonymous",
+  opts?: AlenaChatOpts,
+): Promise<{
+  reply: string;
+  crisis: boolean;
+  stub: boolean;
+  quota: AlenaQuota;
+  error?: "quota_exceeded" | "alena_busy";
+}> {
+  const turn = await prepareAlenaChat(sub, message, mode, opts);
+  if (turn.kind === "error") {
+    return {
+      reply: "",
+      crisis: false,
+      stub: true,
+      quota: turn.quota,
+      error: turn.error,
+    };
+  }
+  if (turn.kind === "immediate") {
+    return {
+      reply: turn.reply,
+      crisis: turn.crisis,
+      stub: turn.stub,
+      quota: turn.quota,
+    };
+  }
+  const result = await converseNova({ system: turn.system, messages: turn.messages });
   let reply = result.text;
   if (findDeniedPhrases(reply).length) reply = SAFE_ALENA_FALLBACK;
   return {
     reply,
     crisis: false,
     stub: result.stub,
-    quota: await getAlenaQuota(sub),
+    quota: turn.quota,
   };
+}
+
+export async function* streamAlenaReply(
+  turn: Extract<AlenaTurn, { kind: "model" }>,
+): AsyncGenerator<{ delta?: string; done?: boolean; reply: string; stub: boolean }> {
+  let reply = "";
+  let stub = false;
+  for await (const chunk of converseNovaStream({
+    system: turn.system,
+    messages: turn.messages,
+  })) {
+    stub = chunk.stub;
+    reply += chunk.text;
+    if (findDeniedPhrases(reply).length) {
+      yield { done: true, reply: SAFE_ALENA_FALLBACK, stub: false };
+      return;
+    }
+    yield { delta: chunk.text, reply, stub };
+  }
+  yield { done: true, reply, stub };
+}
+
+export type GuestAlenaTurn =
+  | {
+      kind: "immediate";
+      reply: string;
+      crisis: boolean;
+      stub: boolean;
+      remaining: number;
+    }
+  | {
+      kind: "model";
+      system: string;
+      messages: Array<{ role: "user" | "assistant"; content: string }>;
+      remaining: number;
+    };
+
+export async function prepareGuestAlenaChat(
+  message: string,
+  market: Market,
+  ip: string,
+): Promise<GuestAlenaTurn> {
+  const clean = redactPii(message).slice(0, 2000);
+  if (detectCrisis(clean)) {
+    return {
+      kind: "immediate",
+      reply: crisisMessage(market),
+      crisis: true,
+      stub: false,
+      remaining: GUEST_LIMIT,
+    };
+  }
+  if (!guestAllowed(ip)) {
+    return {
+      kind: "immediate",
+      reply:
+        "I’ve hit the guest chat limit for this hour. Create a free account to keep talking with Alena in the app.",
+      crisis: false,
+      stub: true,
+      remaining: 0,
+    };
+  }
+  const cur = guestHits.get(ip);
+  return {
+    kind: "model",
+    system: alenaGuestSystemPrompt(market),
+    messages: [{ role: "user", content: clean }],
+    remaining: Math.max(0, GUEST_LIMIT - (cur?.n ?? 0)),
+  };
+}
+
+export async function alenaGuestChat(
+  message: string,
+  market: Market,
+  ip: string,
+): Promise<{
+  reply: string;
+  crisis: boolean;
+  stub: boolean;
+  remaining: number;
+}> {
+  const turn = await prepareGuestAlenaChat(message, market, ip);
+  if (turn.kind === "immediate") {
+    return {
+      reply: turn.reply,
+      crisis: turn.crisis,
+      stub: turn.stub,
+      remaining: turn.remaining,
+    };
+  }
+  const result = await converseNova({
+    system: turn.system,
+    messages: turn.messages,
+    maxTokens: 400,
+  });
+  let reply = result.text;
+  if (findDeniedPhrases(reply).length) {
+    reply =
+      "I need to stay on the wellness side of this. Create an account if you want Alena to use logs you allow — still not a diagnosis.";
+  }
+  return {
+    reply,
+    crisis: false,
+    stub: result.stub,
+    remaining: turn.remaining,
+  };
+}
+
+export async function* streamGuestAlenaReply(
+  turn: Extract<GuestAlenaTurn, { kind: "model" }>,
+): AsyncGenerator<{ delta?: string; done?: boolean; reply: string; stub: boolean }> {
+  const denied =
+    "I need to stay on the wellness side of this. Create an account if you want Alena to use logs you allow — still not a diagnosis.";
+  let reply = "";
+  let stub = false;
+  for await (const chunk of converseNovaStream({
+    system: turn.system,
+    messages: turn.messages,
+    maxTokens: 400,
+  })) {
+    stub = chunk.stub;
+    reply += chunk.text;
+    if (findDeniedPhrases(reply).length) {
+      yield { done: true, reply: denied, stub: false };
+      return;
+    }
+    yield { delta: chunk.text, reply, stub };
+  }
+  yield { done: true, reply, stub };
 }
 
 async function lensInput(sub: string) {

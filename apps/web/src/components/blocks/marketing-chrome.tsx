@@ -203,54 +203,52 @@ export function MarketingHeader() {
             ))}
           </nav>
         </LayoutGroup>
-        <div className="hidden shrink-0 items-center gap-3 lg:flex">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-3">
           <Link
             to="/signin"
             className={cn(
-              "inline-flex h-10 min-h-10 items-center text-[length:var(--text-label)] font-semibold text-foreground no-underline [@media(hover:hover)]:hover:text-primary",
+              "hidden h-10 min-h-10 items-center text-[length:var(--text-label)] font-semibold text-foreground no-underline lg:inline-flex [@media(hover:hover)]:hover:text-primary",
               navFocus,
               "rounded-[var(--radius)]",
             )}
           >
             Sign in
           </Link>
-          <motion.div
-            whileHover={reduce ? undefined : { scale: 1.04 }}
-            whileTap={reduce ? undefined : { scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+          <Button
+            asChild
+            size="sm"
+            className="relative overflow-hidden rounded-full px-4 active:scale-[0.97]"
           >
-            <Button asChild size="sm" className="relative overflow-hidden rounded-full px-4">
-              <Link to="/signup">
-                Create account
-                <ShineSweep />
-              </Link>
-            </Button>
-          </motion.div>
+            <Link to="/signup">
+              Start free
+              <ShineSweep />
+            </Link>
+          </Button>
+          <button
+            type="button"
+            className={cn(
+              "grid size-12 place-items-center rounded-[var(--radius)] text-foreground lg:hidden",
+              navFocus,
+            )}
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            aria-controls={menuId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={open ? "close" : "open"}
+                initial={reduce ? { opacity: 0 } : { opacity: 0, rotate: -90, scale: 0.6 }}
+                animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, rotate: 90, scale: 0.6 }}
+                transition={{ type: "spring", stiffness: 420, damping: 22 }}
+                className="grid place-items-center"
+              >
+                {open ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
+              </motion.span>
+            </AnimatePresence>
+          </button>
         </div>
-        <button
-          type="button"
-          className={cn(
-            "grid size-12 place-items-center rounded-[var(--radius)] text-foreground lg:hidden",
-            navFocus,
-          )}
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          aria-controls={menuId}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={open ? "close" : "open"}
-              initial={reduce ? { opacity: 0 } : { opacity: 0, rotate: -90, scale: 0.6 }}
-              animate={{ opacity: 1, rotate: 0, scale: 1 }}
-              exit={reduce ? { opacity: 0 } : { opacity: 0, rotate: 90, scale: 0.6 }}
-              transition={{ type: "spring", stiffness: 420, damping: 22 }}
-              className="grid place-items-center"
-            >
-              {open ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
-            </motion.span>
-          </AnimatePresence>
-        </button>
       </div>
     </header>
       <AnimatePresence>
@@ -268,7 +266,7 @@ export function MarketingHeader() {
           >
             <div
               className={cn(
-                "flex h-full flex-col justify-center gap-8 pt-[calc(72px+env(safe-area-inset-top))]",
+                "flex h-full flex-col justify-center gap-8 overflow-y-auto pt-[calc(72px+env(safe-area-inset-top))] pb-8",
                 marketingChromePad,
               )}
             >
@@ -299,6 +297,18 @@ export function MarketingHeader() {
                   );
                 })}
               </motion.nav>
+              <div className="flex flex-col gap-3 pb-[env(safe-area-inset-bottom)]">
+                <Button asChild className="h-12 min-h-[var(--tap)] rounded-full">
+                  <Link to="/signup" onClick={() => setOpen(false)}>
+                    Create account
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="h-12 min-h-[var(--tap)] rounded-full">
+                  <Link to="/signin" onClick={() => setOpen(false)}>
+                    Sign in
+                  </Link>
+                </Button>
+              </div>
             </div>
           </motion.div>
         ) : null}

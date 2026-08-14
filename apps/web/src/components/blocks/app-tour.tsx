@@ -15,7 +15,7 @@ export function AppTour({ onDone }: { onDone: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-40 grid place-items-end bg-foreground/40 p-4 sm:place-items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-foreground/40 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="app-tour-title"
@@ -33,9 +33,10 @@ export function AppTour({ onDone }: { onDone: () => void }) {
         <p className="m-0 mt-2 text-[length:var(--text-body)] text-muted-foreground">
           {step.body}
         </p>
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button
             type="button"
+            className="w-full sm:w-auto"
             onClick={() => {
               if (last) finish();
               else setI((n) => n + 1);
@@ -43,7 +44,12 @@ export function AppTour({ onDone }: { onDone: () => void }) {
           >
             {last ? "Done" : "Next"}
           </Button>
-          <Button type="button" variant="outline" onClick={finish}>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={finish}
+          >
             Skip
           </Button>
         </div>

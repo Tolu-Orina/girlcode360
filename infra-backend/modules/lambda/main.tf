@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = ">= 6.25.0"
     }
     archive = {
       source  = "hashicorp/archive"
@@ -140,43 +140,40 @@ resource "aws_iam_role_policy" "app" {
   })
 }
 
-resource "aws_lambda_function" "api" {
-  function_name = "girlcode360-api-${var.environment}"
-  role          = aws_iam_role.lambda.arn
-  handler       = "index.handler"
-  runtime       = "nodejs20.x"
-  timeout       = 29
-  memory_size   = 256
+output "invoke_arns" {
+  value = { for k, f in aws_lambda_function.fn : k => f.invoke_arn }
+}
 
-  filename         = data.archive_file.api.output_path
-  source_code_hash = data.archive_file.api.output_base64sha256
-
-  environment {
-    variables = {
-      ENVIRONMENT            = var.environment
-      COGNITO_USER_POOL_ID   = var.cognito_user_pool_id
-      COGNITO_CLIENT_ID      = var.cognito_client_id
-      DSQL_ENDPOINT          = var.dsql_endpoint
-      DSQL_ENABLED           = tostring(var.dsql_enabled)
-      DSQL_USER              = "girlcode360_app"
-      DATA_BUCKET            = var.data_bucket_name
-      CONSENT_POLICY_VERSION = "2026-07-v1"
-      ALENA_MODEL_ID         = var.alena_model_id
-      BEDROCK_ENABLED        = tostring(var.bedrock_enabled)
-    }
+output "streaming_invoke_arns" {
+  value = {
+    for k, f in aws_lambda_function.fn :
+    k => replace(
+      replace(f.invoke_arn, "2015-03-31", "2021-11-15"),
+      "/invocations",
+      "/response-streaming-invocations",
+    )
   }
 }
 
+output "function_names" {
+  value = { for k, f in aws_lambda_function.fn : k => f.function_name }
+}
+
+output "function_arns" {
+  value = { for k, f in aws_lambda_function.fn : k => f.arn }
+}
+
+# Identity is the leftover {proxy+} target and health check.
 output "invoke_arn" {
-  value = aws_lambda_function.api.invoke_arn
+  value = aws_lambda_function.fn["identity"].invoke_arn
 }
 
 output "function_name" {
-  value = aws_lambda_function.api.function_name
+  value = aws_lambda_function.fn["identity"].function_name
 }
 
 output "function_arn" {
-  value = aws_lambda_function.api.arn
+  value = aws_lambda_function.fn["identity"].arn
 }
 
 output "role_arn" {

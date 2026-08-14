@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = ">= 6.25.0"
     }
     archive = {
       source  = "hashicorp/archive"
@@ -101,13 +101,14 @@ module "lambda" {
 }
 
 module "apigw" {
-  source                = "./modules/apigw"
-  environment           = var.environment
-  lambda_invoke_arn     = module.lambda.invoke_arn
-  lambda_function_name  = module.lambda.function_name
-  cognito_user_pool_arn = module.cognito.user_pool_arn
-  enable_custom_domain  = var.enable_api_custom_domain
-  domain_name           = var.enable_api_custom_domain ? local.api_fqdn : ""
+  source                       = "./modules/apigw"
+  environment                  = var.environment
+  lambda_invoke_arns           = module.lambda.invoke_arns
+  lambda_streaming_invoke_arns = module.lambda.streaming_invoke_arns
+  lambda_function_names        = module.lambda.function_names
+  cognito_user_pool_arn        = module.cognito.user_pool_arn
+  enable_custom_domain         = var.enable_api_custom_domain
+  domain_name                  = var.enable_api_custom_domain ? local.api_fqdn : ""
   certificate_arn = var.enable_api_custom_domain ? (
     var.api_certificate_arn != "" ? var.api_certificate_arn : module.acm_api.certificate_arn
   ) : ""

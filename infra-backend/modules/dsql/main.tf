@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = ">= 6.25.0"
     }
   }
 }
@@ -40,7 +40,7 @@ resource "aws_dsql_cluster" "main" {
 
 locals {
   identifier = var.enabled ? aws_dsql_cluster.main[0].identifier : ""
-  endpoint   = var.enabled ? "${local.identifier}.dsql.${data.aws_region.current.name}.on.aws" : ""
+  endpoint   = var.enabled ? "${local.identifier}.dsql.${data.aws_region.current.region}.on.aws" : ""
 }
 
 output "endpoint" {

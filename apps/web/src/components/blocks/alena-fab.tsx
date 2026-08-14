@@ -127,12 +127,31 @@ export function AlenaFab() {
         setMsgs((m) => [...m, { role: "assistant", text: LOCAL_STUB }]);
         return;
       }
-      const res = await postGuestAlenaChat(message, detectMarket());
+      setMsgs((m) => [...m, { role: "assistant", text: "" }]);
+      const res = await postGuestAlenaChat(message, detectMarket(), (delta) => {
+        setMsgs((m) => {
+          const next = [...m];
+          const last = next[next.length - 1];
+          if (last?.role !== "assistant") return m;
+          next[next.length - 1] = { ...last, text: last.text + delta };
+          return next;
+        });
+      });
       setDisclaimer(res.disclaimer);
-      setMsgs((m) => [
-        ...m,
-        { role: "assistant", text: res.reply, crisis: res.crisis },
-      ]);
+      setMsgs((m) => {
+        const next = [...m];
+        const last = next[next.length - 1];
+        if (last?.role !== "assistant") {
+          next.push({ role: "assistant", text: res.reply, crisis: res.crisis });
+          return next;
+        }
+        next[next.length - 1] = {
+          ...last,
+          text: res.reply || last.text,
+          crisis: res.crisis,
+        };
+        return next;
+      });
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "chat_failed";
       if (code === "api_base_url_missing") {
@@ -140,9 +159,11 @@ export function AlenaFab() {
         return;
       }
       setMsgs((m) => {
-        const last = m[m.length - 1];
-        if (last?.role === "user" && last.text === message) return m.slice(0, -1);
-        return m;
+        let next = m;
+        if (next[next.length - 1]?.role === "assistant") next = next.slice(0, -1);
+        const last = next[next.length - 1];
+        if (last?.role === "user" && last.text === message) return next.slice(0, -1);
+        return next;
       });
       setInput(message);
       setError(guestErrorCopy(code));

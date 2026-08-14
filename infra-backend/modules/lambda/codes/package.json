@@ -2,6 +2,9 @@
   "name": "@girlcode360/backend",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node scripts/build-api.mjs",
     "build:health": "node scripts/build-api.mjs",

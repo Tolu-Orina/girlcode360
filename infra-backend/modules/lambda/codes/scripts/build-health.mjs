@@ -11,7 +11,7 @@ await build({
   entryPoints: [join(root, "src/handlers/health.ts")],
   bundle: true,
   platform: "node",
-  target: "node20",
+  target: "node22",
   format: "cjs",
   outfile: join(outdir, "health.js"),
 });

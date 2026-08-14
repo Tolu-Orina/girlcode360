@@ -53,58 +53,110 @@ export async function converseNova(
   };
 }
 
+/** Yield assistant text deltas. Stub path chunks the canned reply so the UI still streams. */
+export async function* converseNovaStream(
+  input: ConverseInput,
+): AsyncGenerator<{ text: string; modelId: string; stub: boolean; done?: boolean }> {
+  const modelId = input.modelId ?? DEFAULT_MODEL;
+  if (process.env.BEDROCK_ENABLED === "true") {
+    try {
+      for await (const text of invokeBedrockStream(input, modelId)) {
+        if (text) yield { text, modelId, stub: false };
+      }
+      return;
+    } catch (err) {
+      console.error("Bedrock stream failed; falling back to stub", err);
+    }
+  }
+  const full = stubReply(input);
+  const parts = full.match(/.{1,80}(\s|$)/g) ?? [full];
+  for (const part of parts) {
+    yield { text: part, modelId, stub: true };
+  }
+}
+
 /** Minimal shapes so we typecheck without installing the Bedrock SDK locally. */
 type BedrockContentBlock = { text?: string };
 type BedrockConverseResponse = {
   output?: { message?: { content?: BedrockContentBlock[] } };
 };
+type BedrockStreamEvent = {
+  contentBlockDelta?: { delta?: { text?: string } };
+};
+
 type BedrockRuntimeModule = {
   BedrockRuntimeClient: new (cfg: { region: string }) => {
-    send: (cmd: unknown) => Promise<BedrockConverseResponse>;
+    send: (cmd: unknown) => Promise<
+      BedrockConverseResponse & {
+        stream?: AsyncIterable<BedrockStreamEvent>;
+      }
+    >;
   };
   ConverseCommand: new (input: Record<string, unknown>) => unknown;
+  ConverseStreamCommand: new (input: Record<string, unknown>) => unknown;
 };
+
+function converseArgs(input: ConverseInput, modelId: string): Record<string, unknown> {
+  const effort = input.reasoningEffort ?? DEFAULT_REASONING;
+  return {
+    modelId,
+    system: [{ text: input.system }],
+    messages: input.messages.map((m) => ({
+      role: m.role,
+      content: [{ text: m.content }],
+    })),
+    inferenceConfig: {
+      // Reasoning tokens count against maxTokens. Callers still pass 220–600 for
+      // short answers; floor so low thinking does not eat the whole budget.
+      maxTokens: Math.max(input.maxTokens ?? 2048, 2048),
+      temperature: 0.4,
+    },
+    additionalModelRequestFields: {
+      reasoningConfig: {
+        type: "enabled",
+        maxReasoningEffort: effort,
+      },
+    },
+  };
+}
+
+async function loadBedrock(): Promise<BedrockRuntimeModule> {
+  // Dynamic import keeps local builds working without AWS SDK installed.
+  return Function('return import("@aws-sdk/client-bedrock-runtime")')() as Promise<BedrockRuntimeModule>;
+}
 
 async function invokeBedrock(
   input: ConverseInput,
   modelId: string,
 ): Promise<string> {
-  // Dynamic import keeps local builds working without AWS SDK installed.
-  // Runtime package is optional; resolve via Function so tsc does not require it.
-  const mod = (await (Function(
-    'return import("@aws-sdk/client-bedrock-runtime")',
-  )() as Promise<BedrockRuntimeModule>));
+  const mod = await loadBedrock();
   const client = new mod.BedrockRuntimeClient({
     region: process.env.AWS_REGION ?? "eu-west-2",
   });
-  const effort = input.reasoningEffort ?? DEFAULT_REASONING;
-  const res = await client.send(
-    new mod.ConverseCommand({
-      modelId,
-      system: [{ text: input.system }],
-      messages: input.messages.map((m) => ({
-        role: m.role,
-        content: [{ text: m.content }],
-      })),
-      inferenceConfig: {
-        // Reasoning tokens count against maxTokens. Callers still pass 220–600 for
-        // short answers; floor so low thinking does not eat the whole budget.
-        maxTokens: Math.max(input.maxTokens ?? 2048, 2048),
-        temperature: 0.4,
-      },
-      additionalModelRequestFields: {
-        reasoningConfig: {
-          type: "enabled",
-          maxReasoningEffort: effort,
-        },
-      },
-    }),
-  );
+  const res = await client.send(new mod.ConverseCommand(converseArgs(input, modelId)));
   const parts = res.output?.message?.content ?? [];
   return parts
     .map((p: BedrockContentBlock) => p.text ?? "")
     .join("")
     .trim();
+}
+
+async function* invokeBedrockStream(
+  input: ConverseInput,
+  modelId: string,
+): AsyncGenerator<string> {
+  const mod = await loadBedrock();
+  const client = new mod.BedrockRuntimeClient({
+    region: process.env.AWS_REGION ?? "eu-west-2",
+  });
+  const res = await client.send(
+    new mod.ConverseStreamCommand(converseArgs(input, modelId)),
+  );
+  if (!res.stream) return;
+  for await (const event of res.stream) {
+    const text = event.contentBlockDelta?.delta?.text;
+    if (text) yield text;
+  }
 }
 
 function stubReply(input: ConverseInput): string {

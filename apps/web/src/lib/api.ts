@@ -147,6 +147,56 @@ async function publicRequest<T>(
   return (await res.json()) as T;
 }
 
+type AlenaSseEvent =
+  | { type: "delta"; text: string }
+  | { type: "done"; [k: string]: unknown };
+
+async function readAlenaSse<T>(
+  res: Response,
+  onDelta?: (text: string) => void,
+): Promise<T> {
+  if (!res.body) throw new ApiError(res.status || 0, "empty_stream");
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let donePayload: T | null = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop() ?? "";
+    for (const part of parts) {
+      const line = part.split("\n").find((l) => l.startsWith("data: "));
+      if (!line) continue;
+      let parsed: AlenaSseEvent;
+      try {
+        parsed = JSON.parse(line.slice(6)) as AlenaSseEvent;
+      } catch {
+        continue;
+      }
+      if (parsed.type === "delta" && typeof parsed.text === "string") {
+        onDelta?.(parsed.text);
+      }
+      if (parsed.type === "done") donePayload = parsed as unknown as T;
+    }
+  }
+  if (!donePayload) throw new ApiError(res.status || 0, "incomplete_stream");
+  return donePayload;
+}
+
+async function throwIfNotOk(res: Response): Promise<void> {
+  if (res.ok) return;
+  let code = `http_${res.status}`;
+  try {
+    const j = (await res.json()) as { error?: string };
+    if (j.error) code = j.error;
+  } catch {
+    /* ignore */
+  }
+  throw new ApiError(res.status, code);
+}
+
 export function getMe(): Promise<UserProfile> {
   return request<UserProfile>("GET", "/v1/users/me");
 }
@@ -457,29 +507,75 @@ export function getAlenaQuota() {
   }>("GET", "/v1/alena/quota");
 }
 
-export function postAlenaChat(body: {
-  message: string;
-  mode: "context" | "anonymous";
-  openedFrom?: "cycle" | "health" | "mirror" | "home" | "library";
-  moduleHint?: import("../../../../packages/api-types/src/index").HealthModule;
-  history?: Array<{ role: "user" | "assistant"; content: string }>;
-  lat?: number;
-  lng?: number;
-  climate?: "hot" | "temperate" | "cold" | "mixed";
-}) {
-  return request<
-    import("../../../../packages/api-types/src/index").AlenaChatResponse
-  >("POST", "/v1/alena/chat", body);
+export async function postAlenaChat(
+  body: {
+    message: string;
+    mode: "context" | "anonymous";
+    openedFrom?: "cycle" | "health" | "mirror" | "home" | "library";
+    moduleHint?: import("../../../../packages/api-types/src/index").HealthModule;
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
+    lat?: number;
+    lng?: number;
+    climate?: "hot" | "temperate" | "cold" | "mixed";
+  },
+  onDelta?: (text: string) => void,
+) {
+  if (!apiBaseUrl) {
+    throw new ApiError(0, "api_base_url_missing");
+  }
+  const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/v1/alena/chat`, {
+    method: "POST",
+    headers: {
+      Authorization: await authHeader(),
+      "Content-Type": "application/json",
+      Accept: "text/event-stream, application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  await throwIfNotOk(res);
+  const ct = res.headers.get("content-type") ?? "";
+  if (ct.includes("event-stream")) {
+    return readAlenaSse<
+      import("../../../../packages/api-types/src/index").AlenaChatResponse
+    >(res, onDelta);
+  }
+  return (await res.json()) as import("../../../../packages/api-types/src/index").AlenaChatResponse;
 }
 
-export function postGuestAlenaChat(message: string, market: Market) {
-  return publicRequest<{
+export async function postGuestAlenaChat(
+  message: string,
+  market: Market,
+  onDelta?: (text: string) => void,
+) {
+  if (!apiBaseUrl) {
+    throw new ApiError(0, "api_base_url_missing");
+  }
+  const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/v1/guest/alena`, {
+    method: "POST",
+    headers: {
+      Accept: "text/event-stream, application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message, market }),
+  });
+  await throwIfNotOk(res);
+  const ct = res.headers.get("content-type") ?? "";
+  if (ct.includes("event-stream")) {
+    return readAlenaSse<{
+      reply: string;
+      crisis: boolean;
+      stub: boolean;
+      remaining: number;
+      disclaimer: string;
+    }>(res, onDelta);
+  }
+  return (await res.json()) as {
     reply: string;
     crisis: boolean;
     stub: boolean;
     remaining: number;
     disclaimer: string;
-  }>("POST", "/v1/guest/alena", { message, market });
+  };
 }
 
 export function getHealthLensStatus() {

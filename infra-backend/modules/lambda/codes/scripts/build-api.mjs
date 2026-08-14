@@ -1,19 +1,26 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { build } from "esbuild";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { LAMBDA_NAMES } from "./functions.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "dist");
+rmSync(outdir, { recursive: true, force: true });
 mkdirSync(outdir, { recursive: true });
 
+const entryPoints = Object.fromEntries(
+  LAMBDA_NAMES.map((name) => [name, join(root, `src/handlers/${name}.ts`)]),
+);
+
 await build({
-  entryPoints: [join(root, "src/handlers/api.ts")],
+  entryPoints,
   bundle: true,
   platform: "node",
-  target: "node20",
+  target: "node22",
   format: "cjs",
-  outfile: join(outdir, "index.js"),
+  outdir,
+  entryNames: "[name]",
   external: ["pg-native"],
   // Replace export object so Lambda gets a real handler function (getter snapshot race).
   footer: {
@@ -21,10 +28,11 @@ await build({
   },
 });
 
-// Zip source is codes/dist only — mark CJS so local require() works under type:module parent.
 writeFileSync(
   join(outdir, "package.json"),
   JSON.stringify({ type: "commonjs" }, null, 2),
 );
 
-console.log("Built infra-backend/modules/lambda/codes/dist/index.js");
+console.log(
+  `Built ${LAMBDA_NAMES.length} Lambda entrypoints in infra-backend/modules/lambda/codes/dist`,
+);

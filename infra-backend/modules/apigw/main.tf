@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = ">= 6.25.0"
     }
   }
 }
@@ -13,12 +13,19 @@ variable "environment" {
   type = string
 }
 
-variable "lambda_invoke_arn" {
-  type = string
+variable "lambda_invoke_arns" {
+  type        = map(string)
+  description = "Invoke ARNs keyed by capability Lambda name (identity, cycles, …)."
 }
 
-variable "lambda_function_name" {
-  type = string
+variable "lambda_streaming_invoke_arns" {
+  type        = map(string)
+  description = "InvokeWithResponseStream ARNs keyed by capability Lambda name."
+}
+
+variable "lambda_function_names" {
+  type        = map(string)
+  description = "Function names keyed by capability Lambda name."
 }
 
 variable "cognito_user_pool_arn" {
@@ -84,7 +91,7 @@ resource "aws_api_gateway_integration" "health_get" {
   http_method             = aws_api_gateway_method.health_get.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["identity"]
 }
 
 # ——— Public: GET /v1/wallet/share/{token}[+ /object] ———
@@ -119,7 +126,7 @@ resource "aws_api_gateway_integration" "wallet_share_get" {
   http_method             = aws_api_gateway_method.wallet_share_get.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["wallet-share"]
 }
 
 resource "aws_api_gateway_method" "wallet_share_options" {
@@ -135,7 +142,7 @@ resource "aws_api_gateway_integration" "wallet_share_options" {
   http_method             = aws_api_gateway_method.wallet_share_options.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["wallet-share"]
 }
 
 resource "aws_api_gateway_resource" "wallet_share_object" {
@@ -157,7 +164,7 @@ resource "aws_api_gateway_integration" "wallet_share_object_get" {
   http_method             = aws_api_gateway_method.wallet_share_object_get.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["wallet-share"]
 }
 
 resource "aws_api_gateway_method" "wallet_share_object_options" {
@@ -173,7 +180,7 @@ resource "aws_api_gateway_integration" "wallet_share_object_options" {
   http_method             = aws_api_gateway_method.wallet_share_object_options.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["wallet-share"]
 }
 
 # ——— Public: POST /v1/billing/webhooks/{stripe|paystack} ———
@@ -208,7 +215,7 @@ resource "aws_api_gateway_integration" "billing_webhooks_stripe_post" {
   http_method             = aws_api_gateway_method.billing_webhooks_stripe_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["billing-webhooks"]
 }
 
 resource "aws_api_gateway_resource" "billing_webhooks_paystack" {
@@ -230,7 +237,7 @@ resource "aws_api_gateway_integration" "billing_webhooks_paystack_post" {
   http_method             = aws_api_gateway_method.billing_webhooks_paystack_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["billing-webhooks"]
 }
 
 # ——— Public: POST /v1/privacy/purge-tick (INTERNAL_PURGE_KEY in Lambda) ———
@@ -259,7 +266,7 @@ resource "aws_api_gateway_integration" "privacy_purge_tick_post" {
   http_method             = aws_api_gateway_method.privacy_purge_tick_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["purge"]
 }
 
 # ——— Public: POST /v1/guest/alena (landing FAB; rate-limited in Lambda) ———
@@ -288,7 +295,9 @@ resource "aws_api_gateway_integration" "guest_alena_post" {
   http_method             = aws_api_gateway_method.guest_alena_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_streaming_invoke_arns["alena-guest"]
+  response_transfer_mode  = "STREAM"
+  timeout_milliseconds    = 60000
 }
 
 resource "aws_api_gateway_method" "guest_alena_options" {
@@ -304,7 +313,9 @@ resource "aws_api_gateway_integration" "guest_alena_options" {
   http_method             = aws_api_gateway_method.guest_alena_options.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_streaming_invoke_arns["alena-guest"]
+  response_transfer_mode  = "STREAM"
+  timeout_milliseconds    = 60000
 }
 # ——— Public: POST /v1/webhooks/youcam (HMAC; poller remains) ———
 resource "aws_api_gateway_resource" "webhooks" {
@@ -332,7 +343,7 @@ resource "aws_api_gateway_integration" "webhooks_youcam_post" {
   http_method             = aws_api_gateway_method.webhooks_youcam_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["youcam-webhook"]
 }
 
 resource "aws_api_gateway_method" "webhooks_youcam_options" {
@@ -348,7 +359,7 @@ resource "aws_api_gateway_integration" "webhooks_youcam_options" {
   http_method             = aws_api_gateway_method.webhooks_youcam_options.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["youcam-webhook"]
 }
 
 resource "aws_api_gateway_resource" "proxy" {
@@ -371,7 +382,7 @@ resource "aws_api_gateway_integration" "proxy_any" {
   http_method             = aws_api_gateway_method.proxy_any.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["identity"]
 }
 
 resource "aws_api_gateway_method" "proxy_options" {
@@ -387,13 +398,15 @@ resource "aws_api_gateway_integration" "proxy_options" {
   http_method             = aws_api_gateway_method.proxy_options.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_invoke_arn
+  uri                     = var.lambda_invoke_arns["identity"]
 }
 
 resource "aws_lambda_permission" "apigw" {
+  for_each = var.lambda_function_names
+
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = var.lambda_function_name
+  function_name = each.value
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
 }
@@ -434,6 +447,17 @@ resource "aws_api_gateway_deployment" "main" {
       aws_api_gateway_integration.proxy_any.id,
       aws_api_gateway_method.proxy_options.id,
       aws_api_gateway_integration.proxy_options.id,
+      aws_api_gateway_integration.healthlens_monthly_tick_post.id,
+      aws_api_gateway_integration.notifications_tick_post.id,
+      [for k, m in module.cognito_prefix : m.integration_ids],
+      module.wallet_auth.integration_ids,
+      module.billing_auth.integration_ids,
+      module.privacy_auth.integration_ids,
+      module.healthlens.integration_ids,
+      module.notifications.integration_ids,
+      module.mirror_studio.integration_ids,
+      module.wardrobe_intel.integration_ids,
+      module.resale.integration_ids,
     ]))
   }
 
@@ -454,6 +478,17 @@ resource "aws_api_gateway_deployment" "main" {
     aws_api_gateway_integration.webhooks_youcam_options,
     aws_api_gateway_integration.proxy_any,
     aws_api_gateway_integration.proxy_options,
+    aws_api_gateway_integration.healthlens_monthly_tick_post,
+    aws_api_gateway_integration.notifications_tick_post,
+    module.cognito_prefix,
+    module.wallet_auth,
+    module.billing_auth,
+    module.privacy_auth,
+    module.healthlens,
+    module.notifications,
+    module.mirror_studio,
+    module.wardrobe_intel,
+    module.resale,
   ]
 }
 
@@ -464,7 +499,7 @@ resource "aws_api_gateway_stage" "main" {
 }
 
 locals {
-  execute_api_url = "https://${aws_api_gateway_rest_api.main.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/${aws_api_gateway_stage.main.stage_name}"
+  execute_api_url = "https://${aws_api_gateway_rest_api.main.id}.execute-api.${data.aws_region.current.region}.amazonaws.com/${aws_api_gateway_stage.main.stage_name}"
 }
 
 resource "aws_api_gateway_domain_name" "custom" {

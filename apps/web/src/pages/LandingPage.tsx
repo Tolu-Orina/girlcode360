@@ -14,6 +14,7 @@ import { GlowFrame, ShineSweep } from "@/components/blocks/motion-glow";
 import { MarketingFooter, MarketingHeader } from "@/components/blocks/marketing-chrome";
 import { marketingHeroPad, marketingPad } from "@/components/blocks/marketing-layout";
 import { Button } from "@/components/ui/button";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
@@ -249,9 +250,8 @@ function PhotoCard({
   return (
     <motion.li className="h-full min-h-0" variants={mediaRise(reduce)}>
       <motion.div
-        className="h-full"
+        className="h-full touch-pan-y"
         whileHover={reduce ? undefined : { y: -8, scale: 1.02 }}
-        whileTap={reduce ? undefined : { scale: 0.98 }}
         transition={{ type: "spring", stiffness: 380, damping: 22 }}
       >
         <GlowFrame
@@ -320,6 +320,7 @@ function CardGrid({
 
 export function LandingPage() {
   const reduce = useReducedMotion();
+  const desktop = useMediaQuery("(min-width: 1024px)");
   const text = rise(reduce);
   const heroRef = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll();
@@ -356,7 +357,7 @@ export function LandingPage() {
         <section
           id="hero"
           ref={heroRef}
-          className="relative overflow-hidden py-16 lg:py-24"
+          className="relative py-16 lg:overflow-hidden lg:py-24"
           aria-labelledby="hero-heading"
         >
           <div
@@ -395,18 +396,15 @@ export function LandingPage() {
                 not live places.
               </motion.p>
               <motion.div className="mt-2 flex flex-wrap gap-3" variants={text}>
-                <motion.div
-                  whileHover={reduce ? undefined : { scale: 1.04 }}
-                  whileTap={reduce ? undefined : { scale: 0.97 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                <Button
+                  asChild
+                  className="relative h-12 min-h-[var(--tap)] overflow-hidden rounded-full px-6 active:scale-[0.97]"
                 >
-                  <Button asChild className="relative h-12 min-h-[var(--tap)] overflow-hidden rounded-full px-6">
-                    <Link to="/signup">
-                      Start free
-                      <ShineSweep />
-                    </Link>
-                  </Button>
-                </motion.div>
+                  <Link to="/signup">
+                    Start free
+                    <ShineSweep />
+                  </Link>
+                </Button>
                 <Button asChild variant="outline" className="h-12 min-h-[var(--tap)] rounded-full px-6">
                   <Link to="/signin">I already have an account</Link>
                 </Button>
@@ -431,20 +429,20 @@ export function LandingPage() {
             </motion.div>
 
             <TiltStage
-              reduce={reduce}
-              className="relative h-[420px] lg:h-[520px]"
+              reduce={reduce || !desktop}
+              className="relative flex flex-col gap-4 lg:block lg:h-[520px]"
             >
               <motion.div
-                className="absolute inset-0"
-                style={reduce ? undefined : { y: floatY }}
+                className="relative lg:absolute lg:inset-0"
+                style={reduce || !desktop ? undefined : { y: floatY }}
                 aria-hidden="true"
               >
                 <motion.div
-                  className="absolute top-[6%] right-0 z-[1] w-[78%] rotate-[4deg] shadow-[var(--shadow-modal)]"
-                  initial={reduce ? false : { opacity: 0, x: 32, rotate: 8 }}
-                  animate={{ opacity: 1, x: 0, rotate: 4 }}
+                  className="relative z-[1] w-full shadow-[var(--shadow-modal)] lg:absolute lg:top-[6%] lg:right-0 lg:w-[78%] lg:rotate-[4deg]"
+                  initial={reduce ? false : { opacity: 0, x: 32 }}
+                  animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.8, ease: easeOut, delay: 0.15 }}
-                  whileHover={reduce ? undefined : { rotate: 2, scale: 1.03 }}
+                  whileHover={reduce || !desktop ? undefined : { rotate: 2, scale: 1.03 }}
                 >
                   <GlowFrame
                     delay={0.2}
@@ -501,10 +499,10 @@ export function LandingPage() {
                 </motion.div>
 
                 <motion.div
-                  className="absolute bottom-0 left-0 z-[2] w-[88%] shadow-[var(--shadow-modal)]"
+                  className="relative z-[2] mt-4 w-full touch-pan-y shadow-[var(--shadow-modal)] lg:absolute lg:bottom-0 lg:left-0 lg:mt-0 lg:w-[88%]"
                   initial={reduce ? false : { opacity: 0, y: 36 }}
                   animate={
-                    reduce
+                    reduce || !desktop
                       ? { opacity: 1, y: 0 }
                       : { opacity: 1, y: [0, -12, 0] }
                   }

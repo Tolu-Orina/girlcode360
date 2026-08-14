@@ -236,33 +236,56 @@ export function AlenaPage() {
         return;
       }
       const origin = getSessionOrigin();
-      const res = await postAlenaChat({
-        message,
-        mode,
-        openedFrom,
-        moduleHint: moduleHintFor(openedFrom),
-        history: msgs.slice(-6).map((m) => ({
-          role: m.role,
-          content: m.text,
-        })),
-        lat: origin?.lat,
-        lng: origin?.lng,
-        climate,
-      });
+      setMsgs((m) => [...m, { role: "assistant", text: "" }]);
+      const res = await postAlenaChat(
+        {
+          message,
+          mode,
+          openedFrom,
+          moduleHint: moduleHintFor(openedFrom),
+          history: msgs.slice(-6).map((m) => ({
+            role: m.role,
+            content: m.text,
+          })),
+          lat: origin?.lat,
+          lng: origin?.lng,
+          climate,
+        },
+        (delta) => {
+          setMsgs((m) => {
+            const next = [...m];
+            const last = next[next.length - 1];
+            if (last?.role !== "assistant") return m;
+            next[next.length - 1] = { ...last, text: last.text + delta };
+            return next;
+          });
+        },
+      );
       setQuota(res.quota);
       setDisclaimer(res.disclaimer);
-      setMsgs((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text: res.crisis
-            ? res.reply
-            : res.stub
-              ? `${res.reply || "Alena is running in fallback mode."}\n\n(Model fallback — answers may be limited until Bedrock is available.)`
-              : res.reply,
-          crisis: res.crisis,
-        },
-      ]);
+      setMsgs((m) => {
+        const next = [...m];
+        const last = next[next.length - 1];
+        if (last?.role !== "assistant") {
+          next.push({
+            role: "assistant",
+            text: res.crisis
+              ? res.reply
+              : res.stub
+                ? `${res.reply || "Alena is running in fallback mode."}\n\n(Model fallback — answers may be limited until Bedrock is available.)`
+                : res.reply,
+            crisis: res.crisis,
+          });
+          return next;
+        }
+        const text = res.crisis
+          ? res.reply
+          : res.stub
+            ? `${res.reply || last.text || "Alena is running in fallback mode."}\n\n(Model fallback — answers may be limited until Bedrock is available.)`
+            : res.reply || last.text;
+        next[next.length - 1] = { ...last, text, crisis: res.crisis };
+        return next;
+      });
     } catch (err) {
       const code = err instanceof ApiError ? err.code : null;
       if (code === "alena_consent_required") {
@@ -280,7 +303,12 @@ export function AlenaPage() {
       } else {
         setError(err instanceof Error ? err.message : "Chat failed");
       }
-      setMsgs((m) => m.slice(0, -1));
+      setMsgs((m) => {
+        let next = m;
+        if (next[next.length - 1]?.role === "assistant") next = next.slice(0, -1);
+        if (next[next.length - 1]?.role === "user") next = next.slice(0, -1);
+        return next;
+      });
       setInput(message);
     } finally {
       setBusy(false);
