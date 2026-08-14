@@ -2,7 +2,7 @@
 GirlCode360
 Product Requirements Document
 Functional & Non-Functional Requirements
-Version 1.0  •  UK • Nigeria • Ghana  •  June 2026
+Version 1.0  •  Global Product  •  Initial Launch: UK, Nigeria & Ghana  •  June 2026
 Document Control
 Version: 1.0  |  Status: Draft for Internal Review
 Owner: Product Manager / Founder
@@ -13,7 +13,7 @@ Distribution: Internal only — Confidential
 
 
 1. Introduction & Purpose
-This Product Requirements Document (PRD) defines the functional and non-functional requirements for GirlCode360, an all-inclusive women’s beauty and wellness platform targeting users in the United Kingdom, Nigeria, and Ghana.
+This Product Requirements Document (PRD) defines the functional and non-functional requirements for GirlCode360, a global intelligent health, wellness, and beauty companion that follows a woman across every phase of her life — knows her, predicts for her, and moves with her, because its modules are connected rather than siloed — rather than a single-purpose tracker for any one phase of it. GirlCode360 is built as a global product from the outset, with a market-agnostic consent and compliance architecture (see PRD §6C); the United Kingdom, Nigeria, and Ghana are its initial launch markets, not the boundary of its ambition.
 The purpose of this document is to provide a single source of truth for the product team, engineering team, clinical advisors, and legal counsel. It defines what the product must do (functional requirements), how it must perform and comply (non-functional requirements), and the regulatory obligations applicable in each target jurisdiction.
 
 1.1  Scope
@@ -98,9 +98,11 @@ Data Protection Compliance Organisation (Nigeria)
 2. Product Overview
 2.1  Product Vision
 Vision Statement
-GirlCode360 is the first platform that unites a woman’s complete health journey and beauty life in one trusted, culturally
-relevant app — from her first period to trying to conceive, through pregnancy, and every salon visit, pharmacy
-trip, and clinic appointment in between.
+GirlCode360 is a global health, wellness, and beauty companion, launching first in the UK, Nigeria, and Ghana. It is the one place that follows a woman across every phase of her life — and it is connected, at the data level, in a way no single-purpose competitor is: every module reads from the same picture of her, so moving from one phase of life to the next stays accurate and effortless instead of starting over.
+Why Connection Is the Point
+The accuracy and ease a woman experiences in GirlCode360 exist because the modules are connected, not because any one of them is built better than a competitor's equivalent. A cycle logged in Period Tracker is the same data TTC reads to estimate a fertile window, the same data the PMOS Manager reads to flag a hormonal pattern, the same data Pregnancy Management inherits the moment conception is confirmed. A skin concern logged today is read by Mirror against that same cycle data to explain a breakout, and by SheMatch to know which product to help her restock nearby, or reorder outright, before she runs out.
+That is the actual flow a woman moves through, and GirlCode360 is built so the app does not lose the thread anywhere along it: tracking her period, trying to conceive, navigating PMOS, becoming pregnant, working through a skin concern, restocking the products that already work for her. Every one of those is a different module. None of them is a different app, a separate login, or a fresh start — because underneath, it is one connected picture of her, not five disconnected ones.
+Cycle tracking, PMOS management, TTC, and pregnancy tracking are each real, substantial, and built the hard way — without assuming a 28-day cycle, unlike most competitors. But they are proof of how well GirlCode360 executes each phase, not the reason it exists. The reason it exists is the connection between them.
 
 
 2.2  User Personas
@@ -1117,4 +1119,4 @@ Multi-language support beyond English (Pidgin, Twi planned for v1.1)
 White-label B2B version for HMOs / corporate wellness
 
 
-GirlCode360 — Product Requirements Document v1.0  |  Confidential  |  August 2026
+GirlCode360 — Product Requirements Document v1.0  |  Confidential  |  June 2026

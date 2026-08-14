@@ -20,7 +20,7 @@ import {
   saveMakeupLook,
 } from "@/lib/api";
 import { PURPOSE_COPY } from "@/lib/consent-copy";
-import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
+import { fileToJpegDataUrl, videoFrameToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
   MakeupLook,
@@ -181,21 +181,26 @@ export function MirrorStudioPanel({
 
   async function captureLive() {
     const video = videoRef.current;
-    if (!video || video.videoWidth < 400) {
+    if (!video || video.videoWidth < 480 || video.videoHeight < 480) {
       onError("Hold still in even light until your face fills the guide.");
       return;
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
-    await runLook("live", { imageB64: canvas.toDataURL("image/jpeg", 0.82) });
+    try {
+      const imageB64 = videoFrameToJpegDataUrl(video, { maxLong: 1024 });
+      await runLook("live", { imageB64 });
+    } catch (err) {
+      onError(
+        err instanceof Error && err.message === "image_too_small"
+          ? "Move closer so your face fills the guide."
+          : friendlyError(err),
+      );
+    }
   }
 
   async function onFaceFile(file: File | undefined, kind: "photo" | "transfer") {
     if (!file) return;
     try {
-      const imageB64 = await fileToJpegDataUrl(file);
+      const imageB64 = await fileToJpegDataUrl(file, { maxLong: 1024 });
       if (kind === "photo") {
         await runLook("photo", {
           imageB64,
@@ -207,7 +212,7 @@ export function MirrorStudioPanel({
           onError("Add a reference photo for Get this look.");
           return;
         }
-        const referenceB64 = await fileToJpegDataUrl(ref);
+        const referenceB64 = await fileToJpegDataUrl(ref, { maxLong: 1024 });
         await runLook("transfer", {
           imageB64,
           scanId: reusable?.id,

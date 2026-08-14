@@ -6,6 +6,7 @@ import { SheMatchBanner } from "@/components/blocks/shematch-banner";
 import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import {
+  elevatedCardClass,
   formStackClass,
   leadClass,
   listClass,
@@ -284,11 +285,14 @@ export function PregnancyPanel({
 
   return (
     <div className="grid gap-6">
-      <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-        Pregnancy
-      </h2>
       {!preg ? (
-        <form className={formStackClass} onSubmit={start}>
+        <form className={elevatedCardClass} onSubmit={start}>
+          <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+            Start pregnancy tracking
+          </h2>
+          <p className={leadClass}>
+            Wellness guidance, not medical advice. Your clinician confirms dating.
+          </p>
           <Field id="preg-method" label="Method">
             <FieldSelect
               id="preg-method"
@@ -314,6 +318,12 @@ export function PregnancyPanel({
         </form>
       ) : (
         <>
+          <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-8">
+            <div className="grid gap-6">
+              <section className={elevatedCardClass}>
+          <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+            This week
+          </h2>
           <p className={leadClass}>
             Week {week} · EDD {preg.edd} (range {preg.eddEarly} – {preg.eddLate})
           </p>
@@ -334,8 +344,9 @@ export function PregnancyPanel({
               </li>
             </ul>
           ) : null}
+              </section>
 
-          <div className="grid gap-2">
+          <div className={elevatedCardClass}>
             <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
               Emergency
             </h2>
@@ -376,8 +387,9 @@ export function PregnancyPanel({
               />
             </Field>
           </div>
+            </div>
 
-          <form className={formStackClass} onSubmit={saveDay}>
+          <form className={`${elevatedCardClass} lg:sticky lg:top-8 lg:max-h-[calc(100dvh-var(--header-height)-4rem)] lg:overflow-y-auto`} onSubmit={saveDay}>
             <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
               Today’s log
             </h2>
@@ -614,8 +626,9 @@ export function PregnancyPanel({
               Save day
             </Button>
           </form>
+          </div>
 
-          <form className={formStackClass} onSubmit={addAppt}>
+          <form className={elevatedCardClass} onSubmit={addAppt}>
             <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
               Appointments
             </h2>

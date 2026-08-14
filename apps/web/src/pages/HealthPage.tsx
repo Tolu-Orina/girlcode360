@@ -2,13 +2,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   AppPage,
-  formStackClass,
+  elevatedCardClass,
   leadClass,
   listClass,
   listItemClass,
 } from "@/components/blocks/app-page";
 import { PageHeader } from "@/components/blocks/page-header";
-import { AskAlenaLink } from "@/components/blocks/ask-alena-link";
+import { HealthModuleNav, type HealthTab } from "@/components/blocks/health-module-nav";
+import { SymptomChipGroups } from "@/components/blocks/symptom-chip-groups";
 import { SheMatchBanner } from "@/components/blocks/shematch-banner";
 import {
   EmptyState,
@@ -18,10 +19,10 @@ import {
 } from "@/components/blocks/states";
 import { Chip } from "@/components/primitives/chip";
 import { Field, FieldInput, FieldSelect } from "@/components/primitives/field";
-import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
 import { PageTip } from "@/components/blocks/page-tip";
 import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
+import { useAlena } from "@/hooks/use-alena";
 import { useOnline } from "@/hooks/use-online";
 import type {
   BiometricLog,
@@ -59,6 +60,7 @@ import { WalletPanel } from "./WalletPanel";
 type Symptom = {
   id: string;
   label: string;
+  category?: string;
   surfaces?: Array<"cycle" | "pmos">;
 };
 
@@ -77,9 +79,10 @@ function todayYmd(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-type Tab = "pcos" | "pregnancy" | "ttc" | "wallet";
+type Tab = HealthTab;
 
 export function HealthPage() {
+  const { openAlena } = useAlena();
   const [tab, setTab] = useState<Tab>("pcos");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -357,15 +360,20 @@ export function HealthPage() {
     }
   }
 
+  const moduleOn: Record<Tab, boolean> = {
+    pcos: pmosOn,
+    pregnancy: profile?.modules.includes("pregnancy") ?? false,
+    ttc: profile?.modules.includes("ttc") ?? false,
+    wallet: profile?.modules.includes("wallet") ?? false,
+  };
+
   return (
-    <AppPage>
+    <AppPage className="lg:max-w-[var(--shell-max)] lg:gap-8">
       <PageHeader
-        eyebrow="Health"
-        title="Modules you opt into"
-        lead="Wellness tracking and education. Clinicians diagnose; we help you prepare."
+        title="Health"
+        lead="Opt-in modules for symptoms, pregnancy, fertility, and encrypted files. Clinicians diagnose. This page helps you prepare."
       />
       <PageTip id="health" />
-      <AskAlenaLink from="health" />
 
       {!online ? (
         <OfflineBanner message="You are offline. The PMOS diary still saves on this device. Medication reminders need a connection." />
@@ -373,24 +381,22 @@ export function HealthPage() {
       {error ? <ErrorBanner message={error} /> : null}
 
       {loading ? (
-        <div className="grid gap-4" aria-busy="true" aria-label="Loading health">
-          <SkeletonBlock className="h-12" />
-          <SkeletonBlock className="h-40" />
+        <div
+          className="grid gap-6 lg:grid-cols-[14rem_1fr]"
+          aria-busy="true"
+          aria-label="Loading health"
+        >
+          <SkeletonBlock className="hidden h-64 rounded-[var(--radius-sheet)] lg:block" />
+          <SkeletonBlock className="h-96 rounded-[var(--radius-sheet)]" />
         </div>
       ) : (
-        <>
-          <SegmentedTabs
-            ariaLabel="Health modules"
+        <div className="grid items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
+          <HealthModuleNav
             value={tab}
-            onChange={(id) => setTab(id as Tab)}
-            items={[
-              { id: "pcos", label: "PMOS" },
-              { id: "pregnancy", label: "Pregnancy" },
-              { id: "ttc", label: "TTC" },
-              { id: "wallet", label: "Wallet" },
-            ]}
+            onChange={setTab}
+            enabled={moduleOn}
           />
-
+          <div className="grid min-w-0 gap-6">
           {tab === "pcos" ? (
             !pmosOn ? (
               <EmptyState
@@ -412,338 +418,383 @@ export function HealthPage() {
                   <SheMatchBanner trigger="pcos_acne" />
                 ) : null}
                 {meds.length ? <SheMatchBanner trigger="medication_due" /> : null}
-                <form className={formStackClass} onSubmit={(e) => void saveDiary(e)}>
-                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-                    Symptom diary
-                  </h2>
-                  <p className={leadClass}>
-                    {PMOS_SYMPTOMS.length} wellness symptoms. Saves on this
-                    device first, then syncs with Cycle. Not a diagnosis.
-                    {diaryPending
-                      ? ` ${diaryPending} change(s) waiting to sync.`
-                      : ""}
-                  </p>
-                  <Field id="diary-date" label="Date">
-                    <FieldInput
-                      id="diary-date"
-                      type="date"
-                      value={diaryDate}
-                      onChange={(e) => setDiaryDate(e.target.value)}
-                    />
-                  </Field>
-                  <div className="flex flex-wrap gap-2">
-                    {PMOS_SYMPTOMS.map((s) => (
-                      <Chip
-                        key={s.id}
-                        pressed={diaryIds.includes(s.id)}
-                        onClick={() =>
-                          setDiaryIds((prev) =>
-                            prev.includes(s.id)
-                              ? prev.filter((x) => x !== s.id)
-                              : [...prev, s.id],
-                          )
-                        }
-                      >
-                        {s.label}
-                      </Chip>
-                    ))}
-                  </div>
-                  <Button type="submit" disabled={busy}>
-                    {busy ? "Saving…" : "Save diary"}
-                  </Button>
-                </form>
 
-                <section className="grid gap-4">
-                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-                    Insights
-                  </h2>
-                  <PredictionDisclaimer message={disclaimer} />
-                  <ul className={listClass}>
-                    {insights.map((i) => (
-                      <li key={i.id} className={listItemClass}>
-                        <strong className="block text-foreground">{i.title}</strong>
-                        <p className={leadClass}>{i.body}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-
-                <form className={formStackClass} onSubmit={saveBiometrics}>
-                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-                    Biometrics (optional)
-                  </h2>
-                  <p className={leadClass}>
-                    Weight, sleep, water, and stress — only if you want to. Skip
-                    any field.
-                  </p>
-                  <Field id="bio-date" label="Date">
-                    <FieldInput
-                      id="bio-date"
-                      type="date"
-                      value={bioDate}
-                      onChange={(e) => setBioDate(e.target.value)}
-                    />
-                  </Field>
-                  <Field id="weight" label="Weight (kg)">
-                    <FieldInput
-                      id="weight"
-                      type="number"
-                      step="0.1"
-                      min={20}
-                      max={300}
-                      value={weight}
-                      onChange={(e) => setWeight(e.target.value)}
-                    />
-                  </Field>
-                  <Field id="sleep" label="Sleep (hours)">
-                    <FieldInput
-                      id="sleep"
-                      type="number"
-                      step="0.5"
-                      min={0}
-                      max={24}
-                      value={sleep}
-                      onChange={(e) => setSleep(e.target.value)}
-                    />
-                  </Field>
-                  <Field id="water" label="Water (glasses)">
-                    <FieldInput
-                      id="water"
-                      type="number"
-                      min={0}
-                      max={20}
-                      value={water}
-                      onChange={(e) => setWater(e.target.value)}
-                    />
-                  </Field>
-                  <div className="grid gap-2">
-                    <p className="m-0 text-[length:var(--text-label)] font-medium">
-                      Stress (1–5)
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {([1, 2, 3, 4, 5] as const).map((n) => (
-                        <Chip
-                          key={n}
-                          pressed={stress === n}
-                          onClick={() => setStress(n)}
-                          className="w-12"
-                        >
-                          {n}
-                        </Chip>
-                      ))}
-                    </div>
-                  </div>
-                  <Button type="submit" disabled={busy}>
-                    Save biometrics
-                  </Button>
-                  {bios.length > 0 ? (
-                    <ul className={listClass}>
-                      {[...bios]
-                        .slice(-14)
-                        .reverse()
-                        .map((b) => (
-                          <li key={b.date} className={listItemClass}>
-                            {b.date}
-                            {b.weightKg != null ? ` · ${b.weightKg} kg` : ""}
-                            {b.sleepHours != null ? ` · ${b.sleepHours} h sleep` : ""}
-                            {b.stress != null ? ` · stress ${b.stress}` : ""}
-                          </li>
-                        ))}
-                    </ul>
-                  ) : (
-                    <p className={leadClass}>No biometric days yet.</p>
-                  )}
-                </form>
-
-                <section className="grid gap-4">
-                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-                    PMOS report
-                  </h2>
-                  <p className={leadClass}>
-                    A three-month wellness summary for a clinic visit. Not a
-                    diagnosis. Prep Card is the HealthLens appointment list.
-                  </p>
-                  <PredictionDisclaimer />
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy || !apiBaseUrl}
-                      onClick={() => {
-                        void (async () => {
-                          setBusy(true);
-                          try {
-                            const [{ cycles }, local] = await Promise.all([
-                              getCycles(),
-                              loadLocalState(),
-                            ]);
-                            const asOf = todayYmd();
-                            const from = new Date(`${asOf}T00:00:00Z`);
-                            from.setUTCDate(from.getUTCDate() - 90);
-                            const fromYmd = from.toISOString().slice(0, 10);
-                            const text = buildPmosHealthReport({
-                              market: profile?.market ?? "UK",
-                              cycles,
-                              symptomIds: local.days
-                                .filter(
-                                  (d) => d.date >= fromYmd && d.date <= asOf,
-                                )
-                                .flatMap((d) => d.symptomIds),
-                              biometrics: bios,
-                              insights,
-                              asOf,
-                            });
-                            downloadText(
-                              `girlcode360-pmos-report-${todayYmd()}.txt`,
-                              text,
-                            );
-                          } catch (err) {
-                            setError(
-                              err instanceof Error
-                                ? err.message
-                                : "Could not build report",
-                            );
-                          } finally {
-                            setBusy(false);
-                          }
-                        })();
-                      }}
-                    >
-                      Download PMOS report
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy || !apiBaseUrl}
-                      onClick={() => {
-                        void (async () => {
-                          setBusy(true);
-                          try {
-                            const card = await createPrepCard([]);
-                            downloadText(card.filename, card.text);
-                          } catch (err) {
-                            setError(
-                              err instanceof Error
-                                ? err.message
-                                : "Prep Card failed",
-                            );
-                          } finally {
-                            setBusy(false);
-                          }
-                        })();
-                      }}
-                    >
-                      Download Prep Card
-                    </Button>
-                  </div>
-                </section>
-
-                <form className={formStackClass} onSubmit={addMedication}>
-                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-                    Medication reminders
-                  </h2>
-                  <p className={leadClass}>
-                    {MED_HINT[profile?.market ?? "UK"]}
-                  </p>
-                  <Field id="med-name" label="Name">
-                    <FieldInput
-                      id="med-name"
-                      required
-                      value={medName}
-                      onChange={(e) => setMedName(e.target.value)}
-                    />
-                  </Field>
-                  <Field id="med-dose" label="Dosage">
-                    <FieldInput
-                      id="med-dose"
-                      value={medDose}
-                      onChange={(e) => setMedDose(e.target.value)}
-                    />
-                  </Field>
-                  <Field id="med-time" label="Time">
-                    <FieldInput
-                      id="med-time"
-                      type="time"
-                      required
-                      value={medTime}
-                      onChange={(e) => setMedTime(e.target.value)}
-                    />
-                  </Field>
-                  <Field id="med-freq" label="How often">
-                    <FieldSelect
-                      id="med-freq"
-                      value={medFreq}
-                      onChange={(e) =>
-                        setMedFreq(
-                          e.target.value as "daily" | "weekdays" | "custom",
+                <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.9fr)] lg:gap-8">
+                  <form
+                    className={`${elevatedCardClass} lg:sticky lg:top-8 lg:max-h-[calc(100dvh-var(--header-height)-4rem)] lg:overflow-y-auto`}
+                    onSubmit={(e) => void saveDiary(e)}
+                  >
+                    <header className="grid gap-1">
+                      <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+                        Symptom diary
+                      </h2>
+                      <p className={leadClass}>
+                        Saves on this device first, then syncs with Cycle. Not a
+                        diagnosis.
+                        {diaryPending
+                          ? ` ${diaryPending} change(s) waiting to sync.`
+                          : ""}
+                      </p>
+                    </header>
+                    <Field id="diary-date" label="Date">
+                      <FieldInput
+                        id="diary-date"
+                        type="date"
+                        value={diaryDate}
+                        onChange={(e) => setDiaryDate(e.target.value)}
+                      />
+                    </Field>
+                    <SymptomChipGroups
+                      symptoms={PMOS_SYMPTOMS}
+                      selected={diaryIds}
+                      onToggle={(id) =>
+                        setDiaryIds((prev) =>
+                          prev.includes(id)
+                            ? prev.filter((x) => x !== id)
+                            : [...prev, id],
                         )
                       }
+                    />
+                    <div className="grid gap-3 border-t border-border pt-4">
+                      <Button type="submit" disabled={busy}>
+                        {busy ? "Saving…" : "Save diary"}
+                      </Button>
+                      <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
+                        <button
+                          type="button"
+                          className="font-semibold text-primary underline underline-offset-2"
+                          onClick={() => openAlena({ from: "health" })}
+                        >
+                          Ask Alena
+                        </button>{" "}
+                        about this screen. Anonymous mode never sends your logs.
+                      </p>
+                    </div>
+                  </form>
+
+                  <div className="grid gap-6">
+                    <section className={elevatedCardClass}>
+                      <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                        Insights
+                      </h2>
+                      <PredictionDisclaimer message={disclaimer} />
+                      {insights.length ? (
+                        <ul className={listClass}>
+                          {insights.map((i) => (
+                            <li key={i.id} className={listItemClass}>
+                              <strong className="block text-foreground">
+                                {i.title}
+                              </strong>
+                              <p className={leadClass}>{i.body}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={leadClass}>
+                          Insights appear after enough diary and cycle history.
+                        </p>
+                      )}
+                    </section>
+
+                    <form
+                      className={elevatedCardClass}
+                      onSubmit={saveBiometrics}
                     >
-                      <option value="daily">Every day</option>
-                      <option value="weekdays">Weekdays</option>
-                      <option value="custom">Custom</option>
-                    </FieldSelect>
-                  </Field>
-                  <Button type="submit" disabled={busy}>
-                    Add reminder
-                  </Button>
-                </form>
-                <ul className={listClass}>
-                  {meds.map((m) => (
-                    <li key={m.id} className={listItemClass}>
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <strong className="block text-foreground">
-                            {m.name}
-                            {m.dosage ? ` · ${m.dosage}` : ""}
-                          </strong>
-                          <p className={leadClass}>
-                            {m.timeLocal} · {m.frequency}
+                      <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                        Biometrics
+                      </h2>
+                      <p className={leadClass}>
+                        Weight, sleep, water, and stress. Skip any field.
+                      </p>
+                      <Field id="bio-date" label="Date">
+                        <FieldInput
+                          id="bio-date"
+                          type="date"
+                          value={bioDate}
+                          onChange={(e) => setBioDate(e.target.value)}
+                        />
+                      </Field>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field id="weight" label="Weight (kg)">
+                          <FieldInput
+                            id="weight"
+                            type="number"
+                            step="0.1"
+                            min={20}
+                            max={300}
+                            value={weight}
+                            onChange={(e) => setWeight(e.target.value)}
+                          />
+                        </Field>
+                        <Field id="sleep" label="Sleep (hours)">
+                          <FieldInput
+                            id="sleep"
+                            type="number"
+                            step="0.5"
+                            min={0}
+                            max={24}
+                            value={sleep}
+                            onChange={(e) => setSleep(e.target.value)}
+                          />
+                        </Field>
+                        <Field id="water" label="Water (glasses)">
+                          <FieldInput
+                            id="water"
+                            type="number"
+                            min={0}
+                            max={20}
+                            value={water}
+                            onChange={(e) => setWater(e.target.value)}
+                          />
+                        </Field>
+                        <div className="grid gap-2">
+                          <p className="m-0 text-[length:var(--text-label)] font-medium">
+                            Stress (1 to 5)
                           </p>
+                          <div className="flex flex-wrap gap-2">
+                            {([1, 2, 3, 4, 5] as const).map((n) => (
+                              <Chip
+                                key={n}
+                                pressed={stress === n}
+                                onClick={() => setStress(n)}
+                                className="w-12"
+                              >
+                                {n}
+                              </Chip>
+                            ))}
+                          </div>
                         </div>
+                      </div>
+                      <Button type="submit" variant="outline" disabled={busy}>
+                        Save biometrics
+                      </Button>
+                      {bios.length > 0 ? (
+                        <ul className={listClass}>
+                          {[...bios]
+                            .slice(-8)
+                            .reverse()
+                            .map((b) => (
+                              <li key={b.date} className={listItemClass}>
+                                {b.date}
+                                {b.weightKg != null ? ` · ${b.weightKg} kg` : ""}
+                                {b.sleepHours != null
+                                  ? ` · ${b.sleepHours} h sleep`
+                                  : ""}
+                                {b.stress != null ? ` · stress ${b.stress}` : ""}
+                              </li>
+                            ))}
+                        </ul>
+                      ) : (
+                        <p className={leadClass}>No biometric days yet.</p>
+                      )}
+                    </form>
+
+                    <section className={elevatedCardClass}>
+                      <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                        Clinic visit
+                      </h2>
+                      <p className={leadClass}>
+                        A three-month wellness summary. Not a diagnosis. Prep
+                        Card is the HealthLens appointment list.
+                      </p>
+                      <PredictionDisclaimer />
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
-                          onClick={() => void removeMed(m.id)}
+                          disabled={busy || !apiBaseUrl}
+                          onClick={() => {
+                            void (async () => {
+                              setBusy(true);
+                              try {
+                                const [{ cycles }, local] = await Promise.all([
+                                  getCycles(),
+                                  loadLocalState(),
+                                ]);
+                                const asOf = todayYmd();
+                                const from = new Date(`${asOf}T00:00:00Z`);
+                                from.setUTCDate(from.getUTCDate() - 90);
+                                const fromYmd = from.toISOString().slice(0, 10);
+                                const text = buildPmosHealthReport({
+                                  market: profile?.market ?? "UK",
+                                  cycles,
+                                  symptomIds: local.days
+                                    .filter(
+                                      (d) => d.date >= fromYmd && d.date <= asOf,
+                                    )
+                                    .flatMap((d) => d.symptomIds),
+                                  biometrics: bios,
+                                  insights,
+                                  asOf,
+                                });
+                                downloadText(
+                                  `girlcode360-pmos-report-${todayYmd()}.txt`,
+                                  text,
+                                );
+                              } catch (err) {
+                                setError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Could not build report",
+                                );
+                              } finally {
+                                setBusy(false);
+                              }
+                            })();
+                          }}
                         >
-                          Remove
+                          Download PMOS report
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy || !apiBaseUrl}
+                          onClick={() => {
+                            void (async () => {
+                              setBusy(true);
+                              try {
+                                const card = await createPrepCard([]);
+                                downloadText(card.filename, card.text);
+                              } catch (err) {
+                                setError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : "Prep Card failed",
+                                );
+                              } finally {
+                                setBusy(false);
+                              }
+                            })();
+                          }}
+                        >
+                          Download Prep Card
                         </Button>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void enablePush()}
-                  disabled={busy}
-                >
-                  Enable generic push reminders
-                </Button>
+                    </section>
 
-                <section className="grid gap-4">
-                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-                    Education
-                  </h2>
-                  <p className={leadClass}>
-                    Full articles, review dates, and reporting live in Library.
-                  </p>
-                  <ul className={listClass}>
-                    {articles.map((a) => (
-                      <li key={a.id} className={listItemClass}>
-                        <strong className="block text-foreground">{a.title}</strong>
-                        <p className={leadClass}>{a.summary}</p>
-                        <Link
-                          className="mt-2 inline-flex min-h-[var(--tap)] items-center text-[length:var(--text-label)] font-semibold text-primary"
-                          to={`/app/library?id=${encodeURIComponent(a.id)}`}
+                    <form
+                      className={elevatedCardClass}
+                      onSubmit={addMedication}
+                    >
+                      <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                        Medication reminders
+                      </h2>
+                      <p className={leadClass}>
+                        {MED_HINT[profile?.market ?? "UK"]}
+                      </p>
+                      <Field id="med-name" label="Name">
+                        <FieldInput
+                          id="med-name"
+                          required
+                          value={medName}
+                          onChange={(e) => setMedName(e.target.value)}
+                        />
+                      </Field>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field id="med-dose" label="Dosage">
+                          <FieldInput
+                            id="med-dose"
+                            value={medDose}
+                            onChange={(e) => setMedDose(e.target.value)}
+                          />
+                        </Field>
+                        <Field id="med-time" label="Time">
+                          <FieldInput
+                            id="med-time"
+                            type="time"
+                            required
+                            value={medTime}
+                            onChange={(e) => setMedTime(e.target.value)}
+                          />
+                        </Field>
+                      </div>
+                      <Field id="med-freq" label="How often">
+                        <FieldSelect
+                          id="med-freq"
+                          value={medFreq}
+                          onChange={(e) =>
+                            setMedFreq(
+                              e.target.value as "daily" | "weekdays" | "custom",
+                            )
+                          }
                         >
-                          Open in Library
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                          <option value="daily">Every day</option>
+                          <option value="weekdays">Weekdays</option>
+                          <option value="custom">Custom</option>
+                        </FieldSelect>
+                      </Field>
+                      <Button type="submit" variant="outline" disabled={busy}>
+                        Add reminder
+                      </Button>
+                      {meds.length ? (
+                        <ul className={listClass}>
+                          {meds.map((m) => (
+                            <li key={m.id} className={listItemClass}>
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <strong className="block text-foreground">
+                                    {m.name}
+                                    {m.dosage ? ` · ${m.dosage}` : ""}
+                                  </strong>
+                                  <p className={leadClass}>
+                                    {m.timeLocal} · {m.frequency}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void removeMed(m.id)}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={leadClass}>No reminders yet.</p>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => void enablePush()}
+                        disabled={busy}
+                      >
+                        Enable generic push reminders
+                      </Button>
+                    </form>
+
+                    <section className={elevatedCardClass}>
+                      <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                        Education
+                      </h2>
+                      <p className={leadClass}>
+                        Full articles live in Library.
+                      </p>
+                      {articles.length ? (
+                        <ul className={listClass}>
+                          {articles.map((a) => (
+                            <li key={a.id} className={listItemClass}>
+                              <strong className="block text-foreground">
+                                {a.title}
+                              </strong>
+                              <p className={leadClass}>{a.summary}</p>
+                              <Link
+                                className="mt-2 inline-flex min-h-[var(--tap)] items-center text-[length:var(--text-label)] font-semibold text-primary"
+                                to={`/app/library?id=${encodeURIComponent(a.id)}`}
+                              >
+                                Open in Library
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={leadClass}>No articles loaded yet.</p>
+                      )}
+                    </section>
+                  </div>
+                </div>
               </div>
             )
           ) : null}
@@ -777,7 +828,8 @@ export function HealthPage() {
               setError={setError}
             />
           ) : null}
-        </>
+          </div>
+        </div>
       )}
     </AppPage>
   );

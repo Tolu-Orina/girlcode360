@@ -3,7 +3,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { RequireOnboarding } from "./components/RequireOnboarding";
 import { AppShell } from "./layout/AppShell";
 import { AccountPage } from "./pages/AccountPage";
-import { AlenaPage } from "./pages/AlenaPage";
+import { AlenaRoute } from "./pages/AlenaRoute";
 import { CommunityPage } from "./pages/CommunityPage";
 import { CyclePage } from "./pages/CyclePage";
 import { InboxPage } from "./pages/InboxPage";
@@ -62,7 +62,7 @@ export default function App() {
         <Route path="cycle" element={<CyclePage />} />
         <Route path="health" element={<HealthPage />} />
         <Route path="mirror" element={<MirrorPage />} />
-        <Route path="alena" element={<AlenaPage />} />
+        <Route path="alena" element={<AlenaRoute />} />
         <Route path="zara" element={<Navigate to="/app/alena" replace />} />
         <Route path="library" element={<LibraryPage />} />
         <Route path="community" element={<CommunityPage />} />

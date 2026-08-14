@@ -1,5 +1,5 @@
-import { useRef, type MouseEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
 import {
   motion,
   useMotionValue,
@@ -24,19 +24,19 @@ const CORE = [
     src: "/images/landing-wallet.png",
     alt: "Private paper records on a table",
     title: "Health Wallet",
-    body: "Labs, scripts, and scans stay encrypted on this device, and you control every share.",
+    body: "Keep labs, prescriptions and scans together. You choose when to share them.",
   },
   {
     src: "/images/period-tracker.jpg",
     alt: "Illustrated calendar with period days circled, next to pads, a menstrual cup, and a pill pack",
     title: "Cycle and PMOS",
-    body: "Log period days and PMOS without assuming a 28-day cycle. One optional module, not the whole product.",
+    body: "Track your cycle and hormonal patterns over time, without a one-size-fits-all calendar.",
   },
   {
     src: "/images/fashion-girlcode.jpg",
     alt: "Fashion and style editorial portrait",
     title: "Mirror",
-    body: "Face or full-body photos for skin scores and try-on, next to your cycle log. Not a diagnosis.",
+    body: "Understand your skin, hair and style in the same place as the rest of you. Not a diagnosis.",
   },
 ] as const;
 
@@ -45,13 +45,13 @@ const CITY = [
     src: "/images/beauty-clinic.webp",
     alt: "Beauty clinic waiting area with soft lighting",
     title: "Near you",
-    body: "Pharmacies, clinics, and beauty nearby from the logs you keep. The listings here are a sample, not live places.",
+    body: "When you know what you need, finding pharmacies, clinics and beauty nearby should be easier. Listings here are samples, not live places.",
   },
   {
     src: "/images/landing-alena.png",
     alt: "Woman journaling at a table",
     title: "Alena",
-    body: "Ask in plain language using the cycle, PMOS, and wallet context you allow. Alena will not diagnose.",
+    body: "Ask in plain language. Alena can use the health context you've already shared, so you don't start from scratch. She will not diagnose.",
   },
 ] as const;
 
@@ -61,21 +61,21 @@ const STEPS = [
     alt: "Woman smiling in soft light",
     n: "01",
     title: "Create your account",
-    body: "Use email, confirm you are 18 or older, then choose which optional tools to turn on.",
+    body: "Create your private space and choose what you want to share.",
   },
   {
     src: "/images/auth-panel-morning.png",
     alt: "Woman in morning light",
     n: "02",
-    title: "Choose your modules",
-    body: "Switch on Cycle, PMOS, Wallet, or Mirror in Account. Nothing extra appears until you do.",
+    title: "Choose what matters to you",
+    body: "Start with cycle, health, fertility, pregnancy or beauty. You don't have to use everything.",
   },
   {
     src: "/images/auth-panel-journal.png",
     alt: "Woman journaling",
     n: "03",
-    title: "Log and prepare",
-    body: "Save days as they happen, even offline, then generate a Prep Card of patterns. Not a diagnosis.",
+    title: "Keep moving",
+    body: "As your life changes, your context can move with you. You don't have to start over.",
   },
 ] as const;
 
@@ -173,8 +173,8 @@ function TiltStage({
 function MirrorGauge({ score }: { score: number }) {
   const reduce = useReducedMotion();
   return (
-    <div className="relative grid size-24 place-items-center">
-      <svg viewBox="0 0 36 36" className="size-24 -rotate-90" aria-hidden="true">
+    <div className="relative grid size-16 place-items-center lg:size-24">
+      <svg viewBox="0 0 36 36" className="size-16 -rotate-90 lg:size-24" aria-hidden="true">
         <circle cx="18" cy="18" r="15.5" fill="none" className="stroke-muted" strokeWidth="3" />
         <motion.circle
           cx="18"
@@ -323,6 +323,7 @@ export function LandingPage() {
   const desktop = useMediaQuery("(min-width: 1024px)");
   const text = rise(reduce);
   const heroRef = useRef<HTMLElement>(null);
+  const { hash } = useLocation();
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 100,
@@ -334,6 +335,15 @@ export function LandingPage() {
     offset: ["start start", "end start"],
   });
   const floatY = useTransform(heroProgress, [0, 1], ["0%", "14%"]);
+
+  useEffect(() => {
+    const id = hash.replace("#", "");
+    if (!id) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ block: "start" });
+    }, 40);
+    return () => window.clearTimeout(t);
+  }, [hash]);
 
   return (
     <div className="relative min-h-dvh bg-background text-foreground">
@@ -357,17 +367,17 @@ export function LandingPage() {
         <section
           id="hero"
           ref={heroRef}
-          className="relative py-16 lg:overflow-hidden lg:py-24"
+          className="relative py-8 lg:overflow-hidden lg:py-24"
           aria-labelledby="hero-heading"
         >
           <div
             className={cn(
-              "relative z-10 grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16",
+              "relative z-10 grid items-center gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16",
               marketingHeroPad,
             )}
           >
             <motion.div
-              className="grid gap-6"
+              className="order-2 grid gap-4 lg:order-1 lg:gap-6"
               initial="hidden"
               animate="show"
               variants={page}
@@ -377,23 +387,22 @@ export function LandingPage() {
                 className="m-0 max-w-[16ch] font-[family-name:var(--font-display)] text-[length:var(--text-hero)] font-bold tracking-tight text-foreground max-lg:text-[32px]"
                 variants={text}
               >
-                Your vault, your glow, your city — one ecosystem
+                Your life doesn't happen in silos. Neither should your wellness.
               </motion.h1>
               <motion.p
                 className="m-0 max-w-[44ch] text-[length:var(--text-body)] leading-relaxed text-foreground"
                 variants={text}
               >
-                GirlCode360 keeps a private health vault, Mirror for skin and
-                style, Alena for questions, and a city layer with pharmacies and
-                clinics nearby. Cycle and PMOS tracking is one optional tool,
-                not the whole product.
+                Your health, wellness and beauty are all part of the same life.
+                GirlCode360 brings them together, so the context you've already
+                shared can make what comes next more useful.
               </motion.p>
               <motion.p
                 className="m-0 max-w-[46ch] text-[length:var(--text-label)] leading-relaxed text-muted-foreground"
                 variants={text}
               >
-                Records stay in one place. Listings on this page are samples,
-                not live places.
+                You don't have to start over every time your life changes.
+                Listings on this page are samples, not live places.
               </motion.p>
               <motion.div className="mt-2 flex flex-wrap gap-3" variants={text}>
                 <Button
@@ -401,19 +410,19 @@ export function LandingPage() {
                   className="relative h-12 min-h-[var(--tap)] overflow-hidden rounded-full px-6 active:scale-[0.97]"
                 >
                   <Link to="/signup">
-                    Start free
+                    Create your account
                     <ShineSweep />
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="h-12 min-h-[var(--tap)] rounded-full px-6">
-                  <Link to="/signin">I already have an account</Link>
+                  <a href="#how">See how it works</a>
                 </Button>
               </motion.div>
               <motion.ul
-                className="m-0 mt-2 flex list-none flex-wrap gap-x-6 gap-y-2 p-0 text-[length:var(--text-caption)] font-semibold text-primary"
+                className="m-0 mt-2 flex list-none flex-wrap gap-x-6 gap-y-2 p-0 text-[length:var(--text-caption)] font-semibold text-grey"
                 variants={text}
               >
-                {["Private by default", "On-device encryption", "You control every share"].map(
+                {["Private by design", "You control what you share", "Your information stays yours"].map(
                   (t) => (
                     <motion.li
                       key={t}
@@ -430,28 +439,44 @@ export function LandingPage() {
 
             <TiltStage
               reduce={reduce || !desktop}
-              className="relative flex flex-col gap-4 lg:block lg:h-[520px]"
+              className="relative order-1 h-[15.5rem] lg:order-2 lg:h-[520px]"
             >
               <motion.div
-                className="relative lg:absolute lg:inset-0"
+                className="absolute inset-0"
                 style={reduce || !desktop ? undefined : { y: floatY }}
                 aria-hidden="true"
               >
                 <motion.div
-                  className="relative z-[1] w-full shadow-[var(--shadow-modal)] lg:absolute lg:top-[6%] lg:right-0 lg:w-[78%] lg:rotate-[4deg]"
+                  className="absolute top-[4%] right-0 z-[1] w-[68%] rotate-[4deg] shadow-[var(--shadow-modal)] lg:top-[6%] lg:w-[78%]"
                   initial={reduce ? false : { opacity: 0, x: 32 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.8, ease: easeOut, delay: 0.15 }}
+                  animate={
+                    reduce
+                      ? { opacity: 1, y: 0 }
+                      : { opacity: 1, y: [0, -10, 0] }
+                  }
+                  transition={
+                    reduce
+                      ? { duration: 0.15 }
+                      : {
+                          opacity: { duration: 0.7, ease: easeOut, delay: 0.15 },
+                          y: {
+                            duration: 6,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                            delay: 0.4,
+                          },
+                        }
+                  }
                   whileHover={reduce || !desktop ? undefined : { rotate: 2, scale: 1.03 }}
                 >
                   <GlowFrame
                     delay={0.2}
-                    innerClassName="bg-[image:var(--hero-card-fill)] p-4"
+                    innerClassName="bg-[image:var(--hero-card-fill)] p-3 lg:p-4"
                   >
                   <h2 className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-label)] font-bold text-foreground">
                     Near you
                   </h2>
-                  <ul className="mt-4 m-0 grid list-none gap-3 p-0">
+                  <ul className="mt-2 m-0 grid list-none gap-2 p-0 lg:mt-4 lg:gap-3">
                     {[
                       {
                         logo: "/boots-800x800.png",
@@ -461,7 +486,7 @@ export function LandingPage() {
                       {
                         logo: "/glam-boutique.webp",
                         title: "Glama Boutique, 0.6 mi",
-                        sub: "Try-on eligible",
+                        sub: "Style nearby",
                       },
                       {
                         logo: "/clinic.jpg",
@@ -471,12 +496,15 @@ export function LandingPage() {
                     ].map(({ logo, title, sub }, i) => (
                       <motion.li
                         key={title}
-                        className="flex items-center gap-3"
+                        className={cn(
+                          "flex items-center gap-3",
+                          i === 2 && "max-lg:hidden",
+                        )}
                         initial={reduce ? false : { opacity: 0, x: 12 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.35 + i * 0.08, duration: 0.45, ease: easeOut }}
                       >
-                        <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-[var(--radius)] bg-white ring-1 ring-border">
+                        <span className="grid size-7 shrink-0 place-items-center overflow-hidden rounded-[var(--radius)] bg-white ring-1 ring-border lg:size-9">
                           <img
                             src={logo}
                             alt=""
@@ -499,44 +527,29 @@ export function LandingPage() {
                 </motion.div>
 
                 <motion.div
-                  className="relative z-[2] mt-4 w-full touch-pan-y shadow-[var(--shadow-modal)] lg:absolute lg:bottom-0 lg:left-0 lg:mt-0 lg:w-[88%]"
-                  initial={reduce ? false : { opacity: 0, y: 36 }}
-                  animate={
-                    reduce || !desktop
-                      ? { opacity: 1, y: 0 }
-                      : { opacity: 1, y: [0, -12, 0] }
-                  }
-                  transition={
-                    reduce
-                      ? { duration: 0.15 }
-                      : {
-                          opacity: { duration: 0.7, ease: easeOut, delay: 0.25 },
-                          y: {
-                            duration: 6,
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                            delay: 0.8,
-                          },
-                        }
-                  }
+                  className="absolute bottom-0 left-0 z-[2] w-[72%] shadow-[var(--shadow-modal)] lg:w-[88%]"
+                  initial={reduce ? false : { opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, ease: easeOut, delay: 0.2 }}
                 >
                   <GlowFrame
                     delay={0.8}
-                    innerClassName="bg-[image:var(--hero-card-fill)] p-6"
+                    spin={desktop}
+                    innerClassName="bg-[image:var(--hero-card-fill)] p-3 lg:p-6"
                   >
-                  <h2 className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-sub)] text-foreground">
+                  <h2 className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-label)] text-foreground lg:text-[length:var(--text-sub)]">
                     Mirror
                   </h2>
-                  <div className="mt-4 flex items-center gap-4">
+                  <div className="mt-2 flex items-center gap-3 lg:mt-4 lg:gap-4">
                     <MirrorGauge score={82} />
-                    <div className="grid min-w-0 flex-1 gap-3">
+                    <div className="grid min-w-0 flex-1 gap-2 lg:gap-3">
                       <MotionScoreBar label="Hydration" value={78} />
                       <MotionScoreBar label="Radiance" value={85} />
                       <MotionScoreBar label="Acne" value={14} />
                     </div>
                   </div>
-                  <p className="mt-4 mb-0 text-[length:var(--text-caption)] text-muted-foreground">
-                    Scanned today · private, never shared · linked to your cycle
+                  <p className="mt-4 mb-0 hidden text-[length:var(--text-caption)] text-muted-foreground lg:block">
+                    Your look, with the cycle context you've chosen to share
                   </p>
                   </GlowFrame>
                 </motion.div>
@@ -562,14 +575,14 @@ export function LandingPage() {
               className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-section)] text-foreground"
               variants={text}
             >
-              Vault, cycle, glow
+              One life. One connected picture.
             </motion.h2>
             <motion.p
               className="m-0 max-w-[40rem] text-[length:var(--text-body)] text-muted-foreground"
               variants={text}
             >
-              Three tools you can use today. Each one has a job. None of them
-              diagnose.
+              Different moments. Different needs. One you. None of this is a
+              diagnosis.
             </motion.p>
           </motion.div>
           <CardGrid cols="md:grid-cols-3" reduce={reduce}>
@@ -608,8 +621,8 @@ export function LandingPage() {
                 className="m-0 max-w-[40rem] text-[length:var(--text-body)] text-muted-foreground"
                 variants={text}
               >
-                Three steps. Finish one before the next. You can change modules
-                later.
+                You choose what you share. GirlCode360 builds your experience
+                around it.
               </motion.p>
             </motion.div>
             <CardGrid cols="md:grid-cols-3" reduce={reduce}>
@@ -647,14 +660,14 @@ export function LandingPage() {
               className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-section)] text-foreground"
               variants={text}
             >
-              City and companion
+              From knowing to doing
             </motion.h2>
             <motion.p
               className="m-0 max-w-[40rem] text-[length:var(--text-body)] text-muted-foreground"
               variants={text}
             >
-              Nearby care is the later layer. Alena is here now, on the logs
-              you allow.
+              Find what you need nearby, and ask Alena without explaining
+              yourself from scratch.
             </motion.p>
           </motion.div>
           <CardGrid cols="md:grid-cols-2" reduce={reduce}>

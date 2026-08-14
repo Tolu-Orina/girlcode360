@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   formStackClass,
+  elevatedCardClass,
   leadClass,
   listClass,
   listItemClass,
@@ -440,7 +441,7 @@ export function WalletPanel({
 
   if (!unlocked) {
     return (
-      <form className={formStackClass} onSubmit={unlock}>
+      <form className={elevatedCardClass} onSubmit={unlock}>
         <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
           Unlock vault
         </h2>
@@ -468,17 +469,16 @@ export function WalletPanel({
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-2">
+      <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-8">
+      <div className="grid gap-6">
+      <form className={elevatedCardClass} onSubmit={(e) => void upload(e)}>
         <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-          Health Wallet
+          Add a file
         </h2>
         <p className={leadClass}>
           Upload PDF, JPG, or PNG (max {MAX_MB}MB). Files are encrypted before
           upload. Deleted files are purged from backups within 30 days.
         </p>
-      </div>
-
-      <form className={formStackClass} onSubmit={(e) => void upload(e)}>
         <Field id="wallet-file" label="File">
           <FieldInput
             id="wallet-file"
@@ -539,7 +539,13 @@ export function WalletPanel({
           <p className={leadClass}>Upload needs a connection.</p>
         ) : null}
       </form>
+      </div>
 
+      <div className="grid gap-6">
+      <section className={elevatedCardClass}>
+        <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+          Files
+        </h2>
       <div className="flex flex-wrap gap-2">
         <Chip pressed={filter === "all"} onClick={() => setFilter("all")}>
           All
@@ -572,7 +578,7 @@ export function WalletPanel({
           body="Try another filter, or upload a file into this category."
         />
       ) : (
-        <ul className={cn(listClass, "rounded-[var(--radius)] border border-border bg-card px-4")}>
+        <ul className={cn(listClass)}>
           {visible.map((d) => (
             <li key={d.id} className={listItemClass}>
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -672,8 +678,11 @@ export function WalletPanel({
           <code className="break-all text-foreground">{shareLink}</code>
         </p>
       ) : null}
+      </section>
+      </div>
+      </div>
 
-      <section className="grid gap-3">
+      <section className={elevatedCardClass}>
         <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
           Medication reminders
         </h2>
@@ -793,7 +802,7 @@ export function WalletPanel({
       </section>
 
       {viewerUrl ? (
-        <div className="grid gap-4 rounded-[var(--radius)] border border-border bg-card p-4">
+        <div className={elevatedCardClass}>
           <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
             Viewer: {viewerName}
           </h2>

@@ -7,7 +7,7 @@ import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { formStackClass, leadClass, listClass, listItemClass } from "@/components/blocks/app-page";
+import { elevatedCardClass, leadClass, listClass, listItemClass } from "@/components/blocks/app-page";
 import type {
   ContentArticle,
   FertileWindowResponse,
@@ -259,11 +259,15 @@ export function TtcPanel({
 
   return (
     <div className="grid gap-6">
-      <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-        Trying to conceive
-      </h2>
       {!active ? (
-        <form className={formStackClass} onSubmit={start}>
+        <form className={elevatedCardClass} onSubmit={start}>
+          <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+            Start TTC timeline
+          </h2>
+          <p className={leadClass}>
+            Fertile-window estimates overlay your cycle calendar. Log BBT and
+            mucus only if you want to.
+          </p>
           <Field id="ttc-start" label="When did you start trying?">
             <FieldInput
               id="ttc-start"
@@ -279,6 +283,12 @@ export function TtcPanel({
         </form>
       ) : (
         <>
+          <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-8">
+            <div className="grid gap-6">
+              <section className={elevatedCardClass}>
+          <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+            Timeline
+          </h2>
           <p className={leadClass}>
             Month {months} on your timeline
             {prompt ? ` · ${prompt}` : ""}
@@ -322,8 +332,10 @@ export function TtcPanel({
               ))}
             </ul>
           ) : null}
+              </section>
+            </div>
 
-          <form className={formStackClass} onSubmit={saveDay}>
+          <form className={`${elevatedCardClass} lg:sticky lg:top-8 lg:max-h-[calc(100dvh-var(--header-height)-4rem)] lg:overflow-y-auto`} onSubmit={saveDay}>
             <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
               Today’s fertility signs
             </h2>
@@ -410,6 +422,7 @@ export function TtcPanel({
               Delete today’s intimacy log
             </Button>
           </form>
+          </div>
         </>
       )}
     </div>

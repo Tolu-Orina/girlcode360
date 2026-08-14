@@ -28,14 +28,16 @@ export function SegmentedTabs({
   value,
   onChange,
   ariaLabel,
+  className,
 }: {
   items: SegmentedTabItem[];
   value: string;
   onChange: (id: string) => void;
   ariaLabel: string;
+  className?: string;
 }) {
   return (
-    <div className={tabList()} role="tablist" aria-label={ariaLabel}>
+    <div className={cn(tabList(), className)} role="tablist" aria-label={ariaLabel}>
       {items.map((item) => {
         const active = item.id === value;
         return (

@@ -14,7 +14,9 @@ import {
   pollTask,
   requestYoucamFileDeletion,
   startMakeupTransfer,
+  startMakeupVto,
   startShadeFinder,
+  type YoucamCapability,
   unpackYoucamIds,
   uploadYoucamFile,
 } from "../lib/youcam";
@@ -209,7 +211,7 @@ async function settleMakeupLook(
 ): Promise<MakeupLookRecord | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollTask("makeup-transfer", row.youcamTaskId);
+    const task = await pollTask(makeupCapability(row.sourceKind), row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as const };
@@ -239,31 +241,32 @@ async function settleMakeupLook(
   }
 }
 
+function makeupCapability(kind: "live" | "photo" | "transfer"): YoucamCapability {
+  return kind === "transfer" ? "mu-transfer" : "makeup-vto";
+}
+
 async function resolveFaceFileId(
   sub: string,
-  opts: { scanId?: string; imageB64?: string },
+  opts: { scanId?: string; imageB64?: string; uploadKind: YoucamCapability },
 ): Promise<{ fileId: string; scanId: string | null }> {
   const scan = await getStudioScanRef(sub, opts.scanId);
-  if (scan && skinScanReusableForShade(scan.createdAt)) {
-    const packed = unpackYoucamIds(scan.youcamTaskId).fileId;
-    if (packed) return { fileId: packed, scanId: scan.id };
-    if (scan.sourceS3Key) {
-      const bytes = await getObject(scan.sourceS3Key);
-      if (bytes) {
-        const fileId = await uploadYoucamFile(
-          "makeup-transfer",
-          bytes,
-          "image/jpeg",
-          `studio-${Date.now()}.jpg`,
-        );
-        return { fileId, scanId: scan.id };
-      }
+  // Skin-analysis file_ids are not valid for makeup-vto / mu-transfer.
+  if (scan && skinScanReusableForShade(scan.createdAt) && scan.sourceS3Key) {
+    const bytes = await getObject(scan.sourceS3Key);
+    if (bytes) {
+      const fileId = await uploadYoucamFile(
+        opts.uploadKind,
+        bytes,
+        "image/jpeg",
+        `studio-${Date.now()}.jpg`,
+      );
+      return { fileId, scanId: scan.id };
     }
   }
   if (!opts.imageB64) throw new Error("STUDIO_FACE_REQUIRED");
   const { bytes, contentType } = decodeImage(opts.imageB64);
   const fileId = await uploadYoucamFile(
-    "makeup-transfer",
+    opts.uploadKind,
     bytes,
     contentType,
     `studio-${Date.now()}.jpg`,
@@ -282,29 +285,33 @@ export async function createMakeupLook(
   },
 ): Promise<MakeupLook> {
   const categories = parseMakeupCategories(opts.categories) as StudioMakeupCategory[];
+  const uploadKind = makeupCapability(opts.sourceKind);
   const face = await resolveFaceFileId(sub, {
     scanId: opts.scanId,
     imageB64: opts.imageB64,
+    uploadKind,
   });
-  let referenceFileId: string | undefined;
+  let vendorTaskId: string;
   if (opts.sourceKind === "transfer") {
     if (!opts.referenceB64) throw new Error("STUDIO_REFERENCE_REQUIRED");
     const ref = decodeImage(opts.referenceB64);
-    referenceFileId = await uploadYoucamFile(
-      "makeup-transfer",
+    const referenceFileId = await uploadYoucamFile(
+      "mu-transfer",
       ref.bytes,
       ref.contentType,
       `look-ref-${Date.now()}.jpg`,
     );
-  }
-  const taskId = packYoucamIds(
-    await startMakeupTransfer({
+    vendorTaskId = await startMakeupTransfer({
+      srcFileId: face.fileId,
+      referenceFileId,
+    });
+  } else {
+    vendorTaskId = await startMakeupVto({
       srcFileId: face.fileId,
       makeupCategories: categories,
-      referenceFileId,
-    }),
-    face.fileId,
-  );
+    });
+  }
+  const taskId = packYoucamIds(vendorTaskId, face.fileId);
   const id = crypto.randomUUID();
   const row: MakeupLookRecord = {
     id,
@@ -330,8 +337,8 @@ export async function createShadeMatch(
   if (!scan || !skinScanReusableForShade(scan.createdAt)) {
     throw new Error("STUDIO_SCAN_REQUIRED");
   }
-  let fileId = unpackYoucamIds(scan.youcamTaskId).fileId;
-  if (!fileId && scan.sourceS3Key) {
+  let fileId: string | null = null;
+  if (scan.sourceS3Key) {
     const bytes = await getObject(scan.sourceS3Key);
     if (bytes) {
       fileId = await uploadYoucamFile(

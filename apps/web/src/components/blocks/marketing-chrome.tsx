@@ -76,34 +76,72 @@ function useLandingSection() {
   return section;
 }
 
+function scrollToLandingId(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.history.pushState(null, "", `/#${id}`);
+}
+
 function NavItem({
   href,
   label,
   active,
   reduce,
   inkId,
+  onNavigate,
 }: {
   href: string;
   label: string;
   active: boolean;
   reduce: boolean | null;
   inkId: string;
+  onNavigate?: () => void;
 }) {
-  return (
-    <Link
-      to={href}
-      className={cn(navLink, navFocus, active && "text-foreground")}
-    >
-      {label}
-      {active && !reduce ? (
+  const { pathname } = useLocation();
+  const hashId = href.startsWith("/#") ? href.slice(2) : null;
+
+  function ink() {
+    if (active && !reduce) {
+      return (
         <motion.span
           layoutId={inkId}
           className="absolute inset-x-0 -bottom-1 h-0.5 rounded-full bg-primary"
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         />
-      ) : active ? (
-        <span className="absolute inset-x-0 -bottom-1 h-0.5 rounded-full bg-primary" />
-      ) : null}
+      );
+    }
+    if (active) {
+      return <span className="absolute inset-x-0 -bottom-1 h-0.5 rounded-full bg-primary" />;
+    }
+    return null;
+  }
+
+  if (hashId && pathname === "/") {
+    return (
+      <a
+        href={`#${hashId}`}
+        className={cn(navLink, navFocus, active && "text-foreground")}
+        onClick={(e) => {
+          e.preventDefault();
+          scrollToLandingId(hashId);
+          onNavigate?.();
+        }}
+      >
+        {label}
+        {ink()}
+      </a>
+    );
+  }
+
+  return (
+    <Link
+      to={href}
+      className={cn(navLink, navFocus, active && "text-foreground")}
+      onClick={onNavigate}
+    >
+      {label}
+      {ink()}
     </Link>
   );
 }
@@ -217,10 +255,10 @@ export function MarketingHeader() {
           <Button
             asChild
             size="sm"
-            className="relative overflow-hidden rounded-full px-4 active:scale-[0.97]"
+            className="relative hidden overflow-hidden rounded-full px-4 active:scale-[0.97] lg:inline-flex"
           >
             <Link to="/signup">
-              Start free
+              Create account
               <ShineSweep />
             </Link>
           </Button>
@@ -279,20 +317,40 @@ export function MarketingHeader() {
               >
                 {LANDING_LINKS.map(([href, label, id]) => {
                   const active = section === id;
+                  const hashId = href.startsWith("/#") ? href.slice(2) : null;
                   return (
                     <motion.div key={href} variants={item}>
-                      <Link
-                        to={href}
-                        className={cn(
-                          "inline-flex min-h-12 items-center font-[family-name:var(--font-display)] text-[length:var(--text-page)] font-semibold no-underline",
-                          navFocus,
-                          "rounded-[var(--radius)]",
-                          active ? "text-primary" : "text-foreground",
-                        )}
-                        onClick={() => setOpen(false)}
-                      >
-                        {label}
-                      </Link>
+                      {hashId ? (
+                        <a
+                          href={`#${hashId}`}
+                          className={cn(
+                            "inline-flex min-h-12 items-center font-[family-name:var(--font-display)] text-[length:var(--text-page)] font-semibold no-underline",
+                            navFocus,
+                            "rounded-[var(--radius)]",
+                            active ? "text-primary" : "text-foreground",
+                          )}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setOpen(false);
+                            window.setTimeout(() => scrollToLandingId(hashId), 50);
+                          }}
+                        >
+                          {label}
+                        </a>
+                      ) : (
+                        <Link
+                          to={href}
+                          className={cn(
+                            "inline-flex min-h-12 items-center font-[family-name:var(--font-display)] text-[length:var(--text-page)] font-semibold no-underline",
+                            navFocus,
+                            "rounded-[var(--radius)]",
+                            active ? "text-primary" : "text-foreground",
+                          )}
+                          onClick={() => setOpen(false)}
+                        >
+                          {label}
+                        </Link>
+                      )}
                     </motion.div>
                   );
                 })}

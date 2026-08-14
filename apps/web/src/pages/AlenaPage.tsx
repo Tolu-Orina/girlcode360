@@ -1,15 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ActionRow,
   AppPage,
-  formStackClass,
   leadClass,
   listClass,
   listItemClass,
-  outlinedCardClass,
 } from "@/components/blocks/app-page";
-import { PageHeader } from "@/components/blocks/page-header";
+import { AlenaComposer } from "@/components/blocks/alena-composer";
 import { AlenaMarkdown } from "@/components/blocks/alena-markdown";
 import {
   EmptyState,
@@ -17,12 +15,8 @@ import {
   OfflineBanner,
   SkeletonBlock,
 } from "@/components/blocks/states";
-import { FieldSelect, FieldTextarea } from "@/components/primitives/field";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
-import { PageTip } from "@/components/blocks/page-tip";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { useOnline } from "@/hooks/use-online";
 import { cn } from "@/lib/utils";
 import type {
@@ -43,11 +37,11 @@ import {
   getMe,
   getAlenaQuota,
   postAlenaChat,
-  setHealthLensPopulationConsent,
 } from "../lib/api";
 import { track } from "../lib/analytics";
 import { apiBaseUrl } from "../lib/config";
 import { getSessionOrigin } from "@/lib/session-geo";
+import { useAlena } from "@/hooks/use-alena";
 
 type ChatMsg = { role: "user" | "assistant"; text: string; crisis?: boolean };
 
@@ -75,14 +69,6 @@ function readStoredMode(): AlenaMode | null {
   return null;
 }
 
-function writeStoredMode(mode: AlenaMode) {
-  try {
-    localStorage.setItem(MODE_KEY, mode);
-  } catch {
-    /* ignore */
-  }
-}
-
 function openedFromParam(
   raw: string | null,
 ): "cycle" | "health" | "mirror" | "home" | "library" | undefined {
@@ -106,15 +92,16 @@ function moduleHintFor(
   return undefined;
 }
 
-export function AlenaPage() {
+export function AlenaPage({ embedded = false }: { embedded?: boolean }) {
+  const alena = useAlena();
   const [params] = useSearchParams();
-  const openedFrom = openedFromParam(params.get("from"));
+  const openedFrom =
+    alena.opts.from ?? openedFromParam(params.get("from"));
   const [panel, setPanel] = useState<Panel>(
-    params.get("panel") === "lens" ? "lens" : "chat",
+    alena.opts.panel ?? (params.get("panel") === "lens" ? "lens" : "chat"),
   );
   const stored = readStoredMode();
-  const [mode, setMode] = useState<AlenaMode>(stored ?? "context");
-  const [modeChosen, setModeChosen] = useState(stored != null);
+  const [mode] = useState<AlenaMode>(stored ?? "context");
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [quota, setQuota] = useState<{
@@ -142,7 +129,7 @@ export function AlenaPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const ask = params.get("ask");
+    const ask = alena.opts.ask ?? params.get("ask");
     if (ask === "report") {
       setPanel("chat");
       setInput(
@@ -153,7 +140,8 @@ export function AlenaPage() {
       setPanel("chat");
       setInput("What should I wear today?");
     }
-  }, [params]);
+    if (alena.opts.panel) setPanel(alena.opts.panel);
+  }, [params, alena.opts.ask, alena.opts.panel]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -216,8 +204,7 @@ export function AlenaPage() {
     };
   }, []);
 
-  async function onSend(e: FormEvent) {
-    e.preventDefault();
+  async function sendMessage() {
     const message = input.trim();
     if (!message || busy) return;
     setError(null);
@@ -361,18 +348,6 @@ export function AlenaPage() {
     }
   }
 
-  async function onPopulationToggle(granted: boolean) {
-    setBusy(true);
-    try {
-      const res = await setHealthLensPopulationConsent(granted);
-      setHlStatus(res.status);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save preference");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const quotaLabel =
     quota?.limit == null
       ? "Premium · unlimited"
@@ -384,15 +359,16 @@ export function AlenaPage() {
     if (showPaywall) track({ name: "paywall_shown", props: { surface: "alena" } });
   }, [showPaywall]);
 
-  return (
-    <AppPage>
-      <PageHeader
-        eyebrow="Alena"
-        title="Ask Alena"
-        lead="Wellness guidance from Amazon Nova. Never a diagnosis. Help for clinician conversations."
-      />
-      <PageTip id="alena" />
+  const composerOff =
+    busy || showPaywall || !online || alenaConsent === false;
 
+  const prompts = [
+    "What should I wear today?",
+    "Help me talk to my clinician.",
+  ];
+
+  const chrome = (
+    <div className="grid gap-3">
       {!online ? (
         <OfflineBanner message="You are offline. Send is paused until you reconnect." />
       ) : null}
@@ -408,353 +384,205 @@ export function AlenaPage() {
           }
         />
       ) : null}
-
+      {alenaConsent === false ? (
+        <ErrorBanner message="Alena needs consent in Account before chat." />
+      ) : null}
       <SegmentedTabs
         ariaLabel="Alena panels"
         value={panel}
         onChange={(id) => setPanel(id as Panel)}
+        className="border-0 bg-card shadow-[var(--shadow-2)]"
         items={[
           { id: "chat", label: "Chat" },
           { id: "lens", label: "HealthLens" },
         ]}
       />
+    </div>
+  );
 
-      {panel === "chat" ? (
-        <div className="grid gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <FieldSelect
-              aria-label="Chat mode"
-              value={mode}
-              onChange={(e) => {
-                const next = e.target.value as AlenaMode;
-                setMode(next);
-                writeStoredMode(next);
-                setModeChosen(true);
-              }}
-              className="max-w-xs"
-            >
-              <option value="context">Context (uses your logs)</option>
-              <option value="anonymous">Anonymous</option>
-            </FieldSelect>
-            {quotaLoading ? (
-              <SkeletonBlock className="h-8 w-40" />
-            ) : (
-              <span className="text-[length:var(--text-caption)] text-muted-foreground">
-                {quotaLabel}
-              </span>
-            )}
-          </div>
-
-          {showPaywall ? (
-            <EmptyState
-              title="Free chats used up today"
-              body="Premium unlocks unlimited conversations."
-              action={
-                <Button asChild variant="outline">
-                  <Link to="/app/account">View Premium plans</Link>
-                </Button>
-              }
-            />
-          ) : null}
-
-          {!modeChosen ? (
-            <div className={cn(outlinedCardClass, "grid gap-3")}>
-              <h2 className="m-0 text-[length:var(--text-sub)]">
-                How should Alena answer?
-              </h2>
-              <p className={leadClass}>
-                Context uses a short, nameless summary of your logs. Anonymous
-                answers general questions only.
-              </p>
-              <ActionRow>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setMode("context");
-                    writeStoredMode("context");
-                    setModeChosen(true);
-                  }}
-                >
-                  Use my logs
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setMode("anonymous");
-                    writeStoredMode("anonymous");
-                    setModeChosen(true);
-                  }}
-                >
-                  Stay anonymous
-                </Button>
-              </ActionRow>
-            </div>
-          ) : null}
-
-          {alenaConsent === false ? (
-            <ErrorBanner message="Alena needs consent in Account before chat — including anonymous mode, which still uses the model." />
-          ) : null}
-
-          {openedFrom ? (
-            <p className={leadClass}>
-              Opened from {openedFrom}. Context mode may include a short hint
-              from that screen — never photos or names.
-            </p>
-          ) : null}
-
-          <div className="grid gap-3">
-            <FieldSelect
-              aria-label="Session climate"
-              value={climate}
-              onChange={(e) =>
-                setClimate(
-                  e.target.value as (typeof WARDROBE_CLIMATES)[number],
-                )
-              }
-              className="max-w-xs"
-            >
-              {WARDROBE_CLIMATES.map((c) => (
-                <option key={c} value={c}>
-                  Climate: {c} (not live weather)
-                </option>
-              ))}
-            </FieldSelect>
-            <ActionRow>
-              <Button
+  const chatThread = (
+    <div className="grid gap-3" aria-live="polite">
+      {showPaywall ? (
+        <EmptyState
+          title="Free chats used up today"
+          body="Premium unlocks unlimited conversations."
+          action={
+            <Button asChild variant="outline">
+              <Link to="/app/account">View Premium plans</Link>
+            </Button>
+          }
+        />
+      ) : null}
+      {msgs.length === 0 && !showPaywall ? (
+        <div className="grid gap-3 py-8">
+          <p className="m-0 text-center text-[length:var(--text-body)] text-muted-foreground">
+            Ask about your cycle, what to wear, or how to talk to a clinician.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {prompts.map((p) => (
+              <button
+                key={p}
                 type="button"
-                variant="outline"
-                disabled={busy || showPaywall || !online}
-                onClick={() => setInput("What should I wear today?")}
+                className="min-h-12 rounded-full bg-muted px-4 text-[length:var(--text-label)] font-semibold text-foreground"
+                onClick={() => setInput(p)}
               >
-                What should I wear today?
-              </Button>
-            </ActionRow>
-          </div>
-
-          <div
-            className="grid max-h-[min(58dvh,560px)] min-h-[min(36dvh,280px)] gap-3 overflow-y-auto rounded-[var(--radius)] border border-border bg-card p-4"
-            aria-live="polite"
-          >
-            {msgs.length === 0 ? (
-              <EmptyState
-                title="Ask Alena"
-                body="Ask about symptoms, cycles, what to wear from your closet, or how to talk to your clinician."
-              />
-            ) : null}
-            {msgs.map((m, i) => (
-              <div
-                key={`${i}-${m.role}`}
-                className={cn(
-                  "max-w-[92%] rounded-[var(--radius)] px-4 py-3",
-                  m.role === "user"
-                    ? "justify-self-end bg-primary text-primary-foreground"
-                    : "justify-self-start bg-muted text-foreground",
-                  m.crisis && "outline outline-2 outline-destructive",
-                )}
-              >
-                {m.role === "assistant" ? (
-                  <AlenaMarkdown text={m.text} />
-                ) : (
-                  <p className="m-0 text-[length:var(--text-body)] leading-normal whitespace-pre-wrap">
-                    {m.text}
-                  </p>
-                )}
-                {m.crisis ? (
-                  <ul className="mt-3 grid list-none gap-1 p-0">
-                    {EMERGENCY_BY_MARKET[market].map((n) => (
-                      <li key={n.number}>
-                        <a
-                          className="font-semibold text-primary underline underline-offset-2"
-                          href={`tel:${n.number.replace(/\s/g, "")}`}
-                        >
-                          {n.label}: {n.number}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
+                {p}
+              </button>
             ))}
-            {busy ? (
-              <p className="m-0 justify-self-start text-[length:var(--text-caption)] text-muted-foreground">
-                Alena is writing…
-              </p>
-            ) : null}
-            <div ref={bottomRef} />
           </div>
+        </div>
+      ) : null}
+      {msgs.map((m, i) => (
+        <div
+          key={`${i}-${m.role}`}
+          className={cn(
+            "max-w-[92%] rounded-[var(--radius-sheet)] px-4 py-3",
+            m.role === "user"
+              ? "justify-self-end bg-primary text-primary-foreground shadow-[var(--shadow-2)]"
+              : "justify-self-start bg-card text-foreground shadow-[var(--shadow-2)]",
+            m.crisis && "outline outline-2 outline-destructive",
+          )}
+        >
+          {m.role === "assistant" ? (
+            <AlenaMarkdown text={m.text} />
+          ) : (
+            <p className="m-0 text-[length:var(--text-body)] leading-normal whitespace-pre-wrap">
+              {m.text}
+            </p>
+          )}
+          {m.crisis ? (
+            <ul className="mt-3 grid list-none gap-1 p-0">
+              {EMERGENCY_BY_MARKET[market].map((n) => (
+                <li key={n.number}>
+                  <a
+                    className="font-semibold underline underline-offset-2"
+                    href={`tel:${n.number.replace(/\s/g, "")}`}
+                  >
+                    {n.label}: {n.number}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ))}
+      {busy ? (
+        <p className="m-0 justify-self-start text-[length:var(--text-caption)] text-muted-foreground">
+          Alena is writing…
+        </p>
+      ) : null}
+      <div ref={bottomRef} />
+    </div>
+  );
 
-          <p className={leadClass}>{disclaimer}</p>
-
+  const lens = (
+    <div className="grid gap-4">
+      <p className={leadClass}>
+        Patterns in your logs, not a medical assessment.
+      </p>
+      {!hlStatus ? (
+        quotaLoading ? (
+          <SkeletonBlock className="h-24" />
+        ) : (
+          <p className={leadClass}>
+            {apiBaseUrl
+              ? "Loading status…"
+              : "Connect the API to see activation progress."}
+          </p>
+        )
+      ) : (
+        <>
+          <p className="m-0 text-[length:var(--text-body)] text-foreground">
+            {hlStatus.progressLabel}
+          </p>
+          <ul className={listClass}>
+            <li className={listItemClass}>
+              Cycles logged: {hlStatus.cyclesLogged} / {hlStatus.cyclesNeeded}
+            </li>
+            <li className={listItemClass}>
+              Logging span: {hlStatus.loggingSpanDays} / {hlStatus.daysNeeded}{" "}
+              days
+            </li>
+            <li className={listItemClass}>
+              Status: {hlStatus.activated ? "Ready" : "Still collecting"}
+            </li>
+          </ul>
           <ActionRow>
+            <Button
+              type="button"
+              disabled={busy || !hlStatus.activated}
+              onClick={() => void onGenerateReport()}
+            >
+              Generate report
+            </Button>
             <Button
               type="button"
               variant="outline"
               disabled={busy}
               onClick={() => void onPrepCard()}
             >
-              Generate Prep Card
+              Download Prep Card
             </Button>
-            {msgs.length ? (
+          </ActionRow>
+          {report ? (
+            <article className="grid gap-4 rounded-[var(--radius-sheet)] bg-card p-4 shadow-[var(--shadow-2)]">
+              <h3 className="m-0 text-[length:var(--text-label)] font-semibold text-foreground">
+                Latest report
+              </h3>
+              <p className={leadClass}>
+                Confidence: {report.confidence}
+                {report.stub ? " · stub model" : ""}
+              </p>
+              <pre className="m-0 font-sans text-[length:var(--text-body)] leading-normal whitespace-pre-wrap">
+                {report.narrative}
+              </pre>
+              <ul className={listClass}>
+                {report.findings.map((f) => (
+                  <li key={f.id} className={listItemClass}>
+                    <strong className="block text-foreground">{f.title}</strong>
+                    <p className={leadClass}>{f.body}</p>
+                  </li>
+                ))}
+              </ul>
               <Button
                 type="button"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => setMsgs([])}
+                variant="outline"
+                onClick={() =>
+                  alena.openAlena({ ask: "report", panel: "chat" })
+                }
               >
-                Clear chat
+                Ask Alena about this report
               </Button>
-            ) : null}
-            {report ? (
-              <Button asChild variant="ghost">
-                <Link to="/app/alena?ask=report">Ask Alena about report</Link>
-              </Button>
-            ) : null}
-          </ActionRow>
-
-          <form
-            className="sticky z-20 grid gap-2 border-t border-border bg-background pt-4 lg:bottom-0"
-            style={{
-              bottom: `calc(var(--tabbar-height) + env(safe-area-inset-bottom) + ${kbInset}px)`,
-            }}
-            onSubmit={(e) => void onSend(e)}
-          >
-            <label className="sr-only" htmlFor="alena-input">
-              Message Alena
-            </label>
-            <FieldTextarea
-              id="alena-input"
-              rows={3}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type a message…"
-              disabled={
-                busy ||
-                showPaywall ||
-                !online ||
-                alenaConsent === false
-              }
-            />
-            <Button
-              type="submit"
-              disabled={
-                busy ||
-                !input.trim() ||
-                showPaywall ||
-                !online ||
-                !modeChosen ||
-                alenaConsent === false
-              }
-            >
-              {busy ? "Alena is writing…" : "Send"}
-            </Button>
-          </form>
-        </div>
-      ) : (
-        <div className={formStackClass}>
-          <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-            HealthLens
-          </h2>
-          <p className={leadClass}>
-            These are patterns in your logged data, not a medical assessment.
-            Monthly reports generate when HealthLens consent is on and enough
-            history exists. On-demand reports on the free tier are once every
-            14 days.
-          </p>
-          {!hlStatus ? (
-            quotaLoading ? (
-              <SkeletonBlock className="h-24" />
-            ) : (
-              <p className={leadClass}>
-                {apiBaseUrl
-                  ? "Loading status…"
-                  : "Connect the API to see activation progress."}
-              </p>
-            )
-          ) : (
-            <>
-              <p className={leadClass}>{hlStatus.progressLabel}</p>
-              <ul className={listClass}>
-                <li className={listItemClass}>
-                  Cycles logged: {hlStatus.cyclesLogged} / {hlStatus.cyclesNeeded}
-                </li>
-                <li className={listItemClass}>
-                  Logging span: {hlStatus.loggingSpanDays} / {hlStatus.daysNeeded}{" "}
-                  days
-                </li>
-                <li className={listItemClass}>
-                  Status: {hlStatus.activated ? "Ready" : "Still collecting"}
-                </li>
-              </ul>
-
-              <Label className="flex items-start gap-3 text-[length:var(--text-body)] font-normal">
-                <Checkbox
-                  checked={hlStatus.populationLearningConsent}
-                  disabled={busy}
-                  onCheckedChange={(v) => void onPopulationToggle(v === true)}
-                />
-                Allow anonymised population learning (consent stored only; no
-                training pipeline yet)
-              </Label>
-
-              <ActionRow>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={busy || !hlStatus.activated}
-                  onClick={() => void onGenerateReport()}
-                >
-                  Generate report
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => void onPrepCard()}
-                >
-                  Download Prep Card
-                </Button>
-                <Button asChild variant="ghost">
-                  <Link to="/app/account">Premium plans</Link>
-                </Button>
-              </ActionRow>
-
-              {report ? (
-                <article className={cn(outlinedCardClass, "grid gap-4")}>
-                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-                    Latest report
-                  </h2>
-                  <p className={leadClass}>
-                    Confidence: {report.confidence}
-                    {report.stub ? " · stub model" : ""}
-                  </p>
-                  <pre className="m-0 rounded-[var(--radius)] bg-muted p-4 font-sans text-[length:var(--text-body)] leading-normal whitespace-pre-wrap">
-                    {report.narrative}
-                  </pre>
-                  <ul className={listClass}>
-                    {report.findings.map((f) => (
-                      <li key={f.id} className={listItemClass}>
-                        <strong className="block text-foreground">{f.title}</strong>
-                        <p className={leadClass}>{f.body}</p>
-                        {f.discussWithProvider ? (
-                          <p className={leadClass}>
-                            Worth discussing with a clinician.
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button asChild variant="outline">
-                    <Link to="/app/alena?ask=report">
-                      Ask Alena about this report
-                    </Link>
-                  </Button>
-                </article>
-              ) : null}
-            </>
-          )}
-        </div>
+            </article>
+          ) : null}
+        </>
       )}
-    </AppPage>
+    </div>
   );
+
+  const shell = (
+    <div
+      className="flex h-full min-h-0 flex-col"
+      style={embedded ? { paddingBottom: kbInset } : undefined}
+    >
+      <div className="shrink-0 px-4 pt-3">{chrome}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {panel === "chat" ? chatThread : lens}
+      </div>
+      {panel === "chat" ? (
+        <AlenaComposer
+          value={input}
+          onChange={setInput}
+          onSend={() => void sendMessage()}
+          disabled={composerOff}
+          busy={busy}
+          hint={quotaLoading ? undefined : `${quotaLabel}. ${disclaimer}`}
+        />
+      ) : null}
+    </div>
+  );
+
+  if (embedded) return shell;
+  return <AppPage className="h-[min(80dvh,720px)] max-w-none p-0">{shell}</AppPage>;
 }
+

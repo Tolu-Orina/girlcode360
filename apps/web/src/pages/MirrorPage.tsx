@@ -68,9 +68,13 @@ const SCORE_LABELS: Record<string, string> = {
   wrinkle: "Wrinkles",
   radiance: "Radiance",
   dark_circle: "Dark circles",
+  dark_circle_v2: "Dark circles",
   moisture: "Moisture",
   firmness: "Firmness",
   age_spot: "Dark spots",
+  eye_bag: "Under-eye bags",
+  tear_trough: "Tear trough",
+  droopy_eyelid: "Eyelid droop",
 };
 
 function friendlyError(err: unknown): string {

@@ -8,6 +8,8 @@ import {
   startHairAnalysis,
   startHairTryOn,
   startMakeupTransfer,
+  startMakeupVto,
+  startSkinAnalysis,
   startNailTryOn,
   startShadeFinder,
   startClothTryOn,
@@ -73,22 +75,42 @@ afterEach(() => {
 });
 
 describe("P3.1 YouCam studio handlers (mocked)", () => {
-  it("Makeup: makeup-transfer payload", async () => {
-    const id = await startMakeupTransfer({ srcFileId: "face-1" });
-    assert.equal(id, "task-makeup-transfer");
+  it("Skin: SD dst_actions only", async () => {
+    const id = await startSkinAnalysis("face-1");
+    assert.equal(id, "task-skin-analysis");
+    const body = calls[0]!.body as Record<string, unknown>;
+    const actions = body.dst_actions as string[];
+    assert.ok(actions.includes("dark_circle_v2"));
+    assert.ok(!actions.includes("dark_circle"));
+    assert.ok(actions.includes("droopy_upper_eyelid"));
+    assert.ok(!actions.includes("droopy_eyelid"));
+  });
+
+  it("Makeup photo: makeup-vto effects payload", async () => {
+    const id = await startMakeupVto({ srcFileId: "face-1" });
+    assert.equal(id, "task-makeup-vto");
     const posted = calls.find((c) => c.method === "POST");
-    assert.ok(posted?.url.endsWith("/s2s/v2.0/task/makeup-transfer"));
+    assert.ok(posted?.url.endsWith("/s2s/v2.0/task/makeup-vto"));
     const body = posted!.body as Record<string, unknown>;
     assert.equal(body.src_file_id, "face-1");
-    assert.deepEqual(body.makeup_categories, [
-      "lip",
-      "eyeshadow",
-      "blush",
-      "foundation",
-      "eyebrow",
-      "eyeliner",
-      "eyelash",
-    ]);
+    assert.equal(body.version, "1.0");
+    assert.ok(Array.isArray(body.effects));
+    assert.ok(
+      (body.effects as { category: string }[]).some((e) => e.category === "lip_color"),
+    );
+  });
+
+  it("Makeup transfer: mu-transfer needs ref_file_id", async () => {
+    const id = await startMakeupTransfer({
+      srcFileId: "face-1",
+      referenceFileId: "look-1",
+    });
+    assert.equal(id, "task-mu-transfer");
+    const posted = calls.find((c) => c.method === "POST");
+    assert.ok(posted?.url.endsWith("/s2s/v2.0/task/mu-transfer"));
+    const body = posted!.body as Record<string, unknown>;
+    assert.equal(body.src_file_id, "face-1");
+    assert.equal(body.ref_file_id, "look-1");
   });
 
   it("Wardrobe: apparel-tryon uses garment file id, not a new endpoint", async () => {
@@ -180,7 +202,7 @@ describe("P3.1 YouCam studio handlers (mocked)", () => {
   it("429 opens the shared circuit after consecutive failures", async () => {
     mode = "429";
     for (let i = 0; i < 5; i += 1) {
-      await assert.rejects(() => startMakeupTransfer({ srcFileId: "x" }), /YOUCAM_RATE_LIMIT/);
+      await assert.rejects(() => startMakeupVto({ srcFileId: "x" }), /YOUCAM_RATE_LIMIT/);
     }
     assert.equal(youcamCircuitOpen(), true);
     mode = "ok";

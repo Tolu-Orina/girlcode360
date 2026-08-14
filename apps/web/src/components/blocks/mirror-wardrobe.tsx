@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { AskAlenaWearLink } from "@/components/blocks/ask-alena-link";
 import {
   ActionRow,
   leadClass,
@@ -729,12 +730,7 @@ export function MirrorWardrobePanel({
             Capsule from pieces you already catalogued. Not a shop list. Climate
             is what you pick here, or a market default — not a live weather feed.
             Daily wear questions also live in{" "}
-            <Link
-              to="/app/alena?from=mirror&ask=wear"
-              className="font-semibold text-primary"
-            >
-              Alena
-            </Link>
+            <AskAlenaWearLink />
             .
           </p>
           <label className="grid gap-2">

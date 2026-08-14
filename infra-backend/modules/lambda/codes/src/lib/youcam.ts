@@ -4,21 +4,23 @@ import { youcamApiKey, youcamWebhookSecret } from "./secrets.ts";
 const BASE =
   process.env.YOUCAM_API_SERVER?.trim() || "https://yce-api-01.makeupar.com";
 
+/** Official SD-only dst_actions. HD names (or invented aliases) 400 the task. */
 const SKIN_ACTIONS = [
   "wrinkle",
+  "droopy_upper_eyelid",
+  "droopy_lower_eyelid",
+  "firmness",
+  "acne",
+  "moisture",
+  "eye_bag",
+  "dark_circle_v2",
+  "age_spot",
+  "radiance",
+  "redness",
+  "oiliness",
   "pore",
   "texture",
-  "acne",
-  "oiliness",
-  "redness",
-  "radiance",
-  "dark_circle",
-  "eye_bag",
-  "droopy_eyelid",
-  "age_spot",
   "tear_trough",
-  "firmness",
-  "moisture",
   "skin_type",
 ] as const;
 
@@ -43,7 +45,8 @@ export const ACCESSORY_CATEGORIES = [
 export type YoucamCapability =
   | "skin-analysis"
   | "cloth-v3"
-  | "makeup-transfer"
+  | "makeup-vto"
+  | "mu-transfer"
   | "shade-finder"
   | "hair-analysis"
   | "hair-tryon"
@@ -155,18 +158,26 @@ function firstFile(json: unknown): Record<string, unknown> | null {
   return asRecord(data);
 }
 
+function youcamContentType(contentType: string): string {
+  const t = contentType.toLowerCase();
+  if (t === "image/jpeg" || t === "image/jpg") return "image/jpg";
+  if (t === "image/png") return "image/png";
+  return contentType;
+}
+
 export async function uploadYoucamFile(
   kind: YoucamCapability,
   bytes: Buffer,
   contentType: string,
   fileName: string,
 ): Promise<string> {
+  const mime = youcamContentType(contentType);
   const { json } = await youcamFetch(`/s2s/v2.0/file/${kind}`, {
     method: "POST",
     body: JSON.stringify({
       files: [
         {
-          content_type: contentType,
+          content_type: mime,
           file_name: fileName,
           file_size: bytes.length,
         },
@@ -196,7 +207,7 @@ export async function uploadYoucamFile(
   if (!fileId || !uploadUrl) {
     throw new Error("YOUCAM_UPLOAD_INIT_FAILED");
   }
-  const putHeaders: Record<string, string> = { "Content-Type": contentType };
+  const putHeaders: Record<string, string> = { "Content-Type": mime };
   for (const [k, v] of Object.entries(extraHeaders)) {
     if (/^content-length$/i.test(k)) continue;
     putHeaders[k] = v;
@@ -284,20 +295,98 @@ export async function startClothTryOn(opts: {
   return submitTask("cloth-v3", body);
 }
 
-export async function startMakeupTransfer(opts: {
+function makeupEffectsFor(categories?: MakeupCategory[]): Record<string, unknown>[] {
+  const set = new Set(
+    categories?.length ? categories : [...MAKEUP_CATEGORIES],
+  );
+  const effects: Record<string, unknown>[] = [
+    {
+      category: "skin_smooth",
+      skinSmoothStrength: 40,
+      skinSmoothColorIntensity: 35,
+    },
+  ];
+  if (set.has("foundation")) {
+    effects.push({
+      category: "foundation",
+      palettes: [
+        {
+          color: "#e8c4a8",
+          colorIntensity: 35,
+          glowIntensity: 20,
+          coverageIntensity: 40,
+        },
+      ],
+    });
+  }
+  if (set.has("blush")) {
+    effects.push({
+      category: "blush",
+      pattern: { name: "1color1" },
+      palettes: [{ color: "#e19f9f", texture: "matte", colorIntensity: 45 }],
+    });
+  }
+  if (set.has("lip")) {
+    effects.push({
+      category: "lip_color",
+      shape: { name: "original" },
+      style: { type: "full" },
+      palettes: [{ color: "#c2185b", texture: "matte", colorIntensity: 55 }],
+    });
+  }
+  if (set.has("eyeshadow")) {
+    effects.push({
+      category: "eye_shadow",
+      pattern: { name: "1color1" },
+      palettes: [{ color: "#8b5a6b", texture: "matte", colorIntensity: 45 }],
+    });
+  }
+  if (set.has("eyeliner")) {
+    effects.push({
+      category: "eye_liner",
+      pattern: { name: "Arabic3" },
+      palettes: [{ color: "#1a1a1a", texture: "matte", colorIntensity: 50 }],
+    });
+  }
+  if (set.has("eyebrow")) {
+    effects.push({
+      category: "eyebrows",
+      pattern: { type: "shape", name: "Original2" },
+      palettes: [{ color: "#3b2a22", texture: "matte", colorIntensity: 40 }],
+    });
+  }
+  if (set.has("eyelash")) {
+    effects.push({
+      category: "eyelashes",
+      pattern: { name: "Natural1" },
+      palettes: [{ color: "#1a1a1a", colorIntensity: 50 }],
+    });
+  }
+  return effects;
+}
+
+/** Photo / live still try-on — Perfect Corp AI Makeup VTO. */
+export async function startMakeupVto(opts: {
   srcFileId: string;
   makeupCategories?: MakeupCategory[];
-  referenceFileId?: string;
 }): Promise<string> {
-  const body: Record<string, unknown> = {
+  return submitTask("makeup-vto", {
     src_file_id: opts.srcFileId,
-    makeup_categories: opts.makeupCategories?.length
-      ? opts.makeupCategories
-      : [...MAKEUP_CATEGORIES],
-    format: "json",
-  };
-  if (opts.referenceFileId) body.reference_file_id = opts.referenceFileId;
-  return submitTask("makeup-transfer", body);
+    version: "1.0",
+    effects: makeupEffectsFor(opts.makeupCategories),
+  });
+}
+
+/** Copy a look from a reference selfie — requires both file IDs. */
+export async function startMakeupTransfer(opts: {
+  srcFileId: string;
+  referenceFileId: string;
+}): Promise<string> {
+  if (!opts.referenceFileId) throw new Error("YOUCAM_REF_REQUIRED");
+  return submitTask("mu-transfer", {
+    src_file_id: opts.srcFileId,
+    ref_file_id: opts.referenceFileId,
+  });
 }
 
 export async function startShadeFinder(opts: {
@@ -423,6 +512,23 @@ function collectScores(node: unknown, into: Record<string, number>): void {
   for (const v of Object.values(rec)) collectScores(v, into);
 }
 
+function aliasSkinScores(scores: Record<string, number>): void {
+  if (scores.dark_circle == null && typeof scores.dark_circle_v2 === "number") {
+    scores.dark_circle = scores.dark_circle_v2;
+  }
+  if (scores.droopy_eyelid == null) {
+    const upper = scores.droopy_upper_eyelid;
+    const lower = scores.droopy_lower_eyelid;
+    if (typeof upper === "number" && typeof lower === "number") {
+      scores.droopy_eyelid = Math.round((upper + lower) / 2);
+    } else if (typeof upper === "number") {
+      scores.droopy_eyelid = upper;
+    } else if (typeof lower === "number") {
+      scores.droopy_eyelid = lower;
+    }
+  }
+}
+
 export async function pollTask(
   capability: YoucamCapability,
   packedTaskId: string,
@@ -447,9 +553,15 @@ export async function pollTask(
 
   const scores: Record<string, number> = {};
   collectScores(data, scores);
+  aliasSkinScores(scores);
   const maskUrls: Record<string, string> = {};
   collectUrls(data, maskUrls);
+  const resultList = Array.isArray(data.results) ? data.results : [];
+  const firstResult = asRecord(resultList[0]);
   const resultUrl =
+    (typeof firstResult?.download_url === "string"
+      ? firstResult.download_url
+      : undefined) ||
     maskUrls.result ||
     maskUrls.url ||
     maskUrls.download_url ||

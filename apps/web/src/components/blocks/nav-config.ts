@@ -19,28 +19,28 @@ export type AppNavItem = {
   lift?: number;
 };
 
-/** Phone tab bar — exactly five. Home sits in the middle of the arch. */
+/** Phone tab bar — exactly five, in a straight glass bar. Alena opens the panel. */
 export const MOBILE_TABS: AppNavItem[] = [
-  { to: "/app/cycle", label: "Cycle", icon: CalendarDays, lift: 0 },
-  { to: "/app/mirror", label: "Mirror", icon: ScanFace, lift: 8 },
-  { to: "/app", label: "Home", end: true, icon: House, lift: 12 },
-  { to: "/app/alena", label: "Alena", icon: MessageCircle, lift: 8 },
-  { to: "/app/account", label: "Account", icon: User, lift: 0 },
+  { to: "/app/cycle", label: "Cycle", icon: CalendarDays },
+  { to: "/app/mirror", label: "Mirror", icon: ScanFace },
+  { to: "/app", label: "Home", end: true, icon: House },
+  { to: "__alena__", label: "Alena", icon: MessageCircle },
+  { to: "/app/account", label: "Account", icon: User },
 ];
 
-/** Desktop top nav. Health + Library are not in the phone bar. */
-export const DESKTOP_TABS: AppNavItem[] = [
+/** Desktop sidebar. Alena is a panel action, not a route. */
+export const SIDEBAR_LINKS: AppNavItem[] = [
   { to: "/app", label: "Home", end: true, icon: House },
   { to: "/app/cycle", label: "Cycle", icon: CalendarDays },
   { to: "/app/health", label: "Health", icon: HeartPulse },
   { to: "/app/mirror", label: "Mirror", icon: ScanFace },
-  { to: "/app/alena", label: "Alena", icon: MessageCircle },
   { to: "/app/library", label: "Library", icon: BookOpen },
   { to: "/app/community", label: "Community", icon: Users },
   { to: "/app/marketplace", label: "Marketplace", icon: Store },
   { to: "/app/account", label: "Account", icon: User },
 ];
 
-/** Visible at `lg`; remainder goes in More until `xl`. */
-export const DESKTOP_NAV_PRIMARY = DESKTOP_TABS.slice(0, 5);
-export const DESKTOP_NAV_MORE = DESKTOP_TABS.slice(5);
+/** @deprecated desktop top nav — sidebar is the desktop pattern */
+export const DESKTOP_TABS = SIDEBAR_LINKS;
+export const DESKTOP_NAV_PRIMARY = SIDEBAR_LINKS.slice(0, 5);
+export const DESKTOP_NAV_MORE = SIDEBAR_LINKS.slice(5);

@@ -12,12 +12,14 @@ export function GlowFrame({
   innerClassName,
   delay = 0,
   duration = 4,
+  spin = true,
 }: {
   children: ReactNode;
   className?: string;
   innerClassName?: string;
   delay?: number;
   duration?: number;
+  spin?: boolean;
 }) {
   const reduce = useReducedMotion();
 
@@ -28,7 +30,7 @@ export function GlowFrame({
         className,
       )}
     >
-      {reduce ? null : (
+      {reduce || !spin ? null : (
         <motion.div
           aria-hidden
           className="pointer-events-none absolute top-1/2 left-1/2 h-[160%] w-[160%] -translate-x-1/2 -translate-y-1/2 bg-[conic-gradient(transparent,var(--primary),var(--brand-soft),transparent_30%)]"

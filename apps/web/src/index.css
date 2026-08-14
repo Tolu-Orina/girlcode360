@@ -79,7 +79,8 @@
 
   --tap: 48px;
   --header-height: 56px;
-  --tabbar-height: 96px;
+  --sidebar-width: 240px;
+  --tabbar-height: 80px;
   --shell-max: 1180px;
   --auth-max: 420px;
   --page-max: min(100%, 960px);
@@ -210,6 +211,25 @@
   }
 }
 
+@keyframes gloss-sweep {
+  0%,
+  68% {
+    transform: translateX(-140%) skewX(-18deg);
+    opacity: 0;
+  }
+  74% {
+    opacity: 0.95;
+  }
+  88% {
+    transform: translateX(260%) skewX(-18deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(260%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -230,12 +250,37 @@
   .ambient-orb {
     animation: none !important;
   }
+
+  .glass-gloss::after {
+    animation: none !important;
+    opacity: 0.4;
+    width: 100%;
+    transform: none;
+    background: linear-gradient(
+      125deg,
+      color-mix(in srgb, #d8e0e8 40%, transparent),
+      transparent 40%,
+      transparent 70%,
+      color-mix(in srgb, white 18%, transparent)
+    );
+  }
 }
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .glass-surface {
     background: var(--card) !important;
     backdrop-filter: none !important;
+  }
+
+  .glass-gloss {
+    background: #c9d3de !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .glass-gloss::before,
+  .glass-gloss::after {
+    display: none;
   }
 }
 
@@ -244,6 +289,67 @@
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur));
     border-color: var(--glass-border);
+  }
+
+  /* Silver glossy pill — metallic fill, silver rim, sweep highlight */
+  .glass-gloss {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, #e9f4e8 72%, transparent) 0%,
+      color-mix(in srgb, #c5dccc 68%, transparent) 48%,
+      color-mix(in srgb, #afc6ae 66%, transparent) 100%
+    );
+    backdrop-filter: blur(20px) saturate(120%) brightness(1.12);
+    -webkit-backdrop-filter: blur(20px) saturate(120%) brightness(1.12);
+    border: 0px solid color-mix(in srgb, #9aa6b4 70%, transparent);
+    box-shadow:
+      0 1px 0 color-mix(in srgb, #c5dcc6 70%, transparent),
+      0 10px 28px color-mix(in srgb, var(--foreground) 14%, transparent),
+      0 3px 0 color-mix(in srgb, var(--foreground) 8%, transparent)
+  }
+
+  .glass-gloss::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, #d8e0e8 55%, transparent) 0%,
+      color-mix(in srgb, #c5d0dc 12%, transparent) 36%,
+      transparent 62%
+    );
+  }
+
+  .glass-gloss::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    top: -30%;
+    bottom: -30%;
+    left: 0;
+    z-index: 0;
+    width: 36%;
+    border-radius: inherit;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, #b8c5d4 42%, transparent) 30%,
+      color-mix(in srgb, white 78%, transparent) 50%,
+      color-mix(in srgb, #cfd8e2 48%, transparent) 70%,
+      transparent 100%
+    );
+    animation: gloss-sweep 8s ease-in-out infinite;
+  }
+
+  .glass-gloss > * {
+    position: relative;
+    z-index: 1;
   }
 
   .ambient-orb {
