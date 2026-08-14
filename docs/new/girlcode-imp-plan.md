@@ -1101,13 +1101,20 @@ Pre-Tier 3 incremental: S3 for makeup/hair/wardrobe images in the existing bucke
 ### 15.1 Secrets / config (names, not values)
 
 ```
-girlcode360/{env}/app          JSON: stripe_*, paystack_*, vapid_*, youcam_api_key, ...
-                               (no LLM key — Bedrock IAM)
+girlcode360/{env}/app          JSON secrets: youcam_api_key, youcam_webhook_secret,
+                               google_client_id/secret, internal_purge_key,
+                               vapid_public_key, vapid_private_key,
+                               stripe_secret_key, stripe_webhook_secret, stripe_price_id,
+                               paystack_secret_key, paystack_plan_code,
+                               paystack_plan_code_ghs (optional Ghana plan).
+                               No LLM key — Bedrock is IAM + BEDROCK_ENABLED.
+API host                     api.{girlcode|girlcode-dev|girlcode-test}.conquerorfoundation.com
+                               (ACM eu-west-2 + APIGW custom domain + Route 53).
+                               Prod: https://api.girlcode.conquerorfoundation.com
 DSQL_ENDPOINT / DSQL_ENABLED   Lambda env from Terraform
-ALENA_MODEL_ID                 default global.amazon.nova-2-lite-v1:0
-BEDROCK_ENABLED                true in demo/prod
-MIRROR_ENABLED                 Wave 0 flag
-YOUCAM_API_SERVER              https://yce-api-01.perfectcorp.com
+ALENA_MODEL_ID                 global.amazon.nova-2-lite-v1:0 (Global CRIS from eu-west-2)
+BEDROCK_ENABLED                Lambda env kill switch; Terraform default true (not a secret)
+YOUCAM_API_SERVER              optional Lambda override (code default yce-api-01.makeupar.com)
 ```
 
 ### 15.2 YouCam endpoints

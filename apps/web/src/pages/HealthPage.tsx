@@ -51,7 +51,7 @@ import {
 import { apiBaseUrl } from "../lib/config";
 import { downloadText } from "../lib/download";
 import symptoms from "../data/symptoms.json";
-import { enqueueAndStore, loadLocalState } from "../lib/sync";
+import { enqueueAndStore, flushOutbox, loadLocalState } from "../lib/sync";
 import { PregnancyPanel } from "./PregnancyPanel";
 import { TtcPanel } from "./TtcPanel";
 import { WalletPanel } from "./WalletPanel";
@@ -195,6 +195,16 @@ export function HealthPage() {
     setStress(row?.stress ?? null);
   }, [bioDate, bios]);
 
+  useEffect(() => {
+    const onOnline = () => {
+      void flushOutbox().then((s) => {
+        if (s) setDiaryPending(s.pendingCount);
+      });
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
+
   async function enablePcos() {
     setBusy(true);
     setError(null);
@@ -313,10 +323,9 @@ export function HealthPage() {
       const vapid = apiBaseUrl ? await getVapidPublicKey() : { publicKey: null };
       const reg = await navigator.serviceWorker.ready;
       if (vapid.publicKey && "PushManager" in window) {
-        const bytes = Uint8Array.from(
-          atob(vapid.publicKey.replace(/-/g, "+").replace(/_/g, "/")),
-          (c) => c.charCodeAt(0),
-        );
+        const raw = vapid.publicKey.replace(/-/g, "+").replace(/_/g, "/");
+        const padded = raw + "=".repeat((4 - (raw.length % 4)) % 4);
+        const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: bytes,
@@ -330,12 +339,8 @@ export function HealthPage() {
           },
         });
       } else {
-        await registerPushSubscription({
-          endpoint: `local://${crypto.randomUUID()}`,
-          keys: { p256dh: "pending-vapid", auth: "pending-vapid" },
-        });
         setError(
-          "Push delivery needs a VAPID key on the server. Permission is saved; bodies stay generic.",
+          "Push delivery needs a VAPID key on the server. Permission is local-only until that is set.",
         );
       }
       if (Notification.permission === "granted") {

@@ -253,16 +253,22 @@ export function AlenaPage() {
       setDisclaimer(res.disclaimer);
       setMsgs((m) => [
         ...m,
-        { role: "assistant", text: res.reply, crisis: res.crisis },
+        {
+          role: "assistant",
+          text: res.crisis
+            ? res.reply
+            : res.stub
+              ? `${res.reply || "Alena is running in fallback mode."}\n\n(Model fallback — answers may be limited until Bedrock is available.)`
+              : res.reply,
+          crisis: res.crisis,
+        },
       ]);
     } catch (err) {
       const code = err instanceof ApiError ? err.code : null;
       if (code === "alena_consent_required") {
         setError(
-          "Context mode needs Alena consent. Update it in Account, or switch to Anonymous.",
+          "Alena needs consent in Account before chat. Anonymous mode still uses the model, so it is gated the same way.",
         );
-        setMode("anonymous");
-        writeStoredMode("anonymous");
       } else if (code === "quota_exceeded") {
         setQuota((q) =>
           q ? { ...q, remaining: 0, used: q.limit ?? q.used } : q,
@@ -458,8 +464,8 @@ export function AlenaPage() {
             </div>
           ) : null}
 
-          {mode === "context" && alenaConsent === false ? (
-            <ErrorBanner message="Context mode needs Alena consent in Account. Anonymous still works." />
+          {alenaConsent === false ? (
+            <ErrorBanner message="Alena needs consent in Account before chat — including anonymous mode, which still uses the model." />
           ) : null}
 
           {openedFrom ? (
@@ -598,7 +604,7 @@ export function AlenaPage() {
                 busy ||
                 showPaywall ||
                 !online ||
-                (mode === "context" && alenaConsent === false)
+                alenaConsent === false
               }
             />
             <Button
@@ -609,7 +615,7 @@ export function AlenaPage() {
                 showPaywall ||
                 !online ||
                 !modeChosen ||
-                (mode === "context" && alenaConsent === false)
+                alenaConsent === false
               }
             >
               {busy ? "Alena is writing…" : "Send"}

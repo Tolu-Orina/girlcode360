@@ -281,3 +281,26 @@ export async function purgeUserAccessories(sub: string): Promise<void> {
   if (isDsqlEnabled()) await dsql.purgeUserAccessories(sub);
   rowsByUser.delete(sub);
 }
+
+export async function settleAccessoryByYoucamTask(
+  taskId: string,
+): Promise<{ kind: "accessory"; id: string } | null> {
+  if (isDsqlEnabled()) {
+    const row = await dsql.findPendingAccessoryByTask(taskId);
+    if (!row) return null;
+    await settleLook(row.userSub, row);
+    return { kind: "accessory", id: row.id };
+  }
+  for (const [sub, rows] of rowsByUser) {
+    const row = rows.find(
+      (s) =>
+        s.status === "pending" &&
+        unpackYoucamIds(s.youcamTaskId).taskId === taskId,
+    );
+    if (row) {
+      await settleLook(sub, row);
+      return { kind: "accessory", id: row.id };
+    }
+  }
+  return null;
+}

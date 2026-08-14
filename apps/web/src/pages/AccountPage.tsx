@@ -68,6 +68,7 @@ import {
   requestAccountDeletion,
   requestDataExport,
   startCheckout,
+  openBillingPortal,
 } from "../lib/api";
 import { setAnalyticsConsent, track } from "../lib/analytics";
 import { changePassword, signOut } from "@/lib/cognito";
@@ -194,9 +195,30 @@ export function AccountPage() {
   }, []);
 
   useEffect(() => {
-    if (params.get("billing") === "success") {
-      setOk("Billing return received. Activate Premium if checkout was a stub.");
+    if (params.get("billing") === "cancel") {
+      setOk("Checkout cancelled. You are still on Free.");
+      return;
     }
+    if (params.get("billing") !== "success") return;
+    let cancelled = false;
+    (async () => {
+      setOk("Confirming payment…");
+      for (const wait of [0, 2000, 5000]) {
+        if (wait) await new Promise((r) => setTimeout(r, wait));
+        if (cancelled) return;
+        try {
+          await refreshPrivacy();
+        } catch {
+          /* webhook may still be in flight */
+        }
+      }
+      if (!cancelled) {
+        setOk("If payment went through, Premium is on. Refresh if this still says Free.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [params]);
 
   async function savePrefs(e: FormEvent) {
@@ -299,10 +321,36 @@ export function AccountPage() {
     try {
       const res = await startCheckout(provider);
       track({ name: "checkout_started", props: { provider } });
+      if (res.live && res.checkoutUrl) {
+        window.location.assign(res.checkoutUrl);
+        return;
+      }
       setOk(res.message);
-      // Stub: stay in-app; live keys would window.location = res.checkoutUrl
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Checkout failed");
+      setError(
+        err instanceof ApiError
+          ? err.code.replace(/_/g, " ")
+          : err instanceof Error
+            ? err.message
+            : "Checkout failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onPortal() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await openBillingPortal();
+      if (res.live && res.portalUrl) {
+        window.location.assign(res.portalUrl);
+        return;
+      }
+      setOk(res.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open billing portal");
     } finally {
       setBusy(false);
     }
@@ -450,7 +498,7 @@ export function AccountPage() {
       <PageHeader
         eyebrow="Account"
         title={profile?.email ?? "Signed in"}
-        lead="Consents, export, deletion, billing stubs, and notification preferences."
+        lead="Consents, export, deletion, Premium, and notification preferences."
       />
 
       {!online ? (
@@ -473,43 +521,71 @@ export function AccountPage() {
         <p className={leadClass}>
           Plan: {billing?.plan ?? myData?.premium ? "premium" : "free"}
           {billing?.provider ? ` · ${billing.provider}` : ""}
-        </p>
-        <p
-          className="m-0 rounded-[var(--radius)] border border-dashed border-border bg-muted px-4 py-3 text-[length:var(--text-caption)] text-muted-foreground"
-          role="note"
-        >
-          Checkout is not live pay yet. These buttons stay in-app until billing
-          secrets are configured.
+          {billing?.renewsAt
+            ? ` · renews ${new Date(billing.renewsAt).toLocaleDateString()}`
+            : ""}
         </p>
         {!(billing?.premium || myData?.premium) ? (
-          <ActionRow>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || !apiBaseUrl || !online}
-              onClick={() => void onCheckout("stripe")}
-            >
-              Upgrade (Stripe stub)
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || !apiBaseUrl || !online}
-              onClick={() => void onCheckout("paystack")}
-            >
-              Upgrade (Paystack stub)
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy || !apiBaseUrl}
-              onClick={() => void onDevPremium()}
-            >
-              Dev activate
-            </Button>
-          </ActionRow>
+          <>
+            <p className={leadClass}>
+              UK: £4.99/month via Stripe. Nigeria: ₦2,500/month via Paystack.
+              Ghana: GH₵35/month via Paystack when that plan is set.
+            </p>
+            <ActionRow>
+              <Button
+                type="button"
+                variant={
+                  profile?.market === "NG" || profile?.market === "GH"
+                    ? "outline"
+                    : "default"
+                }
+                disabled={busy || !apiBaseUrl || !online}
+                onClick={() => void onCheckout("stripe")}
+              >
+                Upgrade with Stripe
+              </Button>
+              <Button
+                type="button"
+                variant={
+                  profile?.market === "NG" || profile?.market === "GH"
+                    ? "default"
+                    : "outline"
+                }
+                disabled={busy || !apiBaseUrl || !online}
+                onClick={() => void onCheckout("paystack")}
+              >
+                Upgrade with Paystack
+              </Button>
+              {(import.meta.env.DEV ||
+                (typeof window !== "undefined" &&
+                  window.location.hostname.includes("girlcode-dev"))) ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={busy || !apiBaseUrl}
+                  onClick={() => void onDevPremium()}
+                >
+                  Dev activate
+                </Button>
+              ) : null}
+            </ActionRow>
+          </>
         ) : (
-          <p className={leadClass}>Unlimited Alena + HealthLens on-demand.</p>
+          <ActionRow>
+            <p className={`${leadClass} m-0`}>
+              Unlimited Alena and HealthLens on-demand. Mirror Studio is included.
+            </p>
+            {billing?.provider === "stripe" ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || !apiBaseUrl || !online}
+                onClick={() => void onPortal()}
+              >
+                Manage subscription
+              </Button>
+            ) : null}
+          </ActionRow>
         )}
       </section>
 

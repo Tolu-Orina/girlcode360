@@ -133,7 +133,10 @@ export async function idbPendingOutbox(): Promise<OutboxItem[]> {
     const req = tx.objectStore("outbox").getAll();
     req.onsuccess = () => {
       const all = (req.result as OutboxItem[]).filter(
-        (i) => i.status === "pending" || i.status === "error",
+        (i) =>
+          i.status === "pending" ||
+          i.status === "syncing" ||
+          i.status === "error",
       );
       resolve(all.sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
     };

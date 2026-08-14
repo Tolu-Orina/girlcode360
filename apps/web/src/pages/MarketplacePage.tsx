@@ -89,7 +89,10 @@ export function MarketplacePage() {
   }, []);
 
   const load = useCallback(async () => {
-    if (!apiBaseUrl) return;
+    if (!apiBaseUrl) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {

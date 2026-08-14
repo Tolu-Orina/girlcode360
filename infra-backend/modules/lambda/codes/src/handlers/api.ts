@@ -36,7 +36,10 @@ import {
   createPortalSession,
   getBillingStatus,
   handleBillingWebhook,
+  handlePaystackSignedWebhook,
+  handleStripeSignedWebhook,
 } from "../store/billing";
+import { internalPurgeKey } from "../lib/secrets";
 import {
   cancelDeletion,
   createExportJob,
@@ -127,6 +130,7 @@ import type {
   PatchPregnancyRequest,
   PatchUserRequest,
   PostConsentsRequest,
+  ConsentPurpose,
   PushSubscriptionRequest,
   SyncOp,
   SyncRequest,
@@ -171,12 +175,14 @@ import {
   listMakeupLooksPublic,
   listShadeMatchesPublic,
   saveMakeupLook,
+  settleMakeupByYoucamTask,
 } from "../store/studio";
 import {
   createHairScan,
   getHairScanMedia,
   getHairScanPublic,
   listHairScansPublic,
+  settleHairByYoucamTask,
 } from "../store/hair";
 import {
   createWardrobeItem,
@@ -192,6 +198,7 @@ import {
   packingListForUser,
   patchWardrobeItem,
   startWardrobeOutfitTryOn,
+  settleWardrobeByYoucamTask,
   suggestOutfitForToday,
 } from "../store/wardrobe";
 import { getStyleAnalytics } from "../store/style";
@@ -200,6 +207,7 @@ import {
   getAccessoryLookMedia,
   getAccessoryLookPublic,
   listAccessoryLooksPublic,
+  settleAccessoryByYoucamTask,
 } from "../store/accessories";
 import {
   createResaleListing,
@@ -316,6 +324,7 @@ function mapYoucamErr(err: unknown): APIGatewayProxyResult | null {
     return json(400, { error: "catalogue_item_invalid" });
   }
   if (msg === "STUDIO_SCAN_REQUIRED") return json(400, { error: "scan_required" });
+  if (msg === "STUDIO_SHADE_PENDING") return json(202, { error: "shade_still_running" });
   if (msg === "STUDIO_FACE_REQUIRED") return json(400, { error: "image_required" });
   if (msg === "STUDIO_REFERENCE_REQUIRED") {
     return json(400, { error: "reference_required" });
@@ -445,6 +454,13 @@ function header(event: APIGatewayProxyEvent, name: string): string | undefined {
   return undefined;
 }
 
+async function internalAuthorized(event: APIGatewayProxyEvent): Promise<boolean> {
+  const presented =
+    header(event, "x-internal-key") ?? header(event, "X-Internal-Key");
+  const expected = await internalPurgeKey();
+  return Boolean(presented) && presented === expected;
+}
+
 async function requireUser(sub: string) {
   return await getUser(sub);
 }
@@ -568,20 +584,39 @@ export const handler = async (
     });
   }
 
-  // Billing webhooks (signature verification when provider secrets are live)
   const stripeHook = path === "/v1/billing/webhooks/stripe";
   const paystackHook = path === "/v1/billing/webhooks/paystack";
-  if (method === "POST" && (stripeHook || paystackHook)) {
-    const provider = stripeHook ? "stripe" : "paystack";
-    const body = parseBody<{
-      sub?: string;
-      customerId?: string;
-      event?: string;
-      listingId?: string;
-    }>(event);
-    const result = await handleBillingWebhook(provider, body);
-    if (!result.ok) return json(400, { error: result.error });
-    return json(200, result);
+  if (method === "POST" && stripeHook) {
+    const raw = event.body
+      ? event.isBase64Encoded
+        ? Buffer.from(event.body, "base64").toString("utf8")
+        : event.body
+      : "";
+    const result = await handleStripeSignedWebhook(
+      raw,
+      header(event, "Stripe-Signature"),
+    );
+    if (!result.ok) {
+      const status = result.error === "invalid_signature" ? 401 : 400;
+      return json(status, { error: result.error });
+    }
+    return json(200, { received: true, ignored: result.ignored === true });
+  }
+  if (method === "POST" && paystackHook) {
+    const raw = event.body
+      ? event.isBase64Encoded
+        ? Buffer.from(event.body, "base64").toString("utf8")
+        : event.body
+      : "";
+    const result = await handlePaystackSignedWebhook(
+      raw,
+      header(event, "x-paystack-signature"),
+    );
+    if (!result.ok) {
+      const status = result.error === "invalid_signature" ? 401 : 400;
+      return json(status, { error: result.error });
+    }
+    return json(200, { received: true, ignored: result.ignored === true });
   }
 
   if (method === "POST" && path === "/v1/webhooks/youcam") {
@@ -605,38 +640,42 @@ export const handler = async (
     }
     const taskId = extractYoucamTaskId(payload);
     if (!taskId) return json(400, { error: "task_id_required" });
-    const settled = await settleYoucamWebhook(taskId);
+    const settled =
+      (await settleYoucamWebhook(taskId)) ??
+      (await settleMakeupByYoucamTask(taskId)) ??
+      (await settleHairByYoucamTask(taskId)) ??
+      (await settleAccessoryByYoucamTask(taskId)) ??
+      (await settleWardrobeByYoucamTask(taskId));
     return json(200, { ok: true, settled });
   }
 
   // Internal purge tick (EventBridge later; open in local with header)
   if (method === "POST" && path === "/v1/privacy/purge-tick") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
-    return json(200, { purged: await runDeletionPurge() });
+    return json(200, {
+      purged: await runDeletionPurge(),
+      wallet: await runWalletPurge(),
+    });
   }
 
   if (method === "POST" && path === "/v1/notifications/tick") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
     return json(200, await runNotificationTick());
   }
 
   if (method === "POST" && path === "/v1/healthlens/monthly-tick") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
     return json(200, await runMonthlyHealthLensTick());
   }
 
   if (method === "POST" && path === "/v1/marketplace/moderate") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
     const body = parseBody<{ id?: string; action?: "approve" | "reject" }>(event);
@@ -657,8 +696,7 @@ export const handler = async (
   }
 
   if (method === "POST" && path === "/v1/marketplace/reviews/moderate") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
     const body = parseBody<{ id?: string; action?: "approve" | "reject" }>(event);
@@ -671,8 +709,7 @@ export const handler = async (
   }
 
   if (method === "POST" && path === "/v1/community/posts/moderate") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
     const body = parseBody<{ id?: string; action?: "approve" | "reject" }>(event);
@@ -685,8 +722,7 @@ export const handler = async (
   }
 
   if (method === "POST" && path === "/v1/in-app/promo") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
     const body = parseBody<{ market?: "UK" | "NG" | "GH"; listingId?: string }>(
@@ -704,8 +740,7 @@ export const handler = async (
   }
 
   if (method === "GET" && path === "/v1/content/moderation-queue") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
     const statusRaw = event.queryStringParameters?.status;
@@ -722,8 +757,7 @@ export const handler = async (
   }
 
   if (method === "PATCH" && path === "/v1/content/moderation-queue") {
-    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
-    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+    if (!(await internalAuthorized(event))) {
       return json(401, { error: "unauthorized" });
     }
     const body = parseBody<{ id?: string; status?: string }>(event);
@@ -808,8 +842,33 @@ export const handler = async (
     if (!body.jurisdiction || !body.items?.length) {
       return json(400, { error: "invalid_consent_payload" });
     }
+    const allowed: ConsentPurpose[] = [
+      "health_data",
+      "analytics",
+      "marketing",
+      "location",
+      "ai_alena",
+      "ai_healthlens",
+      "mirror_biometric",
+      "mirror_live_camera",
+      "wardrobe",
+      "shematch",
+    ];
+    if (
+      body.items.some(
+        (i) => !allowed.includes(i.purpose as ConsentPurpose),
+      )
+    ) {
+      return json(400, { error: "invalid_consent_purpose" });
+    }
     const health = body.items.find((i) => i.purpose === "health_data");
-    if (!health?.granted) return json(400, { error: "health_consent_required" });
+    const current = await latestConsentsByPurpose(user.sub);
+    const healthOnFile = current.find((c) => c.purpose === "health_data")?.granted;
+    if (health) {
+      // grant or revoke is explicit
+    } else if (!healthOnFile) {
+      return json(400, { error: "health_consent_required" });
+    }
     const policyVersion =
       body.policyVersion ||
       process.env.CONSENT_POLICY_VERSION ||
@@ -860,6 +919,18 @@ export const handler = async (
       path.startsWith("/v1/in-app");
     if (sensitive && adult && !adult.ageConfirmed18) {
       return json(403, { error: "minor_blocked" });
+    }
+    const healthPaths =
+      path.startsWith("/v1/cycles") ||
+      path.startsWith("/v1/pcos") ||
+      path.startsWith("/v1/pregnancy") ||
+      path.startsWith("/v1/ttc") ||
+      path.startsWith("/v1/wallet");
+    if (healthPaths && adult) {
+      const consents = await latestConsentsByPurpose(user.sub);
+      if (!consents.find((c) => c.purpose === "health_data")?.granted) {
+        return json(403, { error: "health_consent_required" });
+      }
     }
   }
 
@@ -2070,7 +2141,7 @@ export const handler = async (
     }>(event);
     if (!body.message?.trim()) return json(400, { error: "message_required" });
     const mode = body.mode === "anonymous" ? "anonymous" : "context";
-    if (mode === "context") {
+    {
       const consents = await latestConsentsByPurpose(user.sub);
       const alena = consents.find(
         (c) => c.purpose === "ai_alena" || (c.purpose as string) === "ai_zara",
@@ -2110,6 +2181,13 @@ export const handler = async (
 
   if (method === "GET" && alenaPath === "/v1/alena/context-preview") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    const consents = await latestConsentsByPurpose(user.sub);
+    const alena = consents.find(
+      (c) => c.purpose === "ai_alena" || (c.purpose as string) === "ai_zara",
+    );
+    if (!alena?.granted) {
+      return json(403, { error: "alena_consent_required" });
+    }
     return json(200, { context: await assembleAlenaContext(user.sub) });
   }
 
@@ -2129,6 +2207,9 @@ export const handler = async (
 
   if (method === "POST" && path === "/v1/healthlens/population-consent") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    const consents = await latestConsentsByPurpose(user.sub);
+    const hl = consents.find((c) => c.purpose === "ai_healthlens");
+    if (!hl?.granted) return json(403, { error: "healthlens_consent_required" });
     const body = parseBody<{ granted?: boolean }>(event);
     return json(200, {
       status: await setPopulationLearningConsent(user.sub, Boolean(body.granted)),
@@ -2147,6 +2228,9 @@ export const handler = async (
 
   if (method === "GET" && path === "/v1/healthlens/report") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    const consents = await latestConsentsByPurpose(user.sub);
+    const hl = consents.find((c) => c.purpose === "ai_healthlens");
+    if (!hl?.granted) return json(403, { error: "healthlens_consent_required" });
     const report = await latestHealthLensReport(user.sub);
     if (!report) return json(404, { error: "no_report" });
     return json(200, { report });
@@ -2154,6 +2238,9 @@ export const handler = async (
 
   if (method === "POST" && path === "/v1/healthlens/prep-card") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    const consents = await latestConsentsByPurpose(user.sub);
+    const hl = consents.find((c) => c.purpose === "ai_healthlens");
+    if (!hl?.granted) return json(403, { error: "healthlens_consent_required" });
     const body = parseBody<{ questions?: string[] }>(event);
     const card = await buildPrepCard(user.sub, body.questions ?? []);
     return json(200, card);
@@ -2211,12 +2298,22 @@ export const handler = async (
       cancelUrl?: string;
     }>(event);
     const provider = body.provider === "paystack" ? "paystack" : "stripe";
-    return json(200, await createCheckoutSession(user.sub, provider, body.successUrl));
+    const session = await createCheckoutSession(user.sub, provider, {
+      successUrl: body.successUrl,
+      cancelUrl: body.cancelUrl,
+      email: profile.email,
+      market: profile.market,
+    });
+    if ("error" in session && session.error) {
+      return json(502, { error: session.error, message: session.message });
+    }
+    return json(200, session);
   }
 
   if (method === "POST" && path === "/v1/billing/portal") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
-    return json(200, await createPortalSession(user.sub));
+    const body = parseBody<{ returnUrl?: string }>(event);
+    return json(200, await createPortalSession(user.sub, body.returnUrl));
   }
 
   if (method === "POST" && path === "/v1/billing/dev-activate") {
@@ -2272,7 +2369,7 @@ export const handler = async (
 
   if (method === "GET" && path === "/v1/notifications/vapid") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
-    return json(200, { publicKey: vapidPublicKey() });
+    return json(200, { publicKey: await vapidPublicKey() });
   }
 
   if (method === "POST" && path === "/v1/notifications/push-subscription") {

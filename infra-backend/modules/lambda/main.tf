@@ -45,6 +45,11 @@ variable "alena_model_id" {
   type = string
 }
 
+variable "bedrock_enabled" {
+  type    = bool
+  default = true
+}
+
 data "archive_file" "api" {
   type        = "zip"
   source_dir  = "${path.module}/codes/dist"
@@ -157,6 +162,7 @@ resource "aws_lambda_function" "api" {
       DATA_BUCKET            = var.data_bucket_name
       CONSENT_POLICY_VERSION = "2026-07-v1"
       ALENA_MODEL_ID         = var.alena_model_id
+      BEDROCK_ENABLED        = tostring(var.bedrock_enabled)
     }
   }
 }

@@ -17,6 +17,11 @@ export function stddev(nums: number[]): number | null {
 /** Banned diagnostic phrasing for CI / copy checks */
 export const DIAGNOSIS_DENYLIST = [
   "you have pcos",
+  "you likely have pcos",
+  "sounds like you have pcos",
+  "this means you have",
+  "consistent with pcos",
+  "you have endometriosis",
   "you are pregnant",
   "diagnosed with",
   "this confirms",
@@ -354,15 +359,29 @@ function parseYmd(iso: string): { y: number; m: number; d: number } {
 
 export const CRISIS_PHRASES = [
   "kill myself",
+  "killing myself",
   "suicide",
   "suicidal",
   "end my life",
+  "end it all",
+  "take my life",
   "want to die",
+  "wish i was dead",
+  "wish i were dead",
   "don't want to live",
   "dont want to live",
+  "do not want to live",
+  "don't wanna live",
+  "dont wanna live",
+  "no reason to live",
   "self harm",
   "self-harm",
   "hurt myself",
+  "cut myself",
+  "cutting myself",
+  "slit my",
+  "hang myself",
+  "overdose",
 ] as const;
 
 export function detectCrisis(text: string): boolean {
@@ -551,8 +570,8 @@ export function runHealthLensRules(input: HealthLensInput): HealthLensFinding[] 
       findings.push({
         id: "pcos-cluster",
         kind: "pcos_cluster",
-        title: "Several PCOS-related wellness signs logged",
-        body: "Multiple signs often discussed in PCOS wellness contexts appear in your recent diary. Only a clinician can assess what this means for you.",
+        title: "Several clustered wellness signs in your diary",
+        body: "Several signs that people sometimes bring to a clinician appear together in your recent diary. Only a clinician can assess what this means for you. This is not a diagnosis.",
         confidence: "Medium",
         discussWithProvider: true,
       });

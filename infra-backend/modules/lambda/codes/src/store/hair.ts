@@ -277,3 +277,26 @@ export async function purgeUserHair(sub: string): Promise<void> {
   if (isDsqlEnabled()) await dsql.purgeUserHair(sub);
   rowsByUser.delete(sub);
 }
+
+export async function settleHairByYoucamTask(
+  taskId: string,
+): Promise<{ kind: "hair"; id: string } | null> {
+  if (isDsqlEnabled()) {
+    const row = await dsql.findPendingHairByTask(taskId);
+    if (!row) return null;
+    await settleHair(row.userSub, row);
+    return { kind: "hair", id: row.id };
+  }
+  for (const [sub, rows] of rowsByUser) {
+    const row = rows.find(
+      (s) =>
+        s.status === "pending" &&
+        unpackYoucamIds(s.youcamTaskId).taskId === taskId,
+    );
+    if (row) {
+      await settleHair(sub, row);
+      return { kind: "hair", id: row.id };
+    }
+  }
+  return null;
+}

@@ -44,7 +44,10 @@ export function ListingDetailPage() {
   const online = useOnline();
 
   async function load() {
-    if (!id || !apiBaseUrl) return;
+    if (!id || !apiBaseUrl) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [res, rev] = await Promise.all([
@@ -192,13 +195,19 @@ export function ListingDetailPage() {
               {listing.favourite ? "Remove from saved" : "Save listing"}
             </Button>
           </div>
+        </div>
+      ) : null}
 
-          <section className="grid gap-3">
+      {listing || resale ? (
+        <section className="grid gap-3">
             <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
               Reviews
             </h2>
             <p className={leadClass}>
               New reviews wait for moderation. At least 20 characters. No links.
+              {resale && !listing
+                ? " Ask via this thread — peer listings use the same review path."
+                : ""}
             </p>
             <ul className={listClass}>
               {reviews.length ? (
@@ -264,8 +273,7 @@ export function ListingDetailPage() {
                 Submit review
               </Button>
             </form>
-          </section>
-        </div>
+        </section>
       ) : null}
     </AppPage>
   );

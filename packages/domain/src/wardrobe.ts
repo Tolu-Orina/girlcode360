@@ -43,7 +43,7 @@ export type WardrobeClimate = (typeof WARDROBE_CLIMATES)[number];
 
 /** Same Perfect Corp exclusion as MIR-F-05 / MIR-F-08. */
 export const WARDROBE_BANNED =
-  /swimwear|lingerie|bikini|underwear|intimate|thong|bralette/i;
+  /swimwear|swimsuit|lingerie|bikini|underwear|intimate|thong|bralette/i;
 
 export const WARDROBE_QUEUE_MAX = 50;
 

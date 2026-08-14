@@ -564,19 +564,25 @@ export function getBillingStatus() {
 }
 
 export function startCheckout(provider: "stripe" | "paystack" = "stripe") {
+  const origin = window.location.origin;
   return request<
     import("../../../../packages/api-types/src/index").CheckoutResponse
   >("POST", "/v1/billing/checkout", {
     provider,
-    successUrl: `${window.location.origin}/app/account?billing=success`,
+    successUrl: `${origin}/app/account?billing=success`,
+    cancelUrl: `${origin}/app/account?billing=cancel`,
   });
 }
 
 export function openBillingPortal() {
-  return request<{ portalUrl: string; premium: boolean; message: string }>(
-    "POST",
-    "/v1/billing/portal",
-  );
+  return request<{
+    portalUrl: string;
+    premium: boolean;
+    message: string;
+    live?: boolean;
+  }>("POST", "/v1/billing/portal", {
+    returnUrl: `${window.location.origin}/app/account`,
+  });
 }
 
 export function devActivatePremium() {

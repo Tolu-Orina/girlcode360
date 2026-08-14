@@ -124,37 +124,39 @@ export async function enqueueAndStore(op: SyncOp): Promise<CycleState> {
   return { ...state, prediction };
 }
 
-let flushing = false;
+let flushInFlight: Promise<CycleState | null> | null = null;
 
 export async function flushOutbox(): Promise<CycleState | null> {
-  if (flushing) return null;
+  if (flushInFlight) return flushInFlight;
+  flushInFlight = flushOutboxInner().finally(() => {
+    flushInFlight = null;
+  });
+  return flushInFlight;
+}
+
+async function flushOutboxInner(): Promise<CycleState | null> {
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return loadLocalState();
   }
-  flushing = true;
+  const pending = await idbPendingOutbox();
+  if (pending.length === 0) return loadLocalState();
+
+  // Stable key for this exact pending set (sorted) so retries stay idempotent
+  const batchKey = [...pending.map((p) => p.idempotencyKey)].sort().join(":");
+  const ops = pending.map((p) => p.op as SyncOp);
+  for (const p of pending) await idbMarkOutbox(p.id, "syncing");
+
   try {
-    const pending = await idbPendingOutbox();
-    if (pending.length === 0) return loadLocalState();
-
-    // Stable key for this exact pending set (sorted) so retries stay idempotent
-    const batchKey = [...pending.map((p) => p.idempotencyKey)].sort().join(":");
-    const ops = pending.map((p) => p.op as SyncOp);
-    for (const p of pending) await idbMarkOutbox(p.id, "syncing");
-
-    try {
-      const res = await syncCycles(ops, batchKey);
-      await idbReplaceCycles(res.cycles);
-      await idbReplaceDays(res.days);
-      await idbSetMeta("prediction", res.prediction);
-      for (const p of pending) await idbMarkOutbox(p.id, "done");
-      await idbPruneOutboxDone();
-    } catch {
-      for (const p of pending) await idbMarkOutbox(p.id, "error", "sync_failed");
-    }
-    return loadLocalState();
-  } finally {
-    flushing = false;
+    const res = await syncCycles(ops, batchKey);
+    await idbReplaceCycles(res.cycles);
+    await idbReplaceDays(res.days);
+    await idbSetMeta("prediction", res.prediction);
+    for (const p of pending) await idbMarkOutbox(p.id, "done");
+    await idbPruneOutboxDone();
+  } catch {
+    for (const p of pending) await idbMarkOutbox(p.id, "error", "sync_failed");
   }
+  return loadLocalState();
 }
 
 /**
@@ -172,7 +174,6 @@ export async function hydrateFromServer(
   if (pending.length > 0) {
     const flushed = await flushOutbox();
     if (flushed) return flushed;
-    // Flush failed — keep local, do not overwrite
     return loadLocalState();
   }
   await idbReplaceCycles(snapshot.cycles);

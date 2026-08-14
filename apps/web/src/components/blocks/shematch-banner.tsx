@@ -70,7 +70,10 @@ export function SheMatchBanner({
     await postConsents({
       jurisdiction: me.market,
       policyVersion: CURRENT_POLICY_VERSION,
-      items: [{ purpose: "shematch", granted: true }],
+      items: [
+        { purpose: "health_data", granted: true },
+        { purpose: "shematch", granted: true },
+      ],
     });
     const rule = sheMatchTrigger(trigger);
     if (rule) {

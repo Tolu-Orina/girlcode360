@@ -34,6 +34,18 @@ export async function getUser(sub: string): Promise<UserProfile | undefined> {
   return users.get(sub);
 }
 
+export async function getUserByEmail(
+  email: string,
+): Promise<UserProfile | undefined> {
+  const needle = email.trim().toLowerCase();
+  if (!needle) return undefined;
+  if (isDsqlEnabled()) return dsqlUsers.getUserByEmail(needle);
+  for (const row of users.values()) {
+    if (row.email?.trim().toLowerCase() === needle) return row;
+  }
+  return undefined;
+}
+
 export async function upsertUser(
   sub: string,
   patch: Partial<UserProfile> & { email?: string },

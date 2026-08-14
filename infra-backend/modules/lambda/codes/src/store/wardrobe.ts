@@ -16,6 +16,7 @@ import {
   pollTask,
   requestYoucamFileDeletion,
   startClothTryOn,
+  unpackYoucamIds,
   uploadYoucamFile,
 } from "../lib/youcam";
 import { copyResultToS3 } from "./mirror";
@@ -577,4 +578,28 @@ export async function purgeUserWardrobe(sub: string): Promise<void> {
   if (isDsqlEnabled()) await dsql.purgeUserWardrobe(sub);
   itemsByUser.delete(sub);
   outfitsByUser.delete(sub);
+}
+
+export async function settleWardrobeByYoucamTask(
+  taskId: string,
+): Promise<{ kind: "wardrobe"; id: string } | null> {
+  if (isDsqlEnabled()) {
+    const row = await dsql.findPendingOutfitByTask(taskId);
+    if (!row) return null;
+    await settleOutfitTryOn(row.userSub, row);
+    return { kind: "wardrobe", id: row.id };
+  }
+  for (const [sub, rows] of outfitsByUser) {
+    const row = rows.find(
+      (s) =>
+        s.status === "pending" &&
+        s.youcamTaskId &&
+        unpackYoucamIds(s.youcamTaskId).taskId === taskId,
+    );
+    if (row) {
+      await settleOutfitTryOn(sub, row);
+      return { kind: "wardrobe", id: row.id };
+    }
+  }
+  return null;
 }

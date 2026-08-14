@@ -652,10 +652,11 @@ export type CheckoutRequest = {
 
 export type CheckoutResponse = {
   provider: "stripe" | "paystack";
-  /** Stub checkout URL until live keys are wired */
   checkoutUrl: string;
   sessionId: string;
   message: string;
+  /** True when the URL is Stripe-hosted Checkout, not the in-app stub. */
+  live?: boolean;
 };
 
 export type ContentArticle = {

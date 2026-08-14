@@ -77,6 +77,23 @@ export async function incrementAlenaUsed(
   return res.rows[0]?.used ?? 1;
 }
 
+export async function tryIncrementAlenaUsed(
+  sub: string,
+  dayKey: string,
+  limit: number,
+): Promise<boolean> {
+  const res = await query<QuotaRow>(
+    `INSERT INTO alena_quota (user_sub, day_key, used)
+     VALUES ($1,$2,1)
+     ON CONFLICT (user_sub, day_key) DO UPDATE SET
+       used = alena_quota.used + 1
+       WHERE alena_quota.used < $3
+     RETURNING *`,
+    [sub, dayKey, limit],
+  );
+  return Boolean(res.rows[0]);
+}
+
 export async function getHealthLensPrefs(
   sub: string,
 ): Promise<HealthLensPrefs> {

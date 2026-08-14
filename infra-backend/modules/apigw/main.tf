@@ -467,6 +467,7 @@ resource "aws_api_gateway_domain_name" "custom" {
 
   domain_name              = var.domain_name
   regional_certificate_arn = var.certificate_arn
+  security_policy          = "TLS_1_2"
 
   endpoint_configuration {
     types = ["REGIONAL"]
@@ -483,6 +484,14 @@ resource "aws_api_gateway_base_path_mapping" "custom" {
 
 output "api_base_url" {
   value = local.use_custom_domain ? "https://${var.domain_name}" : local.execute_api_url
+}
+
+output "regional_domain_name" {
+  value = local.use_custom_domain ? aws_api_gateway_domain_name.custom[0].regional_domain_name : ""
+}
+
+output "regional_zone_id" {
+  value = local.use_custom_domain ? aws_api_gateway_domain_name.custom[0].regional_zone_id : ""
 }
 
 output "rest_api_id" {

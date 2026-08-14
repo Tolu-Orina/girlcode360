@@ -285,7 +285,7 @@ export function catalogueById(id: string): MirrorCatalogueItem | undefined {
   return MIRROR_CATALOGUE.find((i) => i.id === id);
 }
 
-const BANNED_GARMENT = /swimwear|lingerie|bikini|underwear|intimate/i;
+const BANNED_GARMENT = /swimwear|swimsuit|lingerie|bikini|underwear|intimate/i;
 
 export function filterCatalogue(opts: {
   kind?: "skincare" | "apparel" | "makeup" | "jewellery" | "eyewear" | "nail_color";

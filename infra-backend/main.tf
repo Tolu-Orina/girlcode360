@@ -30,6 +30,35 @@ provider "aws" {
   }
 }
 
+locals {
+  domain_prefix = var.domain_prefix != "" ? var.domain_prefix : (
+    var.environment == "prod" ? "girlcode" : (
+      var.environment == "test" ? "girlcode-test" : "girlcode-dev"
+    )
+  )
+  api_fqdn = var.api_domain_name != "" ? var.api_domain_name : "api.${local.domain_prefix}.${var.root_domain}"
+}
+
+data "aws_route53_zone" "root" {
+  count        = var.enable_api_custom_domain && var.route53_zone_id == "" ? 1 : 0
+  name         = var.root_domain
+  private_zone = false
+}
+
+locals {
+  zone_id = var.enable_api_custom_domain ? (
+    var.route53_zone_id != "" ? var.route53_zone_id : data.aws_route53_zone.root[0].zone_id
+  ) : ""
+  issue_api_cert = var.enable_api_custom_domain && var.api_certificate_arn == ""
+}
+
+module "acm_api" {
+  source             = "./modules/acm"
+  domain_name        = local.api_fqdn
+  zone_id            = local.zone_id
+  create_certificate = local.issue_api_cert
+}
+
 module "kms" {
   source      = "./modules/kms"
   environment = var.environment
@@ -68,6 +97,7 @@ module "lambda" {
   data_bucket_name     = module.s3_data.bucket_id
   kms_key_arn          = module.kms.key_arn
   alena_model_id       = var.alena_model_id
+  bedrock_enabled      = var.bedrock_enabled
 }
 
 module "apigw" {
@@ -76,8 +106,36 @@ module "apigw" {
   lambda_invoke_arn     = module.lambda.invoke_arn
   lambda_function_name  = module.lambda.function_name
   cognito_user_pool_arn = module.cognito.user_pool_arn
-  domain_name           = var.api_domain_name
-  certificate_arn       = var.api_certificate_arn
+  domain_name           = var.enable_api_custom_domain ? local.api_fqdn : ""
+  certificate_arn = var.enable_api_custom_domain ? (
+    var.api_certificate_arn != "" ? var.api_certificate_arn : module.acm_api.certificate_arn
+  ) : ""
+}
+
+resource "aws_route53_record" "api_a" {
+  count   = var.enable_api_custom_domain ? 1 : 0
+  zone_id = local.zone_id
+  name    = local.api_fqdn
+  type    = "A"
+
+  alias {
+    name                   = module.apigw.regional_domain_name
+    zone_id                = module.apigw.regional_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "api_aaaa" {
+  count   = var.enable_api_custom_domain ? 1 : 0
+  zone_id = local.zone_id
+  name    = local.api_fqdn
+  type    = "AAAA"
+
+  alias {
+    name                   = module.apigw.regional_domain_name
+    zone_id                = module.apigw.regional_zone_id
+    evaluate_target_health = false
+  }
 }
 
 module "ssm" {

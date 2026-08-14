@@ -71,6 +71,7 @@ export default function App() {
         <Route path="marketplace/:id" element={<ListingDetailPage />} />
         <Route path="account" element={<AccountPage />} />
       </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

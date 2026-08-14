@@ -357,7 +357,15 @@ export async function createShadeMatch(
     srcFileId: fileId,
     brandFilter: brands,
   });
-  const polled = await pollTask("shade-finder", packYoucamIds(taskId, fileId));
+  const packed = packYoucamIds(taskId, fileId);
+  let polled = await pollTask("shade-finder", packed);
+  for (let i = 0; i < 8 && polled.status === "running"; i++) {
+    await new Promise((r) => setTimeout(r, 400));
+    polled = await pollTask("shade-finder", packed);
+  }
+  if (polled.status !== "success") {
+    throw new Error("STUDIO_SHADE_PENDING");
+  }
   const payload = polled.data;
   const scored = matchShadeTwins(payload, shadeCatalogue());
   const id = crypto.randomUUID();
@@ -394,4 +402,27 @@ export async function purgeUserStudio(sub: string): Promise<void> {
   if (isDsqlEnabled()) await dsql.purgeUserStudio(sub);
   looks.delete(sub);
   shades.delete(sub);
+}
+
+export async function settleMakeupByYoucamTask(
+  taskId: string,
+): Promise<{ kind: "makeup"; id: string } | null> {
+  if (isDsqlEnabled()) {
+    const row = await dsql.findPendingMakeupByTask(taskId);
+    if (!row) return null;
+    await settleMakeupLook(row.userSub, row);
+    return { kind: "makeup", id: row.id };
+  }
+  for (const [sub, rows] of looks) {
+    const row = rows.find(
+      (s) =>
+        s.status === "pending" &&
+        unpackYoucamIds(s.youcamTaskId).taskId === taskId,
+    );
+    if (row) {
+      await settleMakeupLook(sub, row);
+      return { kind: "makeup", id: row.id };
+    }
+  }
+  return null;
 }

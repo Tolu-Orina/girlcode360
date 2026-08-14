@@ -32,6 +32,7 @@ describe("P3.4 wardrobe tagging and bans", () => {
     assert.equal(parseWardrobeCategory("Dress"), "one_piece");
     assert.equal(parseWardrobeCategory("lingerie"), null);
     assert.throws(() => assertWardrobeAllowed("silk lingerie set"), /BANNED/);
+    assert.throws(() => assertWardrobeAllowed("one-piece swimsuit"), /BANNED/);
   });
 
   it("maps sample hexes to closed colour names", () => {

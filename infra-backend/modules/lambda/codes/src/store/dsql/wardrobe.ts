@@ -269,3 +269,18 @@ export async function purgeUserWardrobe(userSub: string): Promise<void> {
   await query(`DELETE FROM wardrobe_outfits WHERE user_sub = $1`, [userSub]);
   await query(`DELETE FROM wardrobe_items WHERE user_sub = $1`, [userSub]);
 }
+
+export async function findPendingOutfitByTask(
+  taskId: string,
+): Promise<WardrobeOutfitRow | undefined> {
+  const res = await query<OutfitDb>(
+    `SELECT * FROM wardrobe_outfits
+     WHERE status = 'pending'
+       AND youcam_task_id IS NOT NULL
+       AND (youcam_task_id = $1 OR youcam_task_id LIKE $2)
+     LIMIT 1`,
+    [taskId, `${taskId}::yc::%`],
+  );
+  const row = res.rows[0];
+  return row ? mapOutfit(row) : undefined;
+}

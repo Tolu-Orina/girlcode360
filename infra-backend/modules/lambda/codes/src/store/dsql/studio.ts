@@ -196,3 +196,17 @@ export async function purgeUserStudio(userSub: string): Promise<void> {
   await query(`DELETE FROM makeup_looks WHERE user_sub = $1`, [userSub]);
   await query(`DELETE FROM shade_matches WHERE user_sub = $1`, [userSub]);
 }
+
+export async function findPendingMakeupByTask(
+  taskId: string,
+): Promise<MakeupLookRow | undefined> {
+  const res = await query<MakeupDb>(
+    `SELECT * FROM makeup_looks
+     WHERE status = 'pending' AND deleted_at IS NULL
+       AND (youcam_task_id = $1 OR youcam_task_id LIKE $2)
+     LIMIT 1`,
+    [taskId, `${taskId}::yc::%`],
+  );
+  const row = res.rows[0];
+  return row ? mapMakeup(row) : undefined;
+}

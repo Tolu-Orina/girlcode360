@@ -127,3 +127,17 @@ export async function listHairScans(userSub: string): Promise<HairScanRow[]> {
 export async function purgeUserHair(userSub: string): Promise<void> {
   await query(`DELETE FROM hair_scans WHERE user_sub = $1`, [userSub]);
 }
+
+export async function findPendingHairByTask(
+  taskId: string,
+): Promise<HairScanRow | undefined> {
+  const res = await query<HairDb>(
+    `SELECT * FROM hair_scans
+     WHERE status = 'pending' AND deleted_at IS NULL
+       AND (youcam_task_id = $1 OR youcam_task_id LIKE $2)
+     LIMIT 1`,
+    [taskId, `${taskId}::yc::%`],
+  );
+  const row = res.rows[0];
+  return row ? mapRow(row) : undefined;
+}

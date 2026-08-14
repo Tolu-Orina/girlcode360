@@ -10,6 +10,7 @@ import {
   findDeniedPhrases,
   healthLensActivation,
   HAIR_HL_MONTHLY_SIGNED_OFF,
+  isStylistQuery,
   isWardrobeClimate,
   redactPii,
   runHealthLensRules,
@@ -72,14 +73,13 @@ export async function getAlenaQuota(sub: string) {
 
 async function consumeAlenaQuota(sub: string): Promise<boolean> {
   if (await isPremium(sub)) return true;
+  if (isDsqlEnabled()) {
+    return dsqlAi.tryIncrementAlenaUsed(sub, dayKey(), FREE_ALENA_LIMIT);
+  }
   const q = await getAlenaQuota(sub);
   if ((q.remaining ?? 0) <= 0) return false;
-  if (isDsqlEnabled()) {
-    await dsqlAi.incrementAlenaUsed(sub, dayKey());
-  } else {
-    const key = `${sub}:${dayKey()}`;
-    quota.set(key, (quota.get(key) ?? 0) + 1);
-  }
+  const key = `${sub}:${dayKey()}`;
+  quota.set(key, (quota.get(key) ?? 0) + 1);
   return true;
 }
 
@@ -155,7 +155,8 @@ export async function assembleAlenaContext(
   const starts = cycles.map((c) => c.startDate).sort();
   const intervals: number[] = [];
   for (let i = 1; i < starts.length; i++) {
-    intervals.push(daysBetween(starts[i - 1]!, starts[i]!));
+    const gap = daysBetween(starts[i - 1]!, starts[i]!);
+    if (gap > 0 && gap < 90) intervals.push(gap);
   }
   const days = (await listDays(sub)).slice(-45);
   const symptomCounts = new Map<string, number>();
@@ -236,8 +237,20 @@ export async function assembleAlenaContext(
       categories: [...new Set(items.map((i) => i.category).filter(Boolean))],
       today: {
         item_ids: today.itemIds,
+        pieces: today.itemIds.map((id) => {
+          const row = items.find((i) => i.id === id);
+          return row
+            ? {
+                id,
+                name: row.name,
+                category: row.category,
+                colours: row.colourTags,
+              }
+            : { id };
+        }),
         enough: today.enoughItems,
         shop_first: today.shopFirst,
+        wardrobe_first: true,
       },
     };
   }
@@ -379,7 +392,14 @@ export async function alenaChat(
     }))
     .filter((m) => m.content.length > 0);
 
-  const system = alenaSystemPrompt(market, mode);
+  const system = [
+    alenaSystemPrompt(market, mode),
+    isStylistQuery(cleanMessage)
+      ? "This question is a stylist ask. Use studio.wardrobe.today.pieces (names and colours) first. Do not open with shopping. Do not invent garments that are not in the summary."
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   const question = cleanMessage;
   const messages =
     mode === "context"
@@ -413,7 +433,8 @@ async function lensInput(sub: string) {
   const starts = cycles.map((c) => c.startDate).sort();
   const intervals: number[] = [];
   for (let i = 1; i < starts.length; i++) {
-    intervals.push(daysBetween(starts[i - 1]!, starts[i]!));
+    const gap = daysBetween(starts[i - 1]!, starts[i]!);
+    if (gap > 0 && gap < 90) intervals.push(gap);
   }
   const days = await listDays(sub);
   const pregDays = await listPregnancyDays(sub);

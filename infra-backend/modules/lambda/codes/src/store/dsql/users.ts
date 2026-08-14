@@ -64,6 +64,17 @@ export async function getUser(sub: string): Promise<UserProfile | undefined> {
   return row ? mapUser(row) : undefined;
 }
 
+export async function getUserByEmail(
+  email: string,
+): Promise<UserProfile | undefined> {
+  const res = await query<UserRow>(
+    `SELECT * FROM users WHERE lower(email) = lower($1) LIMIT 1`,
+    [email],
+  );
+  const row = res.rows[0];
+  return row ? mapUser(row) : undefined;
+}
+
 export async function upsertUser(
   sub: string,
   patch: Partial<UserProfile> & { email?: string },

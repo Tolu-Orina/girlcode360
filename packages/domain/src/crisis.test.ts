@@ -17,6 +17,14 @@ describe("detectCrisis (ALN-F-04)", () => {
   it("does not flag ordinary cycle questions", () => {
     assert.equal(detectCrisis("My period is late this month"), false);
   });
+
+  it("flags killing myself, overdose, and end it all", () => {
+    assert.equal(detectCrisis("I keep thinking about killing myself"), true);
+    assert.equal(detectCrisis("I might overdose tonight"), true);
+    assert.equal(detectCrisis("I just want to end it all"), true);
+    assert.equal(detectCrisis("I cut myself last night"), true);
+    assert.equal(detectCrisis("I do not want to live anymore"), true);
+  });
 });
 
 describe("crisisMessage hospital line", () => {

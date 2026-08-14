@@ -114,3 +114,17 @@ export async function listAccessoryLooks(userSub: string): Promise<AccessoryLook
 export async function purgeUserAccessories(userSub: string): Promise<void> {
   await query(`DELETE FROM accessory_looks WHERE user_sub = $1`, [userSub]);
 }
+
+export async function findPendingAccessoryByTask(
+  taskId: string,
+): Promise<AccessoryLookRow | undefined> {
+  const res = await query<Db>(
+    `SELECT * FROM accessory_looks
+     WHERE status = 'pending' AND deleted_at IS NULL
+       AND (youcam_task_id = $1 OR youcam_task_id LIKE $2)
+     LIMIT 1`,
+    [taskId, `${taskId}::yc::%`],
+  );
+  const row = res.rows[0];
+  return row ? mapRow(row) : undefined;
+}

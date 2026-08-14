@@ -20,6 +20,7 @@ import {
   claimNotificationSend,
   listAllPushSubscriptions,
 } from "./marketplace";
+import { vapidKeys } from "../lib/secrets";
 
 function localStamp(now: Date, timeZone: string): {
   date: string;
@@ -124,8 +125,9 @@ async function sendWebPush(
   p256dh: string,
   auth: string,
 ): Promise<boolean> {
-  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
-  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+  const keys = await vapidKeys();
+  const publicKey = keys.publicKey;
+  const privateKey = keys.privateKey;
   if (!publicKey || !privateKey) return false;
   const payload = lockScreenSafePush();
   if (!pushBodyIsLockSafe(payload.body)) return false;
@@ -151,8 +153,8 @@ async function sendWebPush(
   }
 }
 
-export function vapidPublicKey(): string | null {
-  return process.env.VAPID_PUBLIC_KEY?.trim() || null;
+export async function vapidPublicKey(): Promise<string | null> {
+  return (await vapidKeys()).publicKey;
 }
 
 export async function runNotificationTick(now = new Date()): Promise<{
@@ -167,7 +169,8 @@ export async function runNotificationTick(now = new Date()): Promise<{
   let claimed = 0;
   let sent = 0;
   let quiet = 0;
-  const vapid = Boolean(vapidPublicKey() && process.env.VAPID_PRIVATE_KEY?.trim());
+  const keys = await vapidKeys();
+  const vapid = Boolean(keys.publicKey && keys.privateKey);
 
   for (const sub of users) {
     const profile = await getUser(sub);

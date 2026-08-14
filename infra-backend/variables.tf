@@ -14,8 +14,15 @@ variable "enable_dsql" {
 }
 
 variable "alena_model_id" {
-  type    = string
-  default = "global.amazon.nova-2-lite-v1:0"
+  type        = string
+  default     = "global.amazon.nova-2-lite-v1:0"
+  description = "Nova 2 Lite Global CRIS profile. Do not use amazon.nova-2-lite-v1:0 (in-region) or eu.amazon.nova-2-lite-v1:0 unless data residency requires it."
+}
+
+variable "bedrock_enabled" {
+  type        = bool
+  default     = true
+  description = "Lambda kill switch for live Bedrock Converse. Not a secret. Set false only for a Bedrock outage."
 }
 
 variable "cognito_callback_urls" {
@@ -53,12 +60,37 @@ variable "google_oauth_client_secret" {
   description = "Google OAuth client secret. Empty skips the Google IdP."
 }
 
-variable "api_domain_name" {
+variable "root_domain" {
+  type        = string
+  default     = "conquerorfoundation.com"
+  description = "Public Route 53 zone. API host is api.{domain_prefix}.{root_domain}."
+}
+
+variable "domain_prefix" {
+  type        = string
+  default     = ""
+  description = "girlcode (prod), girlcode-dev, girlcode-test. Empty derives from environment."
+}
+
+variable "enable_api_custom_domain" {
+  type        = bool
+  default     = true
+  description = "ACM in eu-west-2 + API Gateway custom domain + Route 53 alias."
+}
+
+variable "route53_zone_id" {
   type    = string
   default = ""
 }
 
+variable "api_domain_name" {
+  type        = string
+  default     = ""
+  description = "Override FQDN. Empty → api.{prefix}.{root_domain}."
+}
+
 variable "api_certificate_arn" {
-  type    = string
-  default = ""
+  type        = string
+  default     = ""
+  description = "Optional pre-issued ACM ARN in eu-west-2. Empty → this stack issues one."
 }

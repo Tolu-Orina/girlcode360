@@ -4,6 +4,7 @@ import {
   cyclePhaseFromDay,
   dayInCycle,
   findDeniedPhrases,
+  assertWardrobeAllowed,
   type CyclePhase,
   type MirrorInsight,
   type MirrorScanPoint,
@@ -547,6 +548,9 @@ export async function createTryOn(
   if (!item || item.kind !== "apparel" || !item.refImageUrl) {
     throw new Error("CATALOGUE_ITEM_INVALID");
   }
+  assertWardrobeAllowed(
+    `${item.title} ${item.tags.join(" ")} ${item.garmentCategory ?? ""}`,
+  );
   const { bytes, contentType } = decodeImage(imageB64);
   const srcId = await uploadYoucamFile(
     "cloth-v3",
