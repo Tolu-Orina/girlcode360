@@ -132,16 +132,12 @@ describe("P3.1 YouCam studio handlers (mocked)", () => {
   it("Hair: analysis and try-on are independent tasks", async () => {
     const analysis = await startHairAnalysis("face-1");
     const tryon = await startHairTryOn({ srcFileId: "face-1", hairColor: "#2b1b17" });
-    assert.equal(analysis, "task-hair-analysis");
+    assert.equal(analysis, "task-hair-length-detection");
     assert.equal(tryon, "task-hair-tryon");
     const posts = calls.filter((c) => c.method === "POST");
-    assert.ok(posts[0]?.url.endsWith("/task/hair-analysis"));
-    assert.deepEqual((posts[0]!.body as Record<string, unknown>).dst_actions, [
-      "hair_type",
-      "hair_length",
-      "hair_frizziness",
-      "hair_density",
-    ]);
+    assert.ok(posts[0]?.url.endsWith("/task/hair-length-detection"));
+    assert.equal((posts[0]!.body as Record<string, unknown>).src_file_id, "face-1");
+    assert.equal((posts[0]!.body as Record<string, unknown>).dst_actions, undefined);
     assert.ok(posts[1]?.url.endsWith("/task/hair-tryon"));
     assert.equal((posts[1]!.body as Record<string, unknown>).hair_color, "#2b1b17");
     await assert.rejects(
@@ -165,19 +161,19 @@ describe("P3.1 YouCam studio handlers (mocked)", () => {
     assert.equal(polled.resultUrl, "https://cdn.example/result.jpg");
   });
 
-  it("Nail: nail-tryon", async () => {
+  it("Nail: nail-vto", async () => {
     const id = await startNailTryOn({ srcFileId: "hand-1", nailColor: "#c45c6a" });
-    assert.equal(id, "task-nail-tryon");
+    assert.equal(id, "task-nail-vto");
     assert.equal((calls[0]!.body as Record<string, unknown>).nail_color, "#c45c6a");
   });
 
-  it("Jewellery: accessory-tryon requires retailer 3D asset (no 2D auto-gen)", async () => {
+  it("Jewellery: 2d-vto needs a SKU still URL (no invented 3D)", async () => {
     await assert.rejects(
       () =>
         startAccessoryTryOn({
           srcFileId: "face-1",
           accessoryCategory: "earring",
-          asset3dId: "",
+          refFileUrl: "",
         }),
       /YOUCAM_3D_ASSET_REQUIRED/,
     );
@@ -185,18 +181,23 @@ describe("P3.1 YouCam studio handlers (mocked)", () => {
     const id = await startAccessoryTryOn({
       srcFileId: "face-1",
       accessoryCategory: "earring",
-      asset3dId: "retailer-asset-9",
+      refFileUrl: "https://cdn.example/hoop.jpg",
     });
-    assert.equal(id, "task-accessory-tryon");
-    const body = calls[0]!.body as Record<string, unknown>;
-    assert.equal(body.asset_3d_id, "retailer-asset-9");
-    assert.equal(body.accessory_category, "earring");
+    assert.equal(id, "task-2d-vto/earring");
+    const posted = calls.find((c) => c.method === "POST");
+    assert.ok(posted?.url.endsWith("/s2s/v2.0/task/2d-vto/earring"));
+    const body = posted!.body as Record<string, unknown>;
+    assert.deepEqual(body.ref_file_urls, ["https://cdn.example/hoop.jpg"]);
+    assert.deepEqual(body.source_info, { name: "face-1" });
+    assert.equal(body.asset_3d_id, undefined);
   });
 
-  it("Eyewear: eyewear-tryon", async () => {
-    const id = await startEyewearTryOn({ srcFileId: "face-1", frameId: "frame-22" });
-    assert.equal(id, "task-eyewear-tryon");
-    assert.equal((calls[0]!.body as Record<string, unknown>).frame_id, "frame-22");
+  it("Eyewear S2S is unavailable", async () => {
+    await assert.rejects(
+      () => startEyewearTryOn({ srcFileId: "face-1", frameId: "frame-22" }),
+      /YOUCAM_EYEWEAR_UNAVAILABLE/,
+    );
+    assert.equal(calls.length, 0);
   });
 
   it("429 opens the shared circuit after consecutive failures", async () => {

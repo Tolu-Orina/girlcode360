@@ -15,6 +15,9 @@ import {
   getHairScanMedia,
   listHairScans,
 } from "@/lib/api";
+import { CameraStillCapture } from "@/components/blocks/camera-still";
+import { MirrorStill } from "@/components/blocks/mirror-still";
+import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
 import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
@@ -27,6 +30,20 @@ import {
   HAIR_CORRELATION_WELLNESS_NOTE,
   HAIR_STYLE_PRESETS,
 } from "../../../../../packages/domain/src/index";
+
+function hairFailCopy(reason: string | null | undefined): string {
+  const r = (reason ?? "").toLowerCase();
+  if (r.includes("face_angle") || r.includes("angle_invalid")) {
+    return "YouCam needs a face looking straight at the camera for length. Density is a separate chin-down still — this face photo cannot score density.";
+  }
+  if (r.includes("face") || r.includes("noface") || r.includes("detect")) {
+    return "YouCam could not read a clear face. Use a front-facing still in even light, hair down.";
+  }
+  if (reason) {
+    return `YouCam could not finish hair scores (${reason}). Try another front-facing still.`;
+  }
+  return "YouCam could not finish hair scores. Try another front-facing still in even light.";
+}
 
 export function MirrorHairPanel({
   status,
@@ -51,8 +68,9 @@ export function MirrorHairPanel({
   const [src, setSrc] = useState<string | null>(null);
   const [color, setColor] = useState<string>(HAIR_COLOR_PRESETS[0]!.hex);
   const [styleId, setStyleId] = useState<string>(HAIR_STYLE_PRESETS[0]!.id);
-  const faceInput = useRef<HTMLInputElement>(null);
   const pending = useRef<string | null>(null);
+  const lastQueued = useRef("");
+  const photos = useMirrorPhotosOptional();
   const reusable = scans.find((s) => !s.seeded && s.status === "success");
   const captureOff = busy || !status.youcamConfigured || !online;
 
@@ -150,14 +168,30 @@ export function MirrorHairPanel({
     }
   }
 
+  const runRef = useRef(run);
+  runRef.current = run;
+
+  useEffect(() => {
+    const queued = photos?.queued;
+    if (!queued || queued.kind !== "face") return;
+    if (queued.token === lastQueued.current) return;
+    lastQueued.current = queued.token;
+    photos?.consumeQueued(queued.token);
+    void runRef.current(mode, queued.file);
+  }, [photos, mode]);
+
   const insight = selected?.kind === "analysis" ? selected.insight : rows.find((r) => r.kind === "analysis")?.insight;
 
   return (
-    <div className="grid gap-4 border-t border-border pt-6">
+    <div className="grid gap-4">
       <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
         Hair Studio
       </h2>
       <p className={leadClass}>{HAIR_CORRELATION_WELLNESS_NOTE}</p>
+      <p className={leadClass}>
+        Hair scores from a face still report length. Density needs a chin-down
+        still (about 45°). Frizz needs front, left, and right views.
+      </p>
       <SegmentedTabs
         ariaLabel="Hair Studio modes"
         value={mode}
@@ -171,7 +205,7 @@ export function MirrorHairPanel({
       <p className={leadClass}>
         {reusable
           ? "Uses your latest skin scan when it is under 30 days old, or a new face photo."
-          : "Take a skin scan first, or upload a face photo here."}
+          : "Take a skin scan first, or take a face photo here."}
       </p>
 
       {mode === "tryon" ? (
@@ -215,42 +249,25 @@ export function MirrorHairPanel({
         </div>
       ) : null}
 
-      <input
-        ref={faceInput}
-        className="sr-only"
-        type="file"
-        accept="image/*"
-        capture="user"
-        disabled={captureOff}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          void run(mode, file);
-        }}
-      />
       <ActionRow>
         <Button
           type="button"
-          disabled={captureOff}
-          onClick={() => {
-            if (reusable) {
-              void run(mode);
-              return;
-            }
-            faceInput.current?.click();
-          }}
+          disabled={captureOff || !reusable}
+          onClick={() => void run(mode)}
         >
           {mode === "analysis" ? "Run hair scores" : "Try this colour"}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={captureOff}
-          onClick={() => faceInput.current?.click()}
-        >
-          Use a new photo
-        </Button>
       </ActionRow>
+      <CameraStillCapture
+        disabled={captureOff}
+        facingMode="user"
+        guide="face"
+        captureLabel="Take a face photo"
+        videoLabel="Live camera for a hair still"
+        photoKind="face"
+        onFile={(file) => void run(mode, file)}
+        onError={onError}
+      />
 
       {selected ? (
         <article className={cn(outlinedCardClass, "grid gap-4")}>
@@ -259,11 +276,14 @@ export function MirrorHairPanel({
             {selected.status === "pending" ? " · Working" : ""}
             {selected.status === "error" ? " · Could not finish" : ""}
           </h3>
+          {selected.status === "error" ? (
+            <p className={leadClass}>{hairFailCopy(selected.failReason)}</p>
+          ) : null}
           {src ? (
-            <img
+            <MirrorStill
               src={src}
               alt={selected.kind === "tryon" ? "Hair colour try-on" : "Hair scores"}
-              className="w-full rounded-[var(--radius)] border border-border bg-muted"
+              crop="face"
             />
           ) : null}
           {selected.kind === "analysis" ? (

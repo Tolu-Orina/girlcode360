@@ -1,6 +1,6 @@
 /**
  * P3.6 Accessories Studio + resale labels (FR-130–133, FR-141–143).
- * Jewellery try-on requires a retailer 3D asset id. Never invent one from a 2D photo.
+ * Jewellery S2S is 2D VTO with a catalogue SKU still (`refImageUrl`). Never invent 3D from a photo.
  */
 
 export const ACCESSORY_STUDIO_KINDS = [
@@ -25,7 +25,7 @@ export type AccessoryJewelleryCategory =
 export const RESALE_PEER_LABEL = "from a GirlCode360 member";
 
 export const ACCESSORY_NO_2D_TO_3D_NOTE =
-  "Jewellery and watch try-on needs a retailer 3D asset. We do not build 3D models from product photos.";
+  "Jewellery try-on needs a catalogue SKU still. We do not invent a 3D model from a product photo.";
 
 const NAIL_HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -46,18 +46,26 @@ export function isNailColorHex(v: string): boolean {
 export function accessoryTryOnReady(item: {
   kind: string;
   asset3dId?: string | null;
+  refImageUrl?: string | null;
   frameId?: string | null;
   nailColor?: string | null;
 }): boolean {
-  if (item.kind === "jewellery") return Boolean(item.asset3dId?.trim());
-  if (item.kind === "eyewear") return Boolean(item.frameId?.trim());
+  if (item.kind === "jewellery") return Boolean(item.refImageUrl?.trim());
+  if (item.kind === "eyewear") return false;
   if (item.kind === "nail_color") {
     return Boolean(item.nailColor && isNailColorHex(item.nailColor));
   }
   return false;
 }
 
-/** FR-133 — empty 3D id is a hard stop, not a 2D fallback. */
+/** FR-133 — empty SKU still is a hard stop. Do not invent a model from a random photo. */
+export function requireJewellerySkuUrl(refImageUrl: string | null | undefined): string {
+  const url = refImageUrl?.trim() ?? "";
+  if (!url) throw new Error("ACCESSORY_3D_REQUIRED");
+  return url;
+}
+
+/** Kept for older 3D-id callers. Empty id is a hard stop. */
 export function requireRetailer3dAsset(asset3dId: string | null | undefined): string {
   const id = asset3dId?.trim() ?? "";
   if (!id) throw new Error("ACCESSORY_3D_REQUIRED");

@@ -2,7 +2,7 @@
  * IndexedDB schema for offline-first cycle logs + sync outbox.
  */
 const DB_NAME = "girlcode360";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export type OutboxItem = {
   id: string;
@@ -13,7 +13,7 @@ export type OutboxItem = {
   error?: string;
 };
 
-function openDb(): Promise<IDBDatabase> {
+export function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
@@ -34,6 +34,11 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("wardrobe_drafts")) {
         const drafts = db.createObjectStore("wardrobe_drafts", { keyPath: "id" });
         drafts.createIndex("status", "status", { unique: false });
+      }
+      if (!db.objectStoreNames.contains("mirror_photos")) {
+        const photos = db.createObjectStore("mirror_photos", { keyPath: "id" });
+        photos.createIndex("kind", "kind", { unique: false });
+        photos.createIndex("createdAt", "createdAt", { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);

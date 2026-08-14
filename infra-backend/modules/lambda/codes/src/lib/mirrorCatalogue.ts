@@ -1,4 +1,7 @@
-import { accessoryTryOnReady } from "../../../../../../packages/domain/src/index";
+import {
+  accessoryTryOnReady,
+  MAKEUP_TRYON_SHADES,
+} from "../../../../../../packages/domain/src/index";
 import type { MirrorCatalogueItem } from "../types";
 
 /** Curated demo catalogue (MIR-F-04 / F-06 / F-08). Public garment URLs from Perfect Corp samples. */
@@ -128,38 +131,23 @@ export const MIRROR_CATALOGUE: MirrorCatalogueItem[] = [
   },
 ];
 
-const SHADE_BOUTIQUES = [
-  { brandCode: "seed-a", boutiqueName: "South Ken Beauty", boutiqueArea: "London · SW7" },
-  { brandCode: "seed-b", boutiqueName: "Bloom Pharmacy", boutiqueArea: "Lagos · Ikeja" },
-  { brandCode: "seed-c", boutiqueName: "Wellness Shelf", boutiqueArea: "Accra · Osu" },
-] as const;
-
-const SHADE_CODES: Record<string, { shade: string; title: string }> = {
-  fair: { shade: "10N", title: "Fair 10N" },
-  light: { shade: "20N", title: "Light 20N" },
-  light_medium: { shade: "30N", title: "Light-medium 30N" },
-  medium: { shade: "40N", title: "Medium 40N" },
-  tan: { shade: "50N", title: "Tan 50N" },
-  deep: { shade: "60N", title: "Deep 60N" },
-};
-
-for (const shop of SHADE_BOUTIQUES) {
-  for (const [family, meta] of Object.entries(SHADE_CODES)) {
-    MIRROR_CATALOGUE.push({
-      id: `mk-${shop.brandCode}-${family}`,
-      kind: "makeup",
-      title: `${shop.brandCode} ${meta.title}`,
-      subtitle: `Foundation stocked by ${shop.boutiqueName}`,
-      tags: ["foundation", family, shop.brandCode],
-      boutiqueName: shop.boutiqueName,
-      boutiqueArea: shop.boutiqueArea,
-      trimester: null,
-      pmosFit: false,
-      brandCode: shop.brandCode,
-      shadeCode: meta.shade,
-      shadeFamily: family,
-    });
-  }
+for (const shade of MAKEUP_TRYON_SHADES) {
+  MIRROR_CATALOGUE.push({
+    id: shade.id,
+    kind: "makeup",
+    title: shade.title,
+    subtitle: `Stocked by ${shade.boutiqueName}`,
+    tags: [shade.category, shade.brandCode, ...(shade.shadeFamily ? [shade.shadeFamily] : [])],
+    boutiqueName: shade.boutiqueName,
+    boutiqueArea: shade.boutiqueArea,
+    trimester: null,
+    pmosFit: false,
+    brandCode: shade.brandCode,
+    shadeCode: shade.shadeCode,
+    shadeFamily: shade.shadeFamily,
+    makeupCategory: shade.category,
+    swatchHex: shade.hex,
+  });
 }
 
 const ACCESSORY_SEED: Array<{
@@ -172,6 +160,7 @@ const ACCESSORY_SEED: Array<{
   boutiqueArea: string;
   accessoryCategory?: "ring" | "bracelet" | "watch" | "earring" | "necklace";
   asset3dId?: string | null;
+  refImageUrl?: string;
   frameId?: string | null;
   nailColor?: string;
 }> = [
@@ -179,73 +168,77 @@ const ACCESSORY_SEED: Array<{
     id: "jw-hoop",
     kind: "jewellery",
     title: "Gold hoop earring",
-    subtitle: "Retailer 3D asset on file — try-on ready",
+    subtitle: "Catalogue SKU still — 2D try-on, not a generated 3D model",
     tags: ["jewellery", "earring"],
     boutiqueName: "Maternal Thread",
     boutiqueArea: "Accra · Airport City",
     accessoryCategory: "earring",
-    asset3dId: "seed-3d-earring-01",
+    refImageUrl:
+      "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=800&q=80",
   },
   {
     id: "jw-band",
     kind: "jewellery",
     title: "Slim ring",
-    subtitle: "Retailer 3D asset on file — try-on ready",
+    subtitle: "Catalogue SKU still — 2D try-on, not a generated 3D model",
     tags: ["jewellery", "ring"],
     boutiqueName: "Maternal Thread",
     boutiqueArea: "Accra · Airport City",
     accessoryCategory: "ring",
-    asset3dId: "seed-3d-ring-01",
+    refImageUrl:
+      "https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=800&q=80",
   },
   {
     id: "jw-bangle",
     kind: "jewellery",
     title: "Everyday bracelet",
-    subtitle: "Retailer 3D asset on file — try-on ready",
+    subtitle: "Catalogue SKU still — 2D try-on, not a generated 3D model",
     tags: ["jewellery", "bracelet"],
     boutiqueName: "Ease Atelier",
     boutiqueArea: "Lagos · Victoria Island",
     accessoryCategory: "bracelet",
-    asset3dId: "seed-3d-bracelet-01",
+    refImageUrl:
+      "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=800&q=80",
   },
   {
     id: "jw-watch",
     kind: "jewellery",
     title: "Slim watch",
-    subtitle: "Retailer 3D asset on file — try-on ready",
+    subtitle: "Catalogue SKU still — 2D try-on, not a generated 3D model",
     tags: ["jewellery", "watch"],
     boutiqueName: "South Ken Beauty",
     boutiqueArea: "London · SW7",
     accessoryCategory: "watch",
-    asset3dId: "seed-3d-watch-01",
+    refImageUrl:
+      "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=800&q=80",
   },
   {
     id: "jw-pendant",
     kind: "jewellery",
     title: "Fine necklace",
-    subtitle: "Retailer 3D asset on file — try-on ready",
+    subtitle: "Catalogue SKU still — 2D try-on, not a generated 3D model",
     tags: ["jewellery", "necklace"],
     boutiqueName: "South Ken Beauty",
     boutiqueArea: "London · SW7",
     accessoryCategory: "necklace",
-    asset3dId: "seed-3d-necklace-01",
+    refImageUrl:
+      "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80",
   },
   {
     id: "jw-photo-only",
     kind: "jewellery",
     title: "Statement earring (photo only)",
-    subtitle: "No 3D asset yet — try-on stays off. We do not build 3D from this photo.",
+    subtitle: "No SKU still on file — try-on stays off. We do not invent a model.",
     tags: ["jewellery", "earring"],
     boutiqueName: "Ease Atelier",
     boutiqueArea: "Lagos · Victoria Island",
     accessoryCategory: "earring",
-    asset3dId: null,
   },
   {
     id: "ew-round",
     kind: "eyewear",
     title: "Round frame",
-    subtitle: "Optician catalogue frame — try-on ready",
+    subtitle: "Eyewear S2S try-on is not on this API key — catalogue only",
     tags: ["eyewear", "optician"],
     boutiqueName: "South Ken Beauty",
     boutiqueArea: "London · SW7",
@@ -276,6 +269,7 @@ for (const row of ACCESSORY_SEED) {
     pmosFit: false,
     accessoryCategory: row.accessoryCategory,
     asset3dId: row.asset3dId,
+    refImageUrl: row.refImageUrl,
     frameId: row.frameId,
     nailColor: row.nailColor,
   });

@@ -390,7 +390,7 @@ export function HealthPage() {
           <SkeletonBlock className="h-96 rounded-[var(--radius-sheet)]" />
         </div>
       ) : (
-        <div className="grid items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
+        <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
           <HealthModuleNav
             value={tab}
             onChange={setTab}

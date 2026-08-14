@@ -48,7 +48,7 @@ export function AlenaHost() {
         aria-hidden={!open}
         inert={!open}
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[min(100%,28rem)] flex-col border-0 bg-background shadow-[var(--shadow-modal)]",
+          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[min(100%,28rem)] flex-col overflow-x-clip border-0 bg-background shadow-[var(--shadow-modal)]",
           !open && "pointer-events-none",
         )}
         initial={false}

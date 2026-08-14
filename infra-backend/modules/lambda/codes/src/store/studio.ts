@@ -2,6 +2,7 @@ import {
   matchShadeTwins,
   parseFoundationFamily,
   parseMakeupCategories,
+  parseMakeupPalettes,
   skinScanReusableForShade,
   type ShadeCatalogueEntry,
   type StudioMakeupCategory,
@@ -12,6 +13,7 @@ import { MIRROR_CATALOGUE } from "../lib/mirrorCatalogue";
 import {
   packYoucamIds,
   pollTask,
+  pollUntilSettled,
   requestYoucamFileDeletion,
   startMakeupTransfer,
   startMakeupVto,
@@ -211,7 +213,7 @@ async function settleMakeupLook(
 ): Promise<MakeupLookRecord | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollTask(makeupCapability(row.sourceKind), row.youcamTaskId);
+    const task = await pollUntilSettled(makeupCapability(row.sourceKind), row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as const };
@@ -250,6 +252,16 @@ async function resolveFaceFileId(
   opts: { scanId?: string; imageB64?: string; uploadKind: YoucamCapability },
 ): Promise<{ fileId: string; scanId: string | null }> {
   const scan = await getStudioScanRef(sub, opts.scanId);
+  if (opts.imageB64) {
+    const { bytes, contentType } = decodeImage(opts.imageB64);
+    const fileId = await uploadYoucamFile(
+      opts.uploadKind,
+      bytes,
+      contentType,
+      `studio-${Date.now()}.jpg`,
+    );
+    return { fileId, scanId: scan?.id ?? null };
+  }
   // Skin-analysis file_ids are not valid for makeup-vto / mu-transfer.
   if (scan && skinScanReusableForShade(scan.createdAt) && scan.sourceS3Key) {
     const bytes = await getObject(scan.sourceS3Key);
@@ -263,15 +275,7 @@ async function resolveFaceFileId(
       return { fileId, scanId: scan.id };
     }
   }
-  if (!opts.imageB64) throw new Error("STUDIO_FACE_REQUIRED");
-  const { bytes, contentType } = decodeImage(opts.imageB64);
-  const fileId = await uploadYoucamFile(
-    opts.uploadKind,
-    bytes,
-    contentType,
-    `studio-${Date.now()}.jpg`,
-  );
-  return { fileId, scanId: scan?.id ?? null };
+  throw new Error("STUDIO_FACE_REQUIRED");
 }
 
 export async function createMakeupLook(
@@ -282,9 +286,11 @@ export async function createMakeupLook(
     scanId?: string;
     referenceB64?: string;
     categories?: unknown;
+    palettes?: unknown;
   },
 ): Promise<MakeupLook> {
   const categories = parseMakeupCategories(opts.categories) as StudioMakeupCategory[];
+  const palettes = parseMakeupPalettes(opts.palettes);
   const uploadKind = makeupCapability(opts.sourceKind);
   const face = await resolveFaceFileId(sub, {
     scanId: opts.scanId,
@@ -309,6 +315,7 @@ export async function createMakeupLook(
     vendorTaskId = await startMakeupVto({
       srcFileId: face.fileId,
       makeupCategories: categories,
+      palettes,
     });
   }
   const taskId = packYoucamIds(vendorTaskId, face.fileId);

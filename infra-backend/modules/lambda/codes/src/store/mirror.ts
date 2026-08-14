@@ -16,7 +16,7 @@ import { youcamApiKey } from "../lib/secrets";
 import {
   downloadUrl,
   packYoucamIds,
-  pollTask,
+  pollUntilSettled,
   requestYoucamFileDeletion,
   startClothTryOn,
   startSkinAnalysis,
@@ -304,7 +304,7 @@ function decodeImage(b64: string): { bytes: Buffer; contentType: string } {
 async function settleScan(sub: string, row: MemScan): Promise<MemScan | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollTask("skin-analysis", row.youcamTaskId);
+    const task = await pollUntilSettled("skin-analysis", row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as const };
@@ -534,6 +534,7 @@ export function listCatalogue(opts: {
         asset3dId,
         frameId,
         nailColor: item.nailColor,
+        refImageUrl: item.refImageUrl,
       }),
     }),
   );
@@ -597,7 +598,7 @@ export async function createTryOn(
 async function settleTryOn(sub: string, row: MemTry): Promise<MemTry | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollTask("cloth-v3", row.youcamTaskId);
+    const task = await pollUntilSettled("cloth-v3", row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as MirrorTaskStatus };

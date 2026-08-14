@@ -346,7 +346,7 @@ export function LandingPage() {
   }, [hash]);
 
   return (
-    <div className="relative min-h-dvh bg-background text-foreground">
+    <div className="relative min-h-dvh max-w-full overflow-x-clip bg-background text-foreground">
       <LandingAtmosphere />
       {reduce ? null : (
         <motion.div

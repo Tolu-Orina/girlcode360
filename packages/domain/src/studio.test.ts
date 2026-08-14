@@ -5,8 +5,11 @@ import {
   parseShadeFinderPayload,
 } from "./fitzpatrick.ts";
 import {
+  buildMakeupVtoEffects,
+  makeupShadesForCategory,
   matchShadeTwins,
   parseMakeupCategories,
+  parseMakeupPalettes,
   skinScanReusableForShade,
   STUDIO_MAKEUP_CATEGORIES,
 } from "./studio.ts";
@@ -30,6 +33,39 @@ describe("parseMakeupCategories", () => {
 
   it("drops unknown labels", () => {
     assert.deepEqual(parseMakeupCategories(["lip", "not-a-category"]), ["lip"]);
+  });
+});
+
+describe("parseMakeupPalettes", () => {
+  it("keeps valid hex per category", () => {
+    assert.deepEqual(parseMakeupPalettes({ blush: "#c45c6a", skip: "#fff" }), {
+      blush: "#c45c6a",
+    });
+  });
+});
+
+describe("buildMakeupVtoEffects", () => {
+  it("includes brows, lashes, and the chosen blush hex", () => {
+    const effects = buildMakeupVtoEffects(["blush", "eyebrow", "eyelash"], {
+      blush: "#c45c6a",
+    });
+    const cats = effects.map((e) => e.category);
+    assert.ok(cats.includes("blush"));
+    assert.ok(cats.includes("eyebrows"));
+    assert.ok(cats.includes("eyelashes"));
+    const blush = effects.find((e) => e.category === "blush") as {
+      palettes: Array<{ color: string }>;
+    };
+    assert.equal(blush.palettes[0]?.color, "#C45C6A");
+  });
+});
+
+describe("makeupShadesForCategory", () => {
+  it("stocks foundation at more than one boutique", () => {
+    const shops = new Set(
+      makeupShadesForCategory("foundation").map((s) => s.boutiqueName),
+    );
+    assert.ok(shops.size >= 2);
   });
 });
 

@@ -28,6 +28,8 @@ import {
   postConsents,
   suggestWardrobeOutfit,
 } from "@/lib/api";
+import { CameraStillCapture } from "@/components/blocks/camera-still";
+import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
 import { PURPOSE_COPY } from "@/lib/consent-copy";
 import {
   enqueueWardrobeDraft,
@@ -142,9 +144,9 @@ export function MirrorWardrobePanel({
   );
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
-  const garmentInput = useRef<HTMLInputElement>(null);
-  const bodyInput = useRef<HTMLInputElement>(null);
   const pendingOutfit = useRef<string | null>(null);
+  const lastQueued = useRef("");
+  const photos = useMirrorPhotosOptional();
   const copy = PURPOSE_COPY.wardrobe;
   const captureOff = busy;
 
@@ -356,6 +358,21 @@ export function MirrorWardrobePanel({
     }
   }
 
+  const onGarmentRef = useRef(onGarment);
+  const onBodyRef = useRef(onBody);
+  onGarmentRef.current = onGarment;
+  onBodyRef.current = onBody;
+
+  useEffect(() => {
+    const queued = photos?.queued;
+    if (!queued) return;
+    if (queued.token === lastQueued.current) return;
+    lastQueued.current = queued.token;
+    photos?.consumeQueued(queued.token);
+    if (queued.kind === "garment") void onGarmentRef.current(queued.file);
+    if (queued.kind === "body") void onBodyRef.current(queued.file);
+  }, [photos]);
+
   async function onSuggestToday() {
     onBusy(true);
     onError(null);
@@ -416,7 +433,7 @@ export function MirrorWardrobePanel({
 
   if (!status.wardrobeConsented) {
     return (
-      <div className="grid gap-4 border-t border-border pt-6">
+      <div className="grid gap-4">
         <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
           My Wardrobe
         </h2>
@@ -431,7 +448,7 @@ export function MirrorWardrobePanel({
   }
 
   return (
-    <div className="grid gap-4 border-t border-border pt-6">
+    <div className="grid gap-4">
       <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
         My Wardrobe
       </h2>
@@ -460,19 +477,6 @@ export function MirrorWardrobePanel({
 
       {mode === "closet" ? (
         <>
-          <input
-            ref={garmentInput}
-            className="sr-only"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            disabled={captureOff}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              void onGarment(file);
-            }}
-          />
           <label className="grid gap-2">
             <span className="text-[length:var(--text-label)]">Name (optional)</span>
             <input
@@ -496,20 +500,23 @@ export function MirrorWardrobePanel({
               ))}
             </select>
           </label>
-          <ActionRow>
-            <Button
-              type="button"
-              disabled={captureOff}
-              onClick={() => garmentInput.current?.click()}
-            >
-              Photograph a piece
-            </Button>
-            {selected && online ? (
+          <CameraStillCapture
+            disabled={captureOff}
+            facingMode="environment"
+            guide="none"
+            captureLabel="Photograph a piece"
+            videoLabel="Live camera for a wardrobe still"
+            photoKind="garment"
+            onFile={(file) => void onGarment(file)}
+            onError={onError}
+          />
+          {selected && online ? (
+            <ActionRow>
               <Button type="button" variant="outline" disabled={busy} onClick={() => void saveTags()}>
                 Save tag corrections
               </Button>
-            ) : null}
-          </ActionRow>
+            </ActionRow>
+          ) : null}
 
           {selected ? (
             <article className={cn(outlinedCardClass, "grid gap-3")}>
@@ -643,26 +650,16 @@ export function MirrorWardrobePanel({
             <Button type="button" disabled={busy || !online} onClick={() => void saveOutfit()}>
               Save outfit
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || !online || !outfit}
-              onClick={() => bodyInput.current?.click()}
-            >
-              Try on with a body photo
-            </Button>
           </ActionRow>
-          <input
-            ref={bodyInput}
-            className="sr-only"
-            type="file"
-            accept="image/*"
-            disabled={!online || busy}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              void onBody(file);
-            }}
+          <CameraStillCapture
+            disabled={busy || !online || !outfit}
+            facingMode="environment"
+            guide="body"
+            captureLabel="Try on with a body photo"
+            videoLabel="Live camera for a wardrobe body still"
+            photoKind="body"
+            onFile={(file) => void onBody(file)}
+            onError={onError}
           />
           {outfits.length ? (
             <ul className="m-0 grid list-none gap-2 p-0">

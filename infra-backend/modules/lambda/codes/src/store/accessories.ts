@@ -2,16 +2,15 @@ import {
   accessoryTryOnReady,
   isAccessoryJewelleryCategory,
   isNailColorHex,
-  requireRetailer3dAsset,
+  requireJewellerySkuUrl,
 } from "../../../../../../packages/domain/src/index";
 import { isDsqlEnabled } from "../db/client";
 import { deleteObject, getObject } from "../db/s3";
 import {
   packYoucamIds,
-  pollTask,
+  pollUntilSettled,
   requestYoucamFileDeletion,
   startAccessoryTryOn,
-  startEyewearTryOn,
   startNailTryOn,
   unpackYoucamIds,
   uploadYoucamFile,
@@ -82,10 +81,18 @@ async function putRow(row: AccessoryLookRecord): Promise<void> {
   );
 }
 
-function capabilityFor(kind: AccessoryLookKind): YoucamCapability {
-  if (kind === "jewellery") return "accessory-tryon";
-  if (kind === "eyewear") return "eyewear-tryon";
-  return "nail-tryon";
+function capabilityFor(
+  kind: AccessoryLookKind,
+  accessoryCategory: string | null,
+): YoucamCapability {
+  if (kind === "jewellery") {
+    if (!isAccessoryJewelleryCategory(accessoryCategory ?? "")) {
+      throw new Error("YOUCAM_ACCESSORY_CATEGORY_INVALID");
+    }
+    return `2d-vto/${accessoryCategory}` as YoucamCapability;
+  }
+  if (kind === "eyewear") throw new Error("YOUCAM_EYEWEAR_UNAVAILABLE");
+  return "nail-vto";
 }
 
 async function resolveSrcFileId(
@@ -93,31 +100,27 @@ async function resolveSrcFileId(
   opts: { scanId?: string; imageB64?: string },
   uploadKind: YoucamCapability,
 ): Promise<string> {
-  if (uploadKind !== "nail-tryon") {
+  if (opts.imageB64) {
+    const { bytes, contentType } = decodeImage(opts.imageB64);
+    return uploadYoucamFile(uploadKind, bytes, contentType, `acc-${Date.now()}.jpg`);
+  }
+  if (uploadKind !== "nail-vto") {
     const scan = await getStudioScanRef(sub, opts.scanId);
-    if (scan) {
-      const packed = unpackYoucamIds(scan.youcamTaskId).fileId;
-      if (packed) return packed;
-      if (scan.sourceS3Key) {
-        const bytes = await getObject(scan.sourceS3Key);
-        if (bytes) {
-          return uploadYoucamFile(
-            uploadKind,
-            bytes,
-            "image/jpeg",
-            `acc-${Date.now()}.jpg`,
-          );
-        }
+    if (scan?.sourceS3Key) {
+      const bytes = await getObject(scan.sourceS3Key);
+      if (bytes) {
+        return uploadYoucamFile(
+          uploadKind,
+          bytes,
+          "image/jpeg",
+          `acc-${Date.now()}.jpg`,
+        );
       }
     }
   }
-  if (!opts.imageB64) {
-    throw new Error(
-      uploadKind === "nail-tryon" ? "STUDIO_HAND_REQUIRED" : "STUDIO_FACE_REQUIRED",
-    );
-  }
-  const { bytes, contentType } = decodeImage(opts.imageB64);
-  return uploadYoucamFile(uploadKind, bytes, contentType, `acc-${Date.now()}.jpg`);
+  throw new Error(
+    uploadKind === "nail-vto" ? "STUDIO_HAND_REQUIRED" : "STUDIO_FACE_REQUIRED",
+  );
 }
 
 async function settleLook(
@@ -126,7 +129,10 @@ async function settleLook(
 ): Promise<AccessoryLookRecord | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollTask(capabilityFor(row.kind), row.youcamTaskId);
+    const task = await pollUntilSettled(
+      capabilityFor(row.kind, row.accessoryCategory),
+      row.youcamTaskId,
+    );
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as const };
@@ -210,6 +216,7 @@ export async function createAccessoryLook(
   if (
     !accessoryTryOnReady({
       kind: item.kind,
+      refImageUrl: item.refImageUrl,
       asset3dId: item.asset3dId,
       frameId: item.frameId,
       nailColor: item.nailColor,
@@ -218,7 +225,7 @@ export async function createAccessoryLook(
     throw new Error("ACCESSORY_3D_REQUIRED");
   }
 
-  const cap = capabilityFor(opts.kind);
+  const cap = capabilityFor(opts.kind, item.accessoryCategory ?? null);
   const fileId = await resolveSrcFileId(sub, opts, cap);
   let taskRaw: string;
   if (opts.kind === "jewellery") {
@@ -226,17 +233,14 @@ export async function createAccessoryLook(
     if (!isAccessoryJewelleryCategory(cat)) {
       throw new Error("YOUCAM_ACCESSORY_CATEGORY_INVALID");
     }
-    const asset3dId = requireRetailer3dAsset(item.asset3dId);
+    const refFileUrl = requireJewellerySkuUrl(item.refImageUrl);
     taskRaw = await startAccessoryTryOn({
       srcFileId: fileId,
       accessoryCategory: cat as AccessoryCategory,
-      asset3dId,
+      refFileUrl,
     });
   } else if (opts.kind === "eyewear") {
-    taskRaw = await startEyewearTryOn({
-      srcFileId: fileId,
-      frameId: item.frameId ?? "",
-    });
+    throw new Error("YOUCAM_EYEWEAR_UNAVAILABLE");
   } else {
     const nail = item.nailColor ?? "";
     if (!isNailColorHex(nail)) throw new Error("YOUCAM_NAIL_COLOR_REQUIRED");

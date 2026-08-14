@@ -10,18 +10,18 @@ import { apiBaseUrl } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
 const navFocus =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 export function AppHeader() {
   const homeTo = useStandalone() ? "/app" : "/";
   const user = useSessionUser();
 
   return (
-    <header className="glass-surface sticky top-0 z-20 flex min-h-[calc(var(--header-height)+env(safe-area-inset-top))] items-center gap-4 border-0 px-4 pt-[env(safe-area-inset-top)] shadow-[var(--shadow-2)] lg:px-6">
+    <header className="glass-surface sticky top-0 z-20 flex min-h-[calc(var(--header-height)+env(safe-area-inset-top))] min-w-0 max-w-full items-center gap-4 overflow-x-clip border-0 px-4 pt-[env(safe-area-inset-top)] shadow-[var(--shadow-2)] lg:px-6">
       <Link
         to={homeTo}
         className={cn(
-          "brand-mark brand-lockup inline-flex min-h-[var(--tap)] shrink-0 items-center gap-2 rounded-[var(--radius)] text-[length:var(--text-sub)] text-primary no-underline lg:hidden",
+          "brand-mark brand-lockup inline-flex min-h-[var(--tap)] min-w-0 items-center gap-2 rounded-[var(--radius)] text-[length:var(--text-sub)] text-primary no-underline lg:hidden",
           navFocus,
         )}
         aria-label="GirlCode360"
@@ -34,7 +34,7 @@ export function AppHeader() {
           className="brand-lockup-mark size-6 object-cover"
           decoding="async"
         />
-        GirlCode360
+        <span className="truncate">GirlCode360</span>
       </Link>
       <AppSearch />
       <div className="ml-auto flex shrink-0 items-center gap-2">

@@ -21,7 +21,7 @@ import {
   type UpsertCycleDayRequest,
   type UserProfile,
 } from "../../../../packages/api-types/src/index";
-import { apiBaseUrl, cognitoConfig } from "./config";
+import { apiBaseUrl, apiUrl, cognitoConfig, localYoucam } from "./config";
 import { getCurrentSession } from "./cognito";
 import { marketplaceQuery } from "./session-geo";
 
@@ -60,6 +60,7 @@ function toBase64Url(str: string): string {
 }
 
 async function authHeader(): Promise<string> {
+  if (localYoucam) return "Bearer local-youcam";
   const cognitoReady = Boolean(
     cognitoConfig.userPoolId && cognitoConfig.clientId,
   );
@@ -69,7 +70,9 @@ async function authHeader(): Promise<string> {
   } catch {
     /* no session */
   }
-  if (cognitoReady) {
+  // Live API Gateway uses a Cognito authorizer. The local `Bearer dev.*`
+  // scaffold never passes it (that is a 401, not a CORS block).
+  if (cognitoReady || apiBaseUrl) {
     throw new ApiError(401, "not_authenticated");
   }
   // Local scaffold when Cognito env is unset
@@ -93,7 +96,7 @@ async function request<T>(
   if (!apiBaseUrl) {
     throw new ApiError(0, "api_base_url_missing");
   }
-  const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${path}`, {
+  const res = await fetch(apiUrl(path), {
     method,
     headers: {
       Authorization: await authHeader(),
@@ -125,7 +128,7 @@ async function publicRequest<T>(
   if (!apiBaseUrl) {
     throw new ApiError(0, "api_base_url_missing");
   }
-  const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${path}`, {
+  const res = await fetch(apiUrl(path), {
     method,
     headers: {
       Accept: "application/json",
@@ -523,7 +526,7 @@ export async function postAlenaChat(
   if (!apiBaseUrl) {
     throw new ApiError(0, "api_base_url_missing");
   }
-  const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/v1/alena/chat`, {
+  const res = await fetch(apiUrl("/v1/alena/chat"), {
     method: "POST",
     headers: {
       Authorization: await authHeader(),
@@ -550,7 +553,7 @@ export async function postGuestAlenaChat(
   if (!apiBaseUrl) {
     throw new ApiError(0, "api_base_url_missing");
   }
-  const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/v1/guest/alena`, {
+  const res = await fetch(apiUrl("/v1/guest/alena"), {
     method: "POST",
     headers: {
       Accept: "text/event-stream, application/json",
@@ -837,6 +840,7 @@ export function createMakeupLook(
     scanId?: string;
     referenceB64?: string;
     categories?: string[];
+    palettes?: Record<string, string>;
   },
 ) {
   return request<{

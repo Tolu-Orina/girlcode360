@@ -6,7 +6,9 @@ import {
 } from "@/components/blocks/app-page";
 import { SheMatchBanner } from "@/components/blocks/shematch-banner";
 import { EmptyState } from "@/components/blocks/states";
+import { FieldSelect } from "@/components/primitives/field";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
+import { useMakeupLook } from "@/components/blocks/makeup-look-context";
 import { Button } from "@/components/ui/button";
 import {
   CURRENT_POLICY_VERSION,
@@ -19,8 +21,11 @@ import {
   postConsents,
   saveMakeupLook,
 } from "@/lib/api";
+import { CameraStillCapture } from "@/components/blocks/camera-still";
+import { MirrorStill } from "@/components/blocks/mirror-still";
+import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
 import { PURPOSE_COPY } from "@/lib/consent-copy";
-import { fileToJpegDataUrl, videoFrameToJpegDataUrl } from "@/lib/jpeg-upload";
+import { cameraVideoConstraints, fileToJpegDataUrl, listVideoCameras, videoFrameToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
   MakeupLook,
@@ -29,7 +34,28 @@ import type {
   ShadeMatch,
   SkinScan,
 } from "../../../../../packages/api-types/src/index";
-import { STUDIO_MAKEUP_CATEGORIES } from "../../../../../packages/domain/src/index";
+
+function makeupFailCopy(reason: string | null | undefined): string {
+  const r = (reason ?? "").toLowerCase();
+  if (
+    r.includes("face") ||
+    r.includes("noface") ||
+    r.includes("detect") ||
+    r.includes("invalidimage")
+  ) {
+    return "YouCam could not find a clear face in that still. Use a front-facing photo in even light, then press Use again.";
+  }
+  if (r.includes("filesize") || r.includes("too_large") || r.includes("exceed")) {
+    return "That photo is larger than YouCam allows. Take a new face still, then try the look again.";
+  }
+  if (r.includes("credit") || r.includes("quota")) {
+    return "YouCam could not run this look (account quota). Try again in a minute.";
+  }
+  if (reason) {
+    return `YouCam could not finish this look (${reason}). Try another face still.`;
+  }
+  return "YouCam could not finish this look. Try another face still in even light.";
+}
 
 export function MirrorStudioPanel({
   status,
@@ -52,28 +78,38 @@ export function MirrorStudioPanel({
   onStatus: () => Promise<void>;
   friendlyError: (err: unknown) => string;
 }) {
-  const [mode, setMode] = useState<"live" | "photo" | "transfer" | "shade">(
-    "photo",
-  );
+  const { mode, setMode, features, lookSelection } = useMakeupLook();
   const [looks, setLooks] = useState<MakeupLook[]>([]);
   const [selected, setSelected] = useState<MakeupLook | null>(null);
   const [lookSrc, setLookSrc] = useState<string | null>(null);
   const [shade, setShade] = useState<ShadeMatch | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [deviceId, setDeviceId] = useState<string | undefined>();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const faceInput = useRef<HTMLInputElement>(null);
   const refInput = useRef<HTMLInputElement>(null);
   const pendingLook = useRef<string | null>(null);
+  const lastQueued = useRef("");
+  const photos = useMirrorPhotosOptional();
   const reusable = scans.find((s) => !s.seeded && s.status === "success");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepId?: string) => {
     const [lookRes, shadeRes] = await Promise.all([
       listMakeupLooks(),
       listShadeMatches(),
     ]);
     setLooks(lookRes.looks);
-    setSelected(lookRes.looks[0] ?? null);
+    if (!pendingLook.current) {
+      setSelected((cur) => {
+        const id = keepId ?? cur?.id;
+        if (id) {
+          const match = lookRes.looks.find((l) => l.id === id);
+          if (match) return match;
+        }
+        return lookRes.looks[0] ?? null;
+      });
+    }
     setShade(shadeRes.matches[0] ?? null);
   }, []);
 
@@ -82,10 +118,7 @@ export function MirrorStudioPanel({
   }, [load, friendlyError, onError]);
 
   useEffect(() => {
-    if (!selected?.hasResultImage) {
-      setLookSrc(null);
-      return;
-    }
+    if (!selected?.hasResultImage) return;
     let cancelled = false;
     (async () => {
       try {
@@ -111,7 +144,7 @@ export function MirrorStudioPanel({
         if (look.status !== "pending") {
           pendingLook.current = null;
           window.clearInterval(tick);
-          await load();
+          await load(look.id);
           setSelected(look);
           onBusy(false);
         }
@@ -135,15 +168,20 @@ export function MirrorStudioPanel({
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 720 } },
+          video: cameraVideoConstraints("user", deviceId),
           audio: false,
         });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
+        streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
+        const used = stream.getVideoTracks()[0]?.getSettings().deviceId;
+        if (used && used !== deviceId) setDeviceId(used);
+        const list = await listVideoCameras();
+        if (!cancelled) setCameras(list);
         setCameraError(null);
       } catch {
         setCameraError(
@@ -156,7 +194,24 @@ export function MirrorStudioPanel({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- deviceId via switchLiveCamera
   }, [mode, status.liveCameraConsented]);
+
+  async function switchLiveCamera(id: string) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: cameraVideoConstraints("user", id),
+        audio: false,
+      });
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setDeviceId(id);
+      setCameraError(null);
+    } catch {
+      setCameraError("Could not switch camera. The other camera may be in use.");
+    }
+  }
 
   async function runLook(
     kind: "live" | "photo" | "transfer",
@@ -170,7 +225,8 @@ export function MirrorStudioPanel({
       setSelected(look);
       if (look.status !== "pending") {
         pendingLook.current = null;
-        await load();
+        await load(look.id);
+        setSelected(look);
         onBusy(false);
       }
     } catch (err) {
@@ -187,7 +243,11 @@ export function MirrorStudioPanel({
     }
     try {
       const imageB64 = videoFrameToJpegDataUrl(video, { maxLong: 1024 });
-      await runLook("live", { imageB64 });
+      if (features.length === 0) {
+        onError("Turn on at least one makeup feature.");
+        return;
+      }
+      await runLook("live", { imageB64, ...lookSelection() });
     } catch (err) {
       onError(
         err instanceof Error && err.message === "image_too_small"
@@ -200,11 +260,17 @@ export function MirrorStudioPanel({
   async function onFaceFile(file: File | undefined, kind: "photo" | "transfer") {
     if (!file) return;
     try {
+      setSelected(null);
+      setLookSrc(URL.createObjectURL(file));
       const imageB64 = await fileToJpegDataUrl(file, { maxLong: 1024 });
       if (kind === "photo") {
+        if (features.length === 0) {
+          onError("Turn on at least one makeup feature.");
+          return;
+        }
         await runLook("photo", {
           imageB64,
-          scanId: reusable?.id,
+          ...lookSelection(),
         });
       } else {
         const ref = refInput.current?.files?.[0];
@@ -215,7 +281,6 @@ export function MirrorStudioPanel({
         const referenceB64 = await fileToJpegDataUrl(ref, { maxLong: 1024 });
         await runLook("transfer", {
           imageB64,
-          scanId: reusable?.id,
           referenceB64,
         });
       }
@@ -223,6 +288,19 @@ export function MirrorStudioPanel({
       onError(friendlyError(err));
     }
   }
+
+  const onFaceFileRef = useRef(onFaceFile);
+  onFaceFileRef.current = onFaceFile;
+
+  useEffect(() => {
+    const queued = photos?.queued;
+    if (!queued || queued.kind !== "face") return;
+    if (mode === "transfer" || mode === "shade") return;
+    if (queued.token === lastQueued.current) return;
+    lastQueued.current = queued.token;
+    photos?.consumeQueued(queued.token);
+    void onFaceFileRef.current(queued.file, "photo");
+  }, [photos, mode]);
 
   async function grantLiveCamera() {
     onBusy(true);
@@ -261,13 +339,13 @@ export function MirrorStudioPanel({
   const liveCopy = PURPOSE_COPY.mirror_live_camera;
 
   return (
-    <div className="grid gap-4 border-t border-border pt-6">
+    <div className="grid gap-4">
       <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
         Makeup Studio
       </h2>
       <p className={leadClass}>
-        Seven look areas: {STUDIO_MAKEUP_CATEGORIES.join(", ")}. Live preview
-        stays on this phone. YouCam receives a still only when you capture.
+        Try on foundation, brows, blush, eyeshadow, and lashes in shades
+        stocked at SheMatch boutiques. Live preview stays on this device.
       </p>
       <SegmentedTabs
         ariaLabel="Makeup Studio modes"
@@ -280,6 +358,11 @@ export function MirrorStudioPanel({
           { id: "shade", label: "Shade match" },
         ]}
       />
+
+      <p className={leadClass}>
+        Choose a saved face photo on the right, then press Use for this makeup
+        look.
+      </p>
 
       {mode === "live" ? (
         <div className={cn(outlinedCardClass, "grid gap-4")}>
@@ -303,19 +386,37 @@ export function MirrorStudioPanel({
                 sends one still — not a video stream.
               </p>
               {cameraError ? <p className={leadClass}>{cameraError}</p> : null}
-              <div className="relative overflow-hidden rounded-[var(--radius)] border border-border bg-muted">
+              <div className="relative w-full overflow-hidden rounded-[var(--radius)] border border-border bg-muted max-lg:aspect-[4/5] lg:mx-auto lg:max-w-[280px]">
                 <video
                   ref={videoRef}
                   autoPlay
                   muted
                   playsInline
-                  className="block aspect-[3/4] w-full object-cover"
+                  className="block aspect-[4/5] h-auto w-full object-cover object-[center_18%] lg:aspect-[3/4]"
                 />
                 <div
-                  className="pointer-events-none absolute inset-8 rounded-[50%] border-2 border-primary/70"
+                  className="pointer-events-none absolute inset-4 rounded-[50%] border-2 border-primary/70"
                   aria-hidden
                 />
               </div>
+              {cameras.length > 1 ? (
+                <label className="grid gap-2">
+                  <span className="text-[length:var(--text-label)] text-foreground">
+                    Camera
+                  </span>
+                  <FieldSelect
+                    aria-label="Choose camera"
+                    value={deviceId ?? ""}
+                    onChange={(e) => void switchLiveCamera(e.target.value)}
+                  >
+                    {cameras.map((cam, i) => (
+                      <option key={cam.deviceId} value={cam.deviceId}>
+                        {cam.label || `Camera ${i + 1}`}
+                      </option>
+                    ))}
+                  </FieldSelect>
+                </label>
+              ) : null}
               <ActionRow>
                 <Button
                   type="button"
@@ -324,6 +425,19 @@ export function MirrorStudioPanel({
                 >
                   Capture look
                 </Button>
+                {cameras.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const i = cameras.findIndex((c) => c.deviceId === deviceId);
+                      const next = cameras[(i + 1 + cameras.length) % cameras.length];
+                      if (next) void switchLiveCamera(next.deviceId);
+                    }}
+                  >
+                    Switch camera
+                  </Button>
+                ) : null}
               </ActionRow>
             </>
           )}
@@ -333,40 +447,27 @@ export function MirrorStudioPanel({
       {mode === "photo" ? (
         <div className="grid gap-4">
           <p className={leadClass}>
-            {reusable
-              ? "Uses your latest skin scan when it is under 30 days old. You can also add a new face photo."
-              : "Take a skin scan first, or upload a face photo here."}
+            Pick a saved face photo on the right, then press Use for this makeup
+            look. That file is the one that runs — not an older skin scan.
           </p>
-          <input
-            ref={faceInput}
-            className="sr-only"
-            type="file"
-            accept="image/*"
-            capture="user"
+          <CameraStillCapture
             disabled={captureOff}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              void onFaceFile(file, "photo");
-            }}
+            facingMode="user"
+            guide="face"
+            captureLabel="Take a face photo"
+            videoLabel="Live camera for a makeup still"
+            photoKind="face"
+            onFile={(file) => void onFaceFile(file, "photo")}
+            onError={onError}
           />
-          <ActionRow>
-            <Button
-              type="button"
-              disabled={captureOff}
-              onClick={() => faceInput.current?.click()}
-            >
-              Apply makeup to a photo
-            </Button>
-          </ActionRow>
         </div>
       ) : null}
 
       {mode === "transfer" ? (
         <div className="grid gap-4">
           <p className={leadClass}>
-            Upload a reference look, then your face. Approximation only — not a
-            product match until you run shade match.
+            Add a reference look from your library, then take a face photo.
+            Approximation only — not a product match until you run shade match.
           </p>
           <input
             ref={refInput}
@@ -374,19 +475,6 @@ export function MirrorStudioPanel({
             type="file"
             accept="image/*"
             disabled={captureOff}
-          />
-          <input
-            ref={faceInput}
-            className="sr-only"
-            type="file"
-            accept="image/*"
-            capture="user"
-            disabled={captureOff}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              void onFaceFile(file, "transfer");
-            }}
           />
           <ActionRow>
             <Button
@@ -397,14 +485,17 @@ export function MirrorStudioPanel({
             >
               Choose reference
             </Button>
-            <Button
-              type="button"
-              disabled={captureOff}
-              onClick={() => faceInput.current?.click()}
-            >
-              Add my face
-            </Button>
           </ActionRow>
+          <CameraStillCapture
+            disabled={captureOff}
+            facingMode="user"
+            guide="face"
+            captureLabel="Take a face photo"
+            videoLabel="Live camera for a look-transfer still"
+            photoKind="face"
+            onFile={(file) => void onFaceFile(file, "transfer")}
+            onError={onError}
+          />
         </div>
       ) : null}
 
@@ -469,12 +560,13 @@ export function MirrorStudioPanel({
             {selected.status === "pending" ? " · Working" : ""}
             {selected.status === "error" ? " · Could not finish" : ""}
           </h3>
+          {selected.status === "error" ? (
+            <p className={leadClass}>
+              {makeupFailCopy(selected.failReason)}
+            </p>
+          ) : null}
           {lookSrc ? (
-            <img
-              src={lookSrc}
-              alt="Makeup try-on result"
-              className="w-full rounded-[var(--radius)] border border-border bg-muted"
-            />
+            <MirrorStill src={lookSrc} alt="Makeup try-on result" crop="face" />
           ) : selected.hasResultImage ? (
             <p className={leadClass}>Loading result…</p>
           ) : (

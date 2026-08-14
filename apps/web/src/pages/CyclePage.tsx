@@ -19,6 +19,11 @@ import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { useAlena } from "@/hooks/use-alena";
 import { useOnline } from "@/hooks/use-online";
+import {
+  addDays,
+  datesInclusive,
+  typicalPeriodLength,
+} from "@/lib/period-span";
 import { cn } from "@/lib/utils";
 import type {
   Cycle,
@@ -38,7 +43,10 @@ import {
   type CycleState,
 } from "../lib/sync";
 import symptoms from "../data/symptoms.json";
-import { buildCycleMonthSummary } from "../../../../packages/domain/src/index";
+import {
+  buildCycleMonthSummary,
+  calculateFertileWindow,
+} from "../../../../packages/domain/src/index";
 
 type Symptom = {
   id: string;
@@ -130,6 +138,7 @@ export function CyclePage() {
   const [fertileMessage, setFertileMessage] = useState<string | null>(null);
   const [periodBanner, setPeriodBanner] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [paintMode, setPaintMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +217,32 @@ export function CyclePage() {
     return map;
   }, [state?.days]);
 
+  const lastPeriodStart = useMemo(() => {
+    const cycles = [...(state?.cycles ?? [])].sort((a, b) =>
+      a.startDate.localeCompare(b.startDate),
+    );
+    return cycles.at(-1)?.startDate ?? null;
+  }, [state?.cycles]);
+
+  const localFertile = useMemo(() => {
+    if (!lastPeriodStart || !state?.prediction) return null;
+    return calculateFertileWindow(
+      lastPeriodStart,
+      state.prediction.cycleLengthDays,
+    );
+  }, [lastPeriodStart, state?.prediction]);
+
+  const calendarFertile = useMemo(() => {
+    if (ttcOn && fertileDates.size > 0) return fertileDates;
+    return new Set(localFertile?.fertileDates ?? []);
+  }, [ttcOn, fertileDates, localFertile]);
+
+  const calendarOvulation =
+    ttcOn && ovulationDay ? ovulationDay : (localFertile?.ovulationDay ?? null);
+
+  const fertileDisclaimer =
+    ttcOn && fertileMessage ? fertileMessage : (localFertile?.message ?? null);
+
   function canShift(delta: number): boolean {
     const d = new Date(viewYear, viewMonth + delta, 1);
     const key = d.getFullYear() * 12 + d.getMonth();
@@ -229,7 +264,9 @@ export function CyclePage() {
     openDay(ymd(today));
   }
 
-  function fillForm(date: string) {
+  function openDay(date: string) {
+    setSelected(date);
+    setOk(null);
     const existing = dayLogs.get(date);
     setFlow(existing?.flow ?? (logged.has(date) ? "medium" : "none"));
     setMood(existing?.mood ?? null);
@@ -238,17 +275,16 @@ export function CyclePage() {
     setDirty(false);
   }
 
-  function openDay(date: string) {
-    setSelected(date);
-    setOk(null);
-    fillForm(date);
-  }
-
   useEffect(() => {
     if (!state || !selected || dirty || busy) return;
-    fillForm(selected);
+    const existing = dayLogs.get(selected);
+    setFlow(existing?.flow ?? (logged.has(selected) ? "medium" : "none"));
+    setMood(existing?.mood ?? null);
+    setSymptomIds(existing?.symptomIds ?? []);
+    setNote(existing?.note ?? "");
+    // Hydrate only: do not depend on selected here (openDay already loads that date).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, selected]);
+  }, [state]);
 
   async function saveDay() {
     if (!selected) return;
@@ -266,30 +302,9 @@ export function CyclePage() {
           note: note.trim() || null,
         },
       });
-
+      setState(next);
       if (flow !== "none" && !logged.has(selected)) {
-        const withPeriod = await enqueueAndStore({
-          op: "upsert_cycle",
-          cycle: { startDate: selected, endDate: selected },
-        });
-        setState(withPeriod);
-      } else if (flow !== "none") {
-        const cycles = next.cycles;
-        const open = [...cycles]
-          .reverse()
-          .find((c) => !c.endDate || c.endDate >= c.startDate);
-        if (open && selected >= open.startDate) {
-          const patched = await enqueueAndStore({
-            op: "patch_cycle",
-            id: open.id,
-            patch: { endDate: selected },
-          });
-          setState(patched);
-        } else {
-          setState(next);
-        }
-      } else {
-        setState(next);
+        await addPeriodDay(selected, flow);
       }
       setOk("Day saved.");
       if (flow !== "none") setPeriodBanner(true);
@@ -301,26 +316,169 @@ export function CyclePage() {
     }
   }
 
-  async function startPeriodToday() {
-    const date = ymd(today);
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await enqueueAndStore({
+  function cycleCovering(date: string, cycles: Cycle[]): Cycle | undefined {
+    return cycles.find((c) => {
+      const end = c.endDate ?? c.startDate;
+      return date >= c.startDate && date <= end;
+    });
+  }
+
+  async function addPeriodDay(date: string, intensity: FlowLevel = "medium") {
+    const bleed = intensity === "none" ? "medium" : intensity;
+    let next = await enqueueAndStore({
+      op: "upsert_day",
+      day: { date, flow: bleed },
+    });
+    const cycles = next.cycles;
+    const prev = addDays(date, -1);
+    const nxt = addDays(date, 1);
+    const left = cycles.find((c) => (c.endDate ?? c.startDate) === prev);
+    const right = cycles.find((c) => c.startDate === nxt);
+    if (left && right) {
+      next = await enqueueAndStore({
+        op: "patch_cycle",
+        id: left.id,
+        patch: { endDate: right.endDate ?? right.startDate },
+      });
+      next = await enqueueAndStore({ op: "delete_cycle", id: right.id });
+    } else if (left) {
+      next = await enqueueAndStore({
+        op: "patch_cycle",
+        id: left.id,
+        patch: { endDate: date },
+      });
+    } else if (right) {
+      next = await enqueueAndStore({
+        op: "patch_cycle",
+        id: right.id,
+        patch: { startDate: date },
+      });
+    } else if (!cycleCovering(date, cycles)) {
+      next = await enqueueAndStore({
         op: "upsert_cycle",
         cycle: { startDate: date, endDate: date },
       });
-      const withDay = await enqueueAndStore({
-        op: "upsert_day",
-        day: { date, flow: "medium" },
-      });
-      setState({ ...withDay, prediction: next.prediction });
-      setPeriodBanner(true);
-      setViewYear(today.getFullYear());
-      setViewMonth(today.getMonth());
-      openDay(date);
+    }
+    setState(next);
+    return next;
+  }
+
+  async function removePeriodDay(date: string) {
+    let next = await enqueueAndStore({
+      op: "upsert_day",
+      day: { date, flow: "none" },
+    });
+    let c = cycleCovering(date, next.cycles);
+    let guard = 0;
+    while (c && guard < 8) {
+      guard += 1;
+      const end = c.endDate ?? c.startDate;
+      if (c.startDate === end) {
+        next = await enqueueAndStore({ op: "delete_cycle", id: c.id });
+      } else if (date === c.startDate) {
+        next = await enqueueAndStore({
+          op: "patch_cycle",
+          id: c.id,
+          patch: { startDate: addDays(date, 1) },
+        });
+      } else if (date === end) {
+        next = await enqueueAndStore({
+          op: "patch_cycle",
+          id: c.id,
+          patch: { endDate: addDays(date, -1) },
+        });
+      } else {
+        next = await enqueueAndStore({
+          op: "patch_cycle",
+          id: c.id,
+          patch: { endDate: addDays(date, -1) },
+        });
+        next = await enqueueAndStore({
+          op: "upsert_cycle",
+          cycle: { startDate: addDays(date, 1), endDate: end },
+        });
+      }
+      c = cycleCovering(date, next.cycles);
+    }
+    setState(next);
+    return next;
+  }
+
+  async function togglePeriodDay(date: string) {
+    if (busy) return;
+    const wasLogged = logged.has(date);
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    try {
+      if (wasLogged) await removePeriodDay(date);
+      else await addPeriodDay(date);
+      const flushed = await flushOutbox();
+      if (flushed) setState(flushed);
+      setSelected(date);
+      setFlow(wasLogged ? "none" : "medium");
+      setDirty(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start period");
+      setError(err instanceof Error ? err.message : "Could not update period");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logPeriod(startDate: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const len = typicalPeriodLength(state?.prediction.periodLengthDays);
+      const endDate = addDays(startDate, len - 1);
+      let next = await enqueueAndStore({
+        op: "upsert_cycle",
+        cycle: { startDate, endDate },
+      });
+      for (const date of datesInclusive(startDate, endDate)) {
+        next = await enqueueAndStore({
+          op: "upsert_day",
+          day: { date, flow: "medium" },
+        });
+      }
+      setState(next);
+      setPeriodBanner(true);
+      setPaintMode(true);
+      setViewYear(Number(startDate.slice(0, 4)));
+      setViewMonth(Number(startDate.slice(5, 7)) - 1);
+      setOk(
+        `Marked ${len} day${len === 1 ? "" : "s"}. Tap a marked day to remove it.`,
+      );
+      openDay(startDate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not log period");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function endPeriod(date: string) {
+    const c = cycleCovering(date, state?.cycles ?? []);
+    if (!c) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const end = c.endDate ?? c.startDate;
+      let next = await enqueueAndStore({
+        op: "patch_cycle",
+        id: c.id,
+        patch: { endDate: date },
+      });
+      for (const d of datesInclusive(addDays(date, 1), end)) {
+        next = await enqueueAndStore({
+          op: "upsert_day",
+          day: { date: d, flow: "none" },
+        });
+      }
+      setState(next);
+      setOk("Period ended.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not end period");
     } finally {
       setBusy(false);
     }
@@ -414,16 +572,23 @@ export function CyclePage() {
       selected={selected}
       logged={logged}
       predicted={predicted}
-      fertileDates={fertileDates}
-      ovulationDay={ovulationDay}
+      fertileDates={calendarFertile}
+      ovulationDay={calendarOvulation}
       dayLogs={new Set(dayLogs.keys())}
-      ttcOn={ttcOn}
       canPrev={canShift(-1)}
       canNext={canShift(1)}
       onPrev={() => shiftMonth(-1)}
       onNext={() => shiftMonth(1)}
       onToday={goToday}
-      onSelect={openDay}
+      onSelect={(date) => {
+        if (paintMode) {
+          void togglePeriodDay(date);
+          return;
+        }
+        openDay(date);
+      }}
+      paintMode={paintMode}
+      onTogglePaint={() => setPaintMode((v) => !v)}
     />
   );
 
@@ -458,12 +623,18 @@ export function CyclePage() {
       onSave={() => void saveDay()}
       onCancel={() => {
         if (isDesktop() && selected) {
-          fillForm(selected);
+          openDay(selected);
           return;
         }
         setSelected(null);
       }}
       onAskAlena={() => openAlena({ from: "cycle" })}
+      isPeriodDay={logged.has(selected)}
+      isOvulationDay={calendarOvulation === selected}
+      isFertileDay={
+        calendarFertile.has(selected) && !logged.has(selected)
+      }
+      onTogglePeriod={() => void togglePeriodDay(selected)}
     />
   ) : null;
 
@@ -497,21 +668,31 @@ export function CyclePage() {
 
   return (
     <AppPage className="lg:max-w-[var(--shell-max)] lg:gap-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
         <PageHeader
           title="Cycle"
-          lead="Select a day to log flow, mood, and symptoms. Predictions are estimates, not a diagnosis."
+          lead="Log a period, then tap extra days to take them off."
         />
         {periodOn ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void startPeriodToday()}
-              disabled={busy}
-            >
-              Start period
-            </Button>
+            {logged.has(ymd(today)) ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void endPeriod(ymd(today))}
+                disabled={busy}
+              >
+                Period ended
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => void logPeriod(ymd(today))}
+                disabled={busy}
+              >
+                Log period
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
@@ -549,9 +730,11 @@ export function CyclePage() {
 
       {periodOn ? (
         <>
-          <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
-            {statusLine}
-          </p>
+          {statusLine !== "Synced" ? (
+            <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
+              {statusLine}
+            </p>
+          ) : null}
 
           {!online ? <OfflineBanner /> : null}
           {error ? (
@@ -567,11 +750,10 @@ export function CyclePage() {
           ) : null}
           {ok ? <SuccessBanner message={ok} /> : null}
 
-          {prediction ? (
-            <PredictionDisclaimer message={prediction.message} />
-          ) : null}
-          {ttcOn && fertileMessage ? (
-            <PredictionDisclaimer message={fertileMessage} />
+          {prediction || fertileDisclaimer ? (
+            <PredictionDisclaimer
+              message={fertileDisclaimer ?? prediction?.message}
+            />
           ) : null}
 
           {state === null ? (
@@ -587,36 +769,20 @@ export function CyclePage() {
             <>
               {empty && !selected ? (
                 <EmptyState
-                  title="Log your first day"
-                  body="Select a date, or start a period today. Logging stays on this device until you sync."
+                  title="Log your first period"
+                  body="Tap Log period. We mark a run of days from your usual period length. Tap a marked day to remove it. Logging stays on this device until you sync."
                   action={
                     <Button
                       type="button"
-                      onClick={() => void startPeriodToday()}
+                      onClick={() => void logPeriod(ymd(today))}
                     >
-                      Start period
+                      Log period
                     </Button>
                   }
                 />
               ) : null}
 
-              <div className="hidden grid-cols-3 gap-4 lg:grid">
-                {stats.map((s) => (
-                  <article
-                    key={s.label}
-                    className="grid gap-1 rounded-[var(--radius-sheet)] bg-card p-4 shadow-[var(--shadow-2)]"
-                  >
-                    <p className="m-0 text-[length:var(--text-caption)] font-semibold text-muted-foreground">
-                      {s.label}
-                    </p>
-                    <p className="m-0 text-[length:var(--text-sub)] font-semibold text-foreground">
-                      {s.value}
-                    </p>
-                  </article>
-                ))}
-              </div>
-
-              <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.9fr)] lg:gap-8">
+              <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.9fr)] lg:gap-8">
                 <div className="grid gap-6">
                   {calendar}
                   <details className="rounded-[var(--radius-sheet)] bg-card p-4 shadow-[var(--shadow-2)] lg:p-6">
@@ -658,10 +824,10 @@ export function CyclePage() {
                   </details>
                 </div>
 
-                <div className={cn(!selected && "max-lg:hidden")}>
+                <div className={cn((!selected || paintMode) && "max-lg:hidden")}>
                   {dayLog ?? (
                     <p className="m-0 hidden rounded-[var(--radius-sheet)] bg-card p-6 text-[length:var(--text-body)] text-muted-foreground shadow-[var(--shadow-2)] lg:block">
-                      Select a day to log flow, mood, and symptoms.
+                      Select a day to log mood and symptoms.
                     </p>
                   )}
                 </div>
@@ -694,7 +860,14 @@ export function CyclePage() {
                 <summary className="cursor-pointer text-[length:var(--text-label)] font-semibold text-foreground">
                   Month notes
                 </summary>
-                <div className="mt-4">{summaryBody}</div>
+                <div className="mt-4 grid gap-2">
+                  {stats.map((s) => (
+                    <p key={s.label} className="m-0 text-muted-foreground">
+                      {s.label}: {s.value}
+                    </p>
+                  ))}
+                  {summaryBody}
+                </div>
               </details>
             </>
           )}

@@ -10,7 +10,7 @@ export function PageHeader({
   lead?: ReactNode;
 }) {
   return (
-    <header className="grid gap-2">
+    <header className="grid min-w-0 gap-2">
       {eyebrow ? (
         <p className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-caption)] font-bold tracking-wide text-primary uppercase">
           {eyebrow}

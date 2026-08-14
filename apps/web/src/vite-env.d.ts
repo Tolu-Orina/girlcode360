@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_COGNITO_DOMAIN: string;
   readonly VITE_COGNITO_GOOGLE_IDP: string;
   readonly VITE_API_BASE_URL: string;
+  readonly VITE_LOCAL_YOUCAM: string;
 }
 
 interface ImportMeta {

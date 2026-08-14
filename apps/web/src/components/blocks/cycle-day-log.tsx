@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import type { FlowLevel, MoodLevel } from "../../../../../packages/api-types/src/index";
 
 const FLOW_OPTIONS: { value: FlowLevel; label: string }[] = [
-  { value: "none", label: "None" },
   { value: "spotting", label: "Spotting" },
   { value: "light", label: "Light" },
   { value: "medium", label: "Medium" },
@@ -60,6 +59,10 @@ export function CycleDayLog({
   onSave,
   onCancel,
   onAskAlena,
+  isPeriodDay,
+  isOvulationDay,
+  isFertileDay,
+  onTogglePeriod,
 }: {
   dateLabel: string;
   flow: FlowLevel;
@@ -76,46 +79,69 @@ export function CycleDayLog({
   onSave: () => void;
   onCancel: () => void;
   onAskAlena: () => void;
+  isPeriodDay: boolean;
+  isOvulationDay: boolean;
+  isFertileDay: boolean;
+  onTogglePeriod: () => void;
 }) {
   const grouped = CATEGORY_ORDER.map((cat) => ({
     cat,
     items: symptoms.filter((s) => s.category === cat),
   })).filter((g) => g.items.length > 0);
 
+  const estimate = isPeriodDay
+    ? null
+    : isOvulationDay
+      ? "Estimated ovulation"
+      : isFertileDay
+        ? "Estimated fertile window"
+        : null;
+
   return (
     <aside
       className={cn(
-        "grid gap-6 rounded-[var(--radius-sheet)] bg-card p-4 shadow-[var(--shadow-2)]",
+        "grid min-w-0 gap-6 rounded-[var(--radius-sheet)] bg-card p-4 shadow-[var(--shadow-2)]",
         "lg:sticky lg:top-8 lg:max-h-[calc(100dvh-var(--header-height)-4rem)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:overflow-hidden lg:p-6",
       )}
     >
-      <header className="grid gap-1">
-        <p className="m-0 text-[length:var(--text-caption)] font-semibold tracking-wide text-muted-foreground uppercase">
-          This day
-        </p>
-        <h3 className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-sub)] text-foreground">
-          {dateLabel}
-        </h3>
+      <header className="grid gap-3">
+        <div className="grid gap-1">
+          <p className="m-0 text-[length:var(--text-caption)] font-semibold tracking-wide text-muted-foreground uppercase">
+            This day
+          </p>
+          <h3 className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-sub)] text-foreground">
+            {dateLabel}
+          </h3>
+          {estimate ? (
+            <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
+              {estimate}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip
+            pressed={isPeriodDay}
+            disabled={busy}
+            onClick={onTogglePeriod}
+            aria-label={isPeriodDay ? "Period on. Tap to turn off" : "Period off. Tap to turn on"}
+          >
+            Period
+          </Chip>
+          {isPeriodDay
+            ? FLOW_OPTIONS.map((f) => (
+                <Chip
+                  key={f.value}
+                  pressed={flow === f.value}
+                  onClick={() => onFlow(flow === f.value ? "none" : f.value)}
+                >
+                  {f.label}
+                </Chip>
+              ))
+            : null}
+        </div>
       </header>
 
       <div className="grid gap-6 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-        <fieldset className="m-0 grid gap-2 border-0 p-0">
-          <legend className="p-0 text-[length:var(--text-label)] font-medium text-foreground">
-            Flow
-          </legend>
-          <div className="flex flex-wrap gap-2">
-            {FLOW_OPTIONS.map((f) => (
-              <Chip
-                key={f.value}
-                pressed={flow === f.value}
-                onClick={() => onFlow(f.value)}
-              >
-                {f.label}
-              </Chip>
-            ))}
-          </div>
-        </fieldset>
-
         <fieldset className="m-0 grid gap-2 border-0 p-0">
           <legend className="p-0 text-[length:var(--text-label)] font-medium text-foreground">
             Mood
@@ -175,15 +201,9 @@ export function CycleDayLog({
           <Button type="button" onClick={onSave} disabled={busy}>
             {busy ? "Saving…" : "Save this day"}
           </Button>
-          {showCancel ? (
-            <Button type="button" variant="ghost" onClick={onCancel}>
-              Cancel
-            </Button>
-          ) : (
-            <Button type="button" variant="ghost" onClick={onCancel}>
-              Reset
-            </Button>
-          )}
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            {showCancel ? "Cancel" : "Reset"}
+          </Button>
         </div>
         <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
           <button
@@ -193,7 +213,7 @@ export function CycleDayLog({
           >
             Ask Alena
           </button>{" "}
-          about this day. Anonymous mode never sends your logs.
+          about this day.
         </p>
       </div>
     </aside>

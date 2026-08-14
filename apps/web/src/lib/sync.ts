@@ -128,20 +128,26 @@ let flushInFlight: Promise<CycleState | null> | null = null;
 
 export async function flushOutbox(): Promise<CycleState | null> {
   if (flushInFlight) return flushInFlight;
-  flushInFlight = flushOutboxInner().finally(() => {
+  flushInFlight = (async () => {
+    let last: CycleState | null = await loadLocalState();
+    for (let i = 0; i < 20; i++) {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return last;
+      const pending = (await idbPendingOutbox()).filter(
+        (i) => i.status === "pending",
+      );
+      if (pending.length === 0) return last;
+      last = await flushOutboxBatch(pending);
+    }
+    return last;
+  })().finally(() => {
     flushInFlight = null;
   });
   return flushInFlight;
 }
 
-async function flushOutboxInner(): Promise<CycleState | null> {
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
-    return loadLocalState();
-  }
-  const pending = await idbPendingOutbox();
-  if (pending.length === 0) return loadLocalState();
-
-  // Stable key for this exact pending set (sorted) so retries stay idempotent
+async function flushOutboxBatch(
+  pending: Awaited<ReturnType<typeof idbPendingOutbox>>,
+): Promise<CycleState> {
   const batchKey = [...pending.map((p) => p.idempotencyKey)].sort().join(":");
   const ops = pending.map((p) => p.op as SyncOp);
   for (const p of pending) await idbMarkOutbox(p.id, "syncing");

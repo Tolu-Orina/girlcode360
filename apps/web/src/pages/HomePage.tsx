@@ -140,9 +140,9 @@ export function HomePage() {
           ))}
         </div>
       ) : (
-        <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 lg:grid-cols-3 lg:gap-6">
+        <ul className="m-0 grid min-w-0 list-none grid-cols-2 gap-4 p-0 lg:grid-cols-3 lg:gap-6">
           {TILES.map((t) => (
-            <li key={t.to} className="min-h-0">
+            <li key={t.to} className="min-h-0 min-w-0">
               <motion.div
                 className="h-full"
                 whileHover={reduce ? undefined : { y: -4 }}

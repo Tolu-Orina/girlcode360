@@ -15,6 +15,9 @@ import {
   getMirrorCatalogue,
   listAccessoryLooks,
 } from "@/lib/api";
+import { CameraStillCapture } from "@/components/blocks/camera-still";
+import { MirrorStill } from "@/components/blocks/mirror-still";
+import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
 import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
@@ -50,8 +53,9 @@ export function MirrorAccessoriesPanel({
   const [looks, setLooks] = useState<AccessoryLook[]>([]);
   const [selected, setSelected] = useState<AccessoryLook | null>(null);
   const [src, setSrc] = useState<string | null>(null);
-  const photoInput = useRef<HTMLInputElement>(null);
   const pending = useRef<string | null>(null);
+  const lastQueued = useRef("");
+  const photos = useMirrorPhotosOptional();
   const reusable = scans.find((s) => !s.seeded && s.status === "success");
   const captureOff = busy || !status.youcamConfigured || !online;
   const catKind = mode === "nail" ? "nail_color" : mode;
@@ -158,10 +162,24 @@ export function MirrorAccessoriesPanel({
     }
   }
 
+  const runRef = useRef(run);
+  runRef.current = run;
+
+  useEffect(() => {
+    const queued = photos?.queued;
+    if (!queued) return;
+    if (queued.token === lastQueued.current) return;
+    const want = mode === "nail" ? "hand" : "face";
+    if (queued.kind !== want) return;
+    lastQueued.current = queued.token;
+    photos?.consumeQueued(queued.token);
+    void runRef.current(queued.file);
+  }, [photos, mode]);
+
   const pickedItem = items.find((i) => i.id === picked);
 
   return (
-    <div className="grid gap-4 border-t border-border pt-6">
+    <div className="grid gap-4">
       <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
         Accessories Studio
       </h2>
@@ -193,7 +211,7 @@ export function MirrorAccessoriesPanel({
               onClick={() => setPicked(row.id)}
             >
               {row.title}
-              {row.tryOnReady ? "" : " · 3D not on file"}
+              {row.tryOnReady ? "" : " · not try-on ready"}
               {row.nailColor ? ` · ${row.nailColor}` : ""}
             </button>
           </li>
@@ -202,31 +220,25 @@ export function MirrorAccessoriesPanel({
       {items.length === 0 ? (
         <EmptyState
           title="No accessories in this catalogue yet"
-          body="Retailer 3D assets and frames come through the Business Portal. Nothing is invented from a 2D photo."
+          body="Jewellery needs a catalogue SKU still. Eyewear S2S is not on this API. Nothing is invented from a random photo."
         />
       ) : null}
-      <input
-        ref={photoInput}
-        className="sr-only"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        disabled={captureOff}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) void run(file);
-        }}
+      <CameraStillCapture
+        disabled={captureOff || !pickedItem}
+        facingMode={mode === "nail" ? "environment" : "user"}
+        guide={mode === "nail" ? "none" : "face"}
+        captureLabel={mode === "nail" ? "Photograph a hand" : "Take a face photo"}
+        videoLabel={
+          mode === "nail"
+            ? "Live camera for a nail still"
+            : "Live camera for an accessory still"
+        }
+        photoKind={mode === "nail" ? "hand" : "face"}
+        onFile={(file) => void run(file)}
+        onError={onError}
       />
-      <ActionRow>
-        <Button
-          type="button"
-          disabled={captureOff || !pickedItem}
-          onClick={() => photoInput.current?.click()}
-        >
-          {mode === "nail" ? "Photograph a hand" : "Photograph your face"}
-        </Button>
-        {mode !== "nail" && reusable ? (
+      {mode !== "nail" && reusable ? (
+        <ActionRow>
           <Button
             type="button"
             variant="outline"
@@ -235,8 +247,8 @@ export function MirrorAccessoriesPanel({
           >
             Use last skin scan
           </Button>
-        ) : null}
-      </ActionRow>
+        </ActionRow>
+      ) : null}
       {mode === "nail" ? <SheMatchBanner trigger="mirror_nail" extraTags={["nail"]} /> : null}
       {selected ? (
         <article className={cn(outlinedCardClass, "grid gap-3")}>
@@ -244,11 +256,7 @@ export function MirrorAccessoriesPanel({
             {selected.status === "pending" ? "Working…" : "Latest try-on"}
           </h3>
           {src ? (
-            <img
-              src={src}
-              alt="Accessory try-on result"
-              className="w-full rounded-[var(--radius)] border border-border bg-muted"
-            />
+            <MirrorStill src={src} alt="Accessory try-on result" crop="face" />
           ) : (
             <p className={leadClass}>
               {selected.status === "error"
@@ -260,7 +268,7 @@ export function MirrorAccessoriesPanel({
       ) : looks.length === 0 ? (
         <EmptyState
           title="No accessory try-ons yet"
-          body="Pick a piece with a retailer 3D asset, frame, or nail colour, then add a photo."
+          body="Pick a piece with a SKU still or nail colour, then add a photo."
         />
       ) : null}
     </div>

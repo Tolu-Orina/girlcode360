@@ -106,12 +106,43 @@ export function parseHairAnalysisPayload(payload: unknown): HairScores {
     data?.hairType ??
     asRecord(data?.hair_type)?.type ??
     asRecord(data?.hair_type)?.value;
+  const results = asRecord(data?.results) ?? data;
+  const lengthObj =
+    asRecord(results?.hair_length) ?? asRecord(data?.hair_length);
+  const lengthTerm =
+    (typeof lengthObj?.term === "string" && lengthObj.term) ||
+    (typeof results?.term === "string" && results.term) ||
+    (typeof data?.term === "string" && data.term) ||
+    null;
   return {
     hair_type: parseHairTexture(typeRaw),
-    hair_length: num(data?.hair_length ?? data?.hairLength),
+    hair_length:
+      num(data?.hair_length ?? data?.hairLength ?? lengthObj?.mapping) ??
+      scoreFromHairLengthTerm(lengthTerm),
     hair_frizziness: num(data?.hair_frizziness ?? data?.hairFrizziness ?? data?.frizz),
-    hair_density: num(data?.hair_density ?? data?.hairDensity ?? data?.density),
+    hair_density: num(
+      data?.hair_density ??
+        data?.hairDensity ??
+        data?.density ??
+        asRecord(results?.hair_density)?.mapping,
+    ),
   };
+}
+
+const HAIR_LENGTH_TERM_SCORE: Record<string, number> = {
+  "above the ears": 18,
+  "ear length": 32,
+  "ear length or longer": 42,
+  "short hair": 52,
+  "short hair or longer": 62,
+  "above chest": 78,
+  "above chest or longer": 86,
+  "long hair": 96,
+};
+
+export function scoreFromHairLengthTerm(term: string | null): number | null {
+  if (!term) return null;
+  return HAIR_LENGTH_TERM_SCORE[term.trim().toLowerCase()] ?? null;
 }
 
 export function scoreHairTextureHarness(cases: HairTextureCase[]): HairTextureScore {

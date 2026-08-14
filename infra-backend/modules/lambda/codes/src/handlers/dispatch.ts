@@ -2,7 +2,8 @@ import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
-import { CORS, json, pathOf } from "../http";
+import { CORS, header, json, pathOf } from "../http";
+import { withYoucamKeyOverride } from "../lib/secrets";
 import { handler as routeHttp } from "./api";
 
 export { under } from "../http";
@@ -18,5 +19,8 @@ export async function dispatch(
   }
   const path = pathOf(event);
   if (!allow(path)) return json(404, { error: "not_found" });
-  return routeHttp(event);
+  return withYoucamKeyOverride(
+    header(event, "X-Girlcode-Youcam-Key"),
+    () => routeHttp(event),
+  );
 }

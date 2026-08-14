@@ -3,6 +3,28 @@ import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-sec
 let cached: Record<string, string> | null = null;
 let loadedAt = 0;
 const TTL_MS = 5 * 60 * 1000;
+let youcamKeyOverride: string | null = null;
+
+function allowYoucamOverride(): boolean {
+  const env = (process.env.ENVIRONMENT ?? "dev").toLowerCase();
+  return env === "dev" || env === "local";
+}
+
+/** Request-scoped key from the Vite proxy. Ignored in prod. */
+export async function withYoucamKeyOverride<T>(
+  key: string | null | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = youcamKeyOverride;
+  const trimmed = key?.trim() ?? "";
+  youcamKeyOverride =
+    allowYoucamOverride() && trimmed.length > 8 ? trimmed : null;
+  try {
+    return await fn();
+  } finally {
+    youcamKeyOverride = prev;
+  }
+}
 
 function envName(): string {
   return process.env.ENVIRONMENT ?? "dev";
@@ -51,6 +73,7 @@ export async function appSecrets(): Promise<Record<string, string>> {
 }
 
 export async function youcamApiKey(): Promise<string | null> {
+  if (youcamKeyOverride) return youcamKeyOverride;
   const s = await appSecrets();
   const key = s.youcam_api_key?.trim();
   return key && key.length > 8 ? key : null;

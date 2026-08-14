@@ -400,6 +400,8 @@ export type MirrorCatalogueItem = {
   shadeFamily?: string;
   accessoryCategory?: "ring" | "bracelet" | "watch" | "earring" | "necklace";
   nailColor?: string;
+  makeupCategory?: string;
+  swatchHex?: string;
   tryOnReady?: boolean;
   /** Server-only retailer 3D / frame ids — stripped in listCatalogue. */
   asset3dId?: string | null;

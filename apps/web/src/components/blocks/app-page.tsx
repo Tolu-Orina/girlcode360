@@ -29,7 +29,7 @@ export function AppPage({
   return (
     <Tag
       className={cn(
-        "mx-auto grid w-full max-w-[var(--page-max)] gap-6",
+        "mx-auto grid w-full min-w-0 max-w-[var(--page-max)] gap-6",
         className,
       )}
       {...props}

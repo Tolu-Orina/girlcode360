@@ -1424,6 +1424,7 @@ export const handler = async (
       imageB64?: string;
       scanId?: string;
       categories?: unknown;
+      palettes?: unknown;
     }>(event);
     try {
       const look = await createMakeupLook(user.sub, {
@@ -1431,6 +1432,7 @@ export const handler = async (
         imageB64: body.imageB64,
         scanId: body.scanId,
         categories: body.categories,
+        palettes: body.palettes,
       });
       return json(202, { look });
     } catch (err) {
@@ -1450,6 +1452,7 @@ export const handler = async (
     const body = parseBody<{
       imageB64?: string;
       categories?: unknown;
+      palettes?: unknown;
     }>(event);
     if (!body.imageB64) return json(400, { error: "image_required" });
     try {
@@ -1457,6 +1460,7 @@ export const handler = async (
         sourceKind: "live",
         imageB64: body.imageB64,
         categories: body.categories,
+        palettes: body.palettes,
       });
       return json(202, { look });
     } catch (err) {

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { GateScreen } from "@/components/blocks/gate-screen";
 import { getCurrentSession } from "../lib/cognito";
-import { cognitoConfig } from "../lib/config";
+import { cognitoConfig, localYoucam } from "../lib/config";
 
 /**
  * When Cognito is configured, require a valid session.
@@ -16,7 +16,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!cognitoConfig.userPoolId || !cognitoConfig.clientId) {
+      if (localYoucam || !cognitoConfig.userPoolId || !cognitoConfig.clientId) {
         if (!cancelled) setState("ok");
         return;
       }

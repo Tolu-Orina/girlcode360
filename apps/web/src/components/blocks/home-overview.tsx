@@ -160,12 +160,12 @@ export function HomeOverview() {
         chartCount === 3 && "lg:grid-cols-3",
       )}
     >
-      <article className="glass-gloss grid gap-3 rounded-[var(--radius-sheet)] p-4">
+      <article className="glass-gloss grid min-w-0 gap-3 overflow-x-clip rounded-[var(--radius-sheet)] p-4">
         <h2 className="m-0 text-[length:var(--text-label)] font-semibold text-foreground">
           {monthName}
         </h2>
         <div
-          className="grid grid-cols-7 gap-1"
+          className="grid min-w-0 grid-cols-7 gap-1"
           role="grid"
           aria-label={`Logged period days in ${monthName}`}
         >
@@ -188,7 +188,7 @@ export function HomeOverview() {
                 role="gridcell"
                 aria-label={`${key}${isPeriod ? ", period logged" : ""}`}
                 className={cn(
-                  "flex size-8 items-center justify-center rounded-[var(--radius)] text-[length:var(--text-caption)]",
+                  "flex size-8 max-w-full min-w-0 items-center justify-center justify-self-center rounded-[var(--radius)] text-[length:var(--text-caption)]",
                   !inMonth && "text-muted-foreground/40",
                   inMonth && "text-foreground",
                   isPeriod && "bg-primary font-semibold text-primary-foreground",
@@ -207,7 +207,7 @@ export function HomeOverview() {
         <h2 className="m-0 text-[length:var(--text-label)] font-semibold text-foreground">
           Cycle length
         </h2>
-            <div className="h-48" aria-hidden>
+            <div className="h-48 min-w-0 overflow-x-clip" aria-hidden>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={lengths}
@@ -267,7 +267,7 @@ export function HomeOverview() {
         <h2 className="m-0 text-[length:var(--text-label)] font-semibold text-foreground">
           This month
         </h2>
-            <div className="h-48" aria-hidden>
+            <div className="h-48 min-w-0 overflow-x-clip" aria-hidden>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie

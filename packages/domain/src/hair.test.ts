@@ -44,11 +44,11 @@ function scan(
 }
 
 describe("P3.3 hair texture equity harness", () => {
-  it("maps vendor labels including coily/kinky", () => {
-    assert.equal(parseHairTexture("coily"), "coily");
-    assert.equal(parseHairTexture("kinky"), "coily");
-    assert.equal(parseHairTexture("3c"), "curly");
-    assert.equal(parseHairTexture("not-a-type"), null);
+  it("maps YouCam hair-length term to a 0–100 score", () => {
+    const parsed = parseHairAnalysisPayload({
+      results: { hair_length: { term: "long hair" } },
+    });
+    assert.equal(parsed.hair_length, 96);
   });
 
   it("covers straight, wavy, curly, and coily", () => {

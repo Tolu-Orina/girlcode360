@@ -130,7 +130,7 @@ export function LandingAtmosphere() {
 
   return (
     <div
-      className="landing-atmosphere pointer-events-none fixed inset-0 z-[1]"
+      className="landing-atmosphere pointer-events-none fixed inset-0 z-[1] overflow-x-clip overflow-y-clip"
       aria-hidden="true"
     >
       {ORBS.map((orb, i) => (

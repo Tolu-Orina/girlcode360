@@ -2,11 +2,11 @@ import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const tabList = cva(
-  "flex flex-wrap gap-2 rounded-[var(--radius)] border border-border bg-card p-1",
+  "flex min-w-0 gap-2 overflow-x-auto rounded-[var(--radius)] border border-border bg-card p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
 );
 
 const tabBtn = cva(
-  "inline-flex min-h-[var(--tap)] items-center justify-center rounded-[var(--radius)] px-4 text-[length:var(--text-label)] font-semibold transition-colors",
+  "inline-flex min-h-[var(--tap)] shrink-0 items-center justify-center rounded-[var(--radius)] px-3 text-[length:var(--text-label)] font-semibold whitespace-nowrap transition-colors sm:px-4",
   {
     variants: {
       active: {

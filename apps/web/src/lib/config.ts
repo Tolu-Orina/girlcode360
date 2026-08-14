@@ -7,4 +7,15 @@ export const cognitoConfig = {
   googleIdp: import.meta.env.VITE_COGNITO_GOOGLE_IDP === "true",
 };
 
-export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+export const localYoucam = import.meta.env.VITE_LOCAL_YOUCAM === "true";
+
+export const apiBaseUrl = localYoucam
+  ? (import.meta.env.VITE_API_BASE_URL || "http://localhost:5173")
+  : (import.meta.env.VITE_API_BASE_URL ?? "");
+
+/** Same-origin in `vite` so YOUCAM_API_KEY can ride the proxy, not the bundle. */
+export function apiUrl(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  if (import.meta.env.DEV && apiBaseUrl) return p;
+  return `${apiBaseUrl.replace(/\/$/, "")}${p}`;
+}

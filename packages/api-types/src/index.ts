@@ -805,6 +805,8 @@ export type MirrorCatalogueItem = {
   shadeFamily?: string;
   accessoryCategory?: "ring" | "bracelet" | "watch" | "earring" | "necklace";
   nailColor?: string;
+  makeupCategory?: string;
+  swatchHex?: string;
   /** True when a retailer 3D asset or frame/nail sku is present. Never inferred from a 2D photo. */
   tryOnReady?: boolean;
 };
@@ -825,6 +827,7 @@ export type MakeupLook = {
   saved: boolean;
   hasResultImage: boolean;
   createdAt: string;
+  failReason?: string | null;
 };
 
 export type ShadeTwin = {
@@ -866,6 +869,7 @@ export type HairScan = {
   hairstyleId: string | null;
   hasResultImage: boolean;
   insight: MirrorInsight | null;
+  failReason?: string | null;
 };
 
 export type WardrobeItem = {

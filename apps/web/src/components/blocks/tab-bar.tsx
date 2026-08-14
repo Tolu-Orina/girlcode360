@@ -4,24 +4,24 @@ import { useAlena } from "@/hooks/use-alena";
 import { cn } from "@/lib/utils";
 
 const itemFocus =
-  "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 export function TabBar() {
   const { open, openAlena } = useAlena();
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 px-4 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 max-w-full overflow-x-clip px-4 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] lg:hidden"
       aria-label="Mobile primary"
     >
       <ul
-        className="glass-gloss m-0 flex list-none items-center justify-between rounded-full px-2 py-2"
+        className="glass-gloss m-0 flex min-w-0 list-none items-center justify-between rounded-full px-1 py-2 sm:px-2"
       >
         {MOBILE_TABS.map((t) => {
           const Icon = t.icon;
           const alena = t.to === "__alena__";
           const body = (isActive: boolean) => (
-            <span className="flex flex-col items-center gap-1">
+            <span className="flex w-full min-w-0 flex-col items-center gap-1">
               <Icon
                 size={24}
                 strokeWidth={isActive ? 2.25 : 1.75}
@@ -30,7 +30,7 @@ export function TabBar() {
               />
               <span
                 className={cn(
-                  "text-[length:var(--text-caption)] font-semibold",
+                  "max-w-full truncate px-0.5 text-[length:var(--text-caption)] font-semibold",
                   isActive ? "text-primary" : "text-muted-foreground",
                 )}
               >

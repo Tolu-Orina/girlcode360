@@ -34,7 +34,11 @@ export function mapYoucamErr(err: unknown): APIGatewayProxyResult | null {
   if (msg === "YOUCAM_HAIR_COLOR_REQUIRED") {
     return json(400, { error: "hair_color_required" });
   }
-  if (msg === "YOUCAM_3D_ASSET_REQUIRED" || msg === "ACCESSORY_3D_REQUIRED") {
+  if (
+    msg === "YOUCAM_3D_ASSET_REQUIRED" ||
+    msg === "ACCESSORY_3D_REQUIRED" ||
+    msg === "YOUCAM_EYEWEAR_UNAVAILABLE"
+  ) {
     return json(400, { error: "accessory_3d_required" });
   }
   if (msg === "YOUCAM_NAIL_COLOR_REQUIRED") {

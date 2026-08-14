@@ -1,4 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  buildMakeupVtoEffects,
+  type StudioMakeupCategory,
+} from "../../../../../../packages/domain/src/index.ts";
 import { youcamApiKey, youcamWebhookSecret } from "./secrets.ts";
 
 const BASE =
@@ -49,10 +53,14 @@ export type YoucamCapability =
   | "mu-transfer"
   | "shade-finder"
   | "hair-analysis"
+  | "hair-length-detection"
   | "hair-tryon"
-  | "nail-tryon"
-  | "accessory-tryon"
-  | "eyewear-tryon";
+  | "nail-vto"
+  | "2d-vto/ring"
+  | "2d-vto/bracelet"
+  | "2d-vto/watch"
+  | "2d-vto/earring"
+  | "2d-vto/necklace";
 
 export type MakeupCategory = (typeof MAKEUP_CATEGORIES)[number];
 export type AccessoryCategory = (typeof ACCESSORY_CATEGORIES)[number];
@@ -218,6 +226,7 @@ export async function uploadYoucamFile(
     body: new Uint8Array(bytes),
   });
   if (!put.ok) throw new Error(`YOUCAM_PUT_${put.status}`);
+  await new Promise((r) => setTimeout(r, 800));
   return fileId;
 }
 
@@ -295,85 +304,23 @@ export async function startClothTryOn(opts: {
   return submitTask("cloth-v3", body);
 }
 
-function makeupEffectsFor(categories?: MakeupCategory[]): Record<string, unknown>[] {
-  const set = new Set(
-    categories?.length ? categories : [...MAKEUP_CATEGORIES],
-  );
-  const effects: Record<string, unknown>[] = [
-    {
-      category: "skin_smooth",
-      skinSmoothStrength: 40,
-      skinSmoothColorIntensity: 35,
-    },
-  ];
-  if (set.has("foundation")) {
-    effects.push({
-      category: "foundation",
-      palettes: [
-        {
-          color: "#e8c4a8",
-          colorIntensity: 35,
-          glowIntensity: 20,
-          coverageIntensity: 40,
-        },
-      ],
-    });
-  }
-  if (set.has("blush")) {
-    effects.push({
-      category: "blush",
-      pattern: { name: "1color1" },
-      palettes: [{ color: "#e19f9f", texture: "matte", colorIntensity: 45 }],
-    });
-  }
-  if (set.has("lip")) {
-    effects.push({
-      category: "lip_color",
-      shape: { name: "original" },
-      style: { type: "full" },
-      palettes: [{ color: "#c2185b", texture: "matte", colorIntensity: 55 }],
-    });
-  }
-  if (set.has("eyeshadow")) {
-    effects.push({
-      category: "eye_shadow",
-      pattern: { name: "1color1" },
-      palettes: [{ color: "#8b5a6b", texture: "matte", colorIntensity: 45 }],
-    });
-  }
-  if (set.has("eyeliner")) {
-    effects.push({
-      category: "eye_liner",
-      pattern: { name: "Arabic3" },
-      palettes: [{ color: "#1a1a1a", texture: "matte", colorIntensity: 50 }],
-    });
-  }
-  if (set.has("eyebrow")) {
-    effects.push({
-      category: "eyebrows",
-      pattern: { type: "shape", name: "Original2" },
-      palettes: [{ color: "#3b2a22", texture: "matte", colorIntensity: 40 }],
-    });
-  }
-  if (set.has("eyelash")) {
-    effects.push({
-      category: "eyelashes",
-      pattern: { name: "Natural1" },
-      palettes: [{ color: "#1a1a1a", colorIntensity: 50 }],
-    });
-  }
-  return effects;
+function makeupEffectsFor(
+  categories?: StudioMakeupCategory[],
+  palettes?: Partial<Record<StudioMakeupCategory, string>>,
+): Record<string, unknown>[] {
+  return buildMakeupVtoEffects(categories, palettes);
 }
 
 /** Photo / live still try-on — Perfect Corp AI Makeup VTO. */
 export async function startMakeupVto(opts: {
   srcFileId: string;
-  makeupCategories?: MakeupCategory[];
+  makeupCategories?: StudioMakeupCategory[];
+  palettes?: Partial<Record<StudioMakeupCategory, string>>;
 }): Promise<string> {
   return submitTask("makeup-vto", {
     src_file_id: opts.srcFileId,
     version: "1.0",
-    effects: makeupEffectsFor(opts.makeupCategories),
+    effects: makeupEffectsFor(opts.makeupCategories, opts.palettes),
   });
 }
 
@@ -402,9 +349,8 @@ export async function startShadeFinder(opts: {
 }
 
 export async function startHairAnalysis(srcFileId: string): Promise<string> {
-  return submitTask("hair-analysis", {
+  return submitTask("hair-length-detection", {
     src_file_id: srcFileId,
-    dst_actions: ["hair_type", "hair_length", "hair_frizziness", "hair_density"],
   });
 }
 
@@ -429,7 +375,7 @@ export async function startNailTryOn(opts: {
 }): Promise<string> {
   const nailColor = opts.nailColor.trim();
   if (!nailColor) throw new Error("YOUCAM_NAIL_COLOR_REQUIRED");
-  return submitTask("nail-tryon", {
+  return submitTask("nail-vto", {
     src_file_id: opts.srcFileId,
     nail_color: nailColor,
   });
@@ -438,30 +384,34 @@ export async function startNailTryOn(opts: {
 export async function startAccessoryTryOn(opts: {
   srcFileId: string;
   accessoryCategory: AccessoryCategory;
-  asset3dId: string;
+  refFileUrl: string;
 }): Promise<string> {
-  const asset3dId = opts.asset3dId.trim();
-  if (!asset3dId) throw new Error("YOUCAM_3D_ASSET_REQUIRED");
+  const refFileUrl = opts.refFileUrl.trim();
+  if (!refFileUrl) throw new Error("YOUCAM_3D_ASSET_REQUIRED");
   if (!ACCESSORY_CATEGORIES.includes(opts.accessoryCategory)) {
     throw new Error("YOUCAM_ACCESSORY_CATEGORY_INVALID");
   }
-  return submitTask("accessory-tryon", {
+  const cap = `2d-vto/${opts.accessoryCategory}` as YoucamCapability;
+  return submitTask(cap, {
     src_file_id: opts.srcFileId,
-    accessory_category: opts.accessoryCategory,
-    asset_3d_id: asset3dId,
+    ref_file_urls: [refFileUrl],
+    source_info: { name: opts.srcFileId },
+    object_infos: [
+      {
+        name: refFileUrl,
+        parameter: {
+          [`${opts.accessoryCategory}_need_remove_background`]: true,
+        },
+      },
+    ],
   });
 }
 
-export async function startEyewearTryOn(opts: {
+export async function startEyewearTryOn(_opts: {
   srcFileId: string;
   frameId: string;
 }): Promise<string> {
-  const frameId = opts.frameId.trim();
-  if (!frameId) throw new Error("YOUCAM_FRAME_ID_REQUIRED");
-  return submitTask("eyewear-tryon", {
-    src_file_id: opts.srcFileId,
-    frame_id: frameId,
-  });
+  throw new Error("YOUCAM_EYEWEAR_UNAVAILABLE");
 }
 
 export type YoucamTaskState = {
@@ -474,6 +424,29 @@ export type YoucamTaskState = {
   error?: string;
   data: Record<string, unknown>;
 };
+
+function firstHttpsUrl(node: unknown, depth = 0): string | undefined {
+  if (depth > 8 || node == null) return undefined;
+  if (typeof node === "string" && /^https:\/\//i.test(node)) return node;
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = firstHttpsUrl(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  const rec = asRecord(node);
+  if (!rec) return undefined;
+  if (typeof rec.url === "string" && /^https:\/\//i.test(rec.url)) return rec.url;
+  if (typeof rec.download_url === "string" && /^https:\/\//i.test(rec.download_url)) {
+    return rec.download_url;
+  }
+  for (const v of Object.values(rec)) {
+    const found = firstHttpsUrl(v, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
 
 function collectUrls(node: unknown, into: Record<string, string>, prefix = ""): void {
   if (!node) return;
@@ -541,13 +514,11 @@ export async function pollTask(
   );
   const root = asRecord(json) ?? {};
   const data = asRecord(root.data) ?? root;
-  const rawStatus = String(
-    data.task_status ?? data.status ?? root.task_status ?? "running",
-  ).toLowerCase();
+  const rawStatus = String(data.task_status ?? "running").toLowerCase();
   const status: YoucamTaskState["status"] =
-    rawStatus.includes("success") || rawStatus === "ok"
+    rawStatus === "success" || rawStatus === "ok"
       ? "success"
-      : rawStatus.includes("error") || rawStatus.includes("fail")
+      : rawStatus === "error" || rawStatus === "failed" || rawStatus === "fail"
         ? "error"
         : "running";
 
@@ -558,7 +529,9 @@ export async function pollTask(
   collectUrls(data, maskUrls);
   const resultList = Array.isArray(data.results) ? data.results : [];
   const firstResult = asRecord(resultList[0]);
+  const resultsObj = asRecord(data.results);
   const resultUrl =
+    (typeof resultsObj?.url === "string" ? resultsObj.url : undefined) ||
     (typeof firstResult?.download_url === "string"
       ? firstResult.download_url
       : undefined) ||
@@ -566,7 +539,9 @@ export async function pollTask(
     maskUrls.url ||
     maskUrls.download_url ||
     maskUrls.output_url ||
-    (typeof data.url === "string" ? data.url : undefined);
+    (typeof data.url === "string" ? data.url : undefined) ||
+    firstHttpsUrl(data.results) ||
+    firstHttpsUrl(data);
 
   const numeric = Object.entries(scores).filter(([k]) => k !== "skin_type");
   const overall =
@@ -586,6 +561,22 @@ export async function pollTask(
     error: status === "error" ? String(data.error ?? data.message ?? "task_error") : undefined,
     data,
   };
+}
+
+/** Stay inside API Gateway's 29s. Frontend GET still polls if we return pending. */
+const SETTLE_POLL_ATTEMPTS = 7;
+const SETTLE_POLL_MS = 2_000;
+
+export async function pollUntilSettled(
+  capability: YoucamCapability,
+  packedTaskId: string,
+): Promise<YoucamTaskState> {
+  let last = await pollTask(capability, packedTaskId);
+  for (let i = 0; i < SETTLE_POLL_ATTEMPTS && last.status === "running"; i += 1) {
+    await new Promise((r) => setTimeout(r, SETTLE_POLL_MS));
+    last = await pollTask(capability, packedTaskId);
+  }
+  return last;
 }
 
 export async function downloadUrl(url: string): Promise<Buffer> {

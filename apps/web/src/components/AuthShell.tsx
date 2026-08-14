@@ -36,7 +36,7 @@ export function AuthShell({
   panelAlt?: string;
 }) {
   return (
-    <main className="relative grid min-h-dvh bg-background lg:grid-cols-2">
+    <main className="relative grid min-h-dvh max-w-full overflow-x-clip bg-background lg:grid-cols-2">
       <AmbientLayer />
       <aside
         className="relative z-10 hidden overflow-hidden lg:block"

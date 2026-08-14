@@ -3,16 +3,25 @@ import { Link } from "react-router-dom";
 import {
   ActionRow,
   AppPage,
+  elevatedCardClass,
   leadClass,
   outlinedCardClass,
 } from "@/components/blocks/app-page";
 import { PageHeader } from "@/components/blocks/page-header";
 import { AskAlenaLink } from "@/components/blocks/ask-alena-link";
 import { SheMatchBanner } from "@/components/blocks/shematch-banner";
+import { CameraStillCapture } from "@/components/blocks/camera-still";
 import { MirrorStudioPanel } from "@/components/blocks/mirror-studio";
 import { MirrorHairPanel } from "@/components/blocks/mirror-hair";
 import { MirrorAccessoriesPanel } from "@/components/blocks/mirror-accessories";
 import { MirrorWardrobePanel } from "@/components/blocks/mirror-wardrobe";
+import {
+  MirrorStudioNav,
+  type MirrorTab,
+} from "@/components/blocks/mirror-studio-nav";
+import { MakeupFeatureRail, MakeupLookProvider } from "@/components/blocks/makeup-look-context";
+import { MirrorPhotoTray } from "@/components/blocks/mirror-photo-tray";
+import { MirrorStill } from "@/components/blocks/mirror-still";
 import { ScoreBar } from "@/components/blocks/score-bar";
 import {
   EmptyState,
@@ -25,6 +34,7 @@ import { FieldSelect } from "@/components/primitives/field";
 import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { useOnline } from "@/hooks/use-online";
+import { MirrorPhotosProvider, useMirrorPhotos } from "@/hooks/use-mirror-photos";
 import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
@@ -56,7 +66,6 @@ import { apiBaseUrl } from "../lib/config";
 import { MIRROR_PROCESSOR_LEAD } from "../lib/consent-copy";
 import { elevatedSkinConcerns } from "../../../../packages/domain/src/index";
 
-type Tab = "scan" | "makeup" | "hair" | "wardrobe" | "accessories" | "tryon" | "timeline";
 type CatalogueMode = "all" | "maternity" | "pmos";
 
 const SCORE_LABELS: Record<string, string> = {
@@ -75,6 +84,11 @@ const SCORE_LABELS: Record<string, string> = {
   eye_bag: "Under-eye bags",
   tear_trough: "Tear trough",
   droopy_eyelid: "Eyelid droop",
+  droopy_lower_eyelid: "Lower eyelid",
+  droopy_upper_eyelid: "Upper eyelid",
+  all: "Combined",
+  skin_age: "Skin age (estimate)",
+  skin_type: "Skin type aid",
 };
 
 function friendlyError(err: unknown): string {
@@ -120,7 +134,7 @@ function friendlyError(err: unknown): string {
     case "wardrobe_failed":
       return "Wardrobe could not finish. Try again in a few minutes.";
     case "accessory_3d_required":
-      return "This piece has no retailer 3D asset yet. We do not build 3D from a photo.";
+      return "This piece has no catalogue SKU still. We do not invent a 3D model from a photo.";
     case "nail_color_required":
       return "Pick a nail colour from the catalogue.";
     case "frame_id_required":
@@ -157,7 +171,7 @@ function TrendRow({
       <p className="m-0 text-[length:var(--text-label)] text-foreground">
         {label} over time
       </p>
-      <ol className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(2.75rem,1fr))] items-end gap-1 p-0">
+      <ol className="m-0 grid min-w-0 list-none grid-cols-[repeat(auto-fit,minmax(2.5rem,1fr))] items-end gap-1 p-0">
         {points.map((p) => (
           <li key={p.id} className="grid justify-items-center gap-1">
             <span
@@ -196,7 +210,15 @@ function formatWhen(iso: string): string {
 }
 
 export function MirrorPage() {
-  const [tab, setTab] = useState<Tab>("scan");
+  return (
+    <MirrorPhotosProvider>
+      <MirrorPageView />
+    </MirrorPhotosProvider>
+  );
+}
+
+function MirrorPageView() {
+  const [tab, setTab] = useState<MirrorTab>("scan");
   const [status, setStatus] = useState<MirrorStatus | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -228,8 +250,8 @@ export function MirrorPage() {
 
   const pendingScan = useRef<string | null>(null);
   const pendingTryOn = useRef<string | null>(null);
-  const faceInput = useRef<HTMLInputElement>(null);
-  const bodyInput = useRef<HTMLInputElement>(null);
+  const lastQueued = useRef("");
+  const { queued, consumeQueued } = useMirrorPhotos();
   const online = useOnline();
   const [preview, setPreview] = useState<{
     kind: "face" | "body";
@@ -527,11 +549,28 @@ export function MirrorPage() {
     }
   }
 
-  function pickPreview(kind: "face" | "body", file: File | undefined) {
+  const pickPreview = useCallback((kind: "face" | "body", file: File | undefined) => {
     if (!file) return;
-    if (preview) URL.revokeObjectURL(preview.src);
-    setPreview({ kind, src: URL.createObjectURL(file), file });
-  }
+    setPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.src);
+      return { kind, src: URL.createObjectURL(file), file };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!queued || queued.token === lastQueued.current) return;
+    if (queued.kind === "face" && (tab === "scan" || tab === "timeline")) {
+      lastQueued.current = queued.token;
+      consumeQueued(queued.token);
+      if (tab === "timeline") setTab("scan");
+      pickPreview("face", queued.file);
+    }
+    if (queued.kind === "body" && tab === "tryon") {
+      lastQueued.current = queued.token;
+      consumeQueued(queued.token);
+      pickPreview("body", queued.file);
+    }
+  }, [queued, tab, consumeQueued, pickPreview]);
 
   async function confirmPreview() {
     if (!preview) return;
@@ -562,7 +601,7 @@ export function MirrorPage() {
   const skinTags = elevatedSkinConcerns(selected?.scores ?? {});
   const apparel = catalogue.filter((i) => i.kind === "apparel");
   const scoreEntries = Object.entries(selected?.scores ?? {}).filter(
-    ([, n]) => typeof n === "number",
+    ([key, n]) => typeof n === "number" && key !== "all" && key !== "skin_type",
   );
 
   if (loading) {
@@ -621,32 +660,17 @@ export function MirrorPage() {
   const captureOff = busy || !status.youcamConfigured || !online;
 
   return (
-    <AppPage>
+    <AppPage className="lg:max-w-[var(--shell-max)] lg:gap-8">
       <PageHeader
         eyebrow="Mirror"
-        title="Skin and style"
-        lead="Scores are wellness snapshots from YouCam, shown with your cycle logs. Not a diagnosis."
+        title="Your studio"
+        lead="Take a photo once. Reuse it for skin, makeup, hair, and try-on. Scores are wellness snapshots, not a diagnosis."
       />
       <AskAlenaLink from="mirror" />
 
       {!online ? (
         <OfflineBanner message="You are offline. Capture is paused. Past scans stay on this page." />
       ) : null}
-
-      <SegmentedTabs
-        ariaLabel="Mirror sections"
-        value={tab}
-        onChange={(id) => setTab(id as Tab)}
-        items={[
-          { id: "scan", label: "Skin scan" },
-          { id: "makeup", label: "Makeup" },
-          { id: "hair", label: "Hair" },
-          { id: "wardrobe", label: "Wardrobe" },
-          { id: "accessories", label: "Accessories" },
-          { id: "tryon", label: "Try-on" },
-          { id: "timeline", label: "Timeline" },
-        ]}
-      />
 
       {error ? (
         <ErrorBanner message={error} onRetry={() => void loadWorkspace()} />
@@ -663,15 +687,20 @@ export function MirrorPage() {
         </p>
       ) : null}
 
+      <MakeupLookProvider>
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)_18rem] lg:gap-8">
+        <MirrorStudioNav value={tab} onChange={setTab} />
+
+        <div className="order-2 grid min-w-0 gap-6 lg:order-none">
       {preview ? (
-        <div className={cn(outlinedCardClass, "grid gap-4")}>
+        <div className={cn(elevatedCardClass)}>
           <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
             Check this photo
           </h2>
-          <img
+          <MirrorStill
             src={preview.src}
             alt="Selected photo preview"
-            className="w-full rounded-[var(--radius)] border border-border"
+            crop={preview.kind === "body" ? "body" : "face"}
           />
           <ActionRow>
             <Button type="button" onClick={() => void confirmPreview()}>
@@ -691,37 +720,24 @@ export function MirrorPage() {
         </div>
       ) : null}
 
-      {tab === "scan" ? (
-        <div className="grid gap-4 border-t border-border pt-6">
+        {tab === "scan" ? (
+        <div className={cn(elevatedCardClass)}>
           <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
             New skin scan
           </h2>
           <p className={leadClass}>
             Use even light, face the camera, and keep hair off your forehead.
           </p>
-          <input
-            ref={faceInput}
-            id="mirror-face"
-            className="sr-only"
-            type="file"
-            accept="image/*"
-            capture="user"
+          <CameraStillCapture
             disabled={captureOff}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              pickPreview("face", file);
-            }}
+            facingMode="user"
+            guide="face"
+            captureLabel="Take a face photo"
+            videoLabel="Live camera for a skin scan still"
+            photoKind="face"
+            onFile={(file) => pickPreview("face", file)}
+            onError={(msg) => setError(msg)}
           />
-          <ActionRow>
-            <Button
-              type="button"
-              disabled={captureOff}
-              onClick={() => faceInput.current?.click()}
-            >
-              Take a face photo
-            </Button>
-          </ActionRow>
 
           {selected ? (
             <article className={cn(outlinedCardClass, "grid gap-4")}>
@@ -730,26 +746,40 @@ export function MirrorPage() {
                 {formatWhen(selected.createdAt)}
               </h3>
               <p className={leadClass}>
-                Cycle day {selected.cycleDayAtScan ?? "—"} ·{" "}
-                {phaseLabel(selected.cyclePhaseAtScan)}
+                {selected.cycleDayAtScan != null
+                  ? `Cycle day ${selected.cycleDayAtScan}${
+                      selected.cyclePhaseAtScan
+                        ? ` · ${phaseLabel(selected.cyclePhaseAtScan)}`
+                        : ""
+                    }`
+                  : "Cycle day is added when you have logs for this date."}
                 {selected.overallScore != null
                   ? ` · Overall ${selected.overallScore} of 100`
+                  : ""}
+                {typeof selected.scores.skin_age === "number"
+                  ? ` · Skin age estimate ${selected.scores.skin_age}`
                   : ""}
                 {selected.status === "pending" ? " · Analysing" : ""}
                 {selected.status === "error" ? " · Could not finish" : ""}
               </p>
+              {selected.status === "error" ? (
+                <p className={leadClass}>
+                  {selected.insight?.body ??
+                    "YouCam could not finish this still. Face the camera in even light and capture again."}
+                </p>
+              ) : null}
               {resultSrc ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <img
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <MirrorStill
                     src={resultSrc}
                     alt="Skin scan result"
-                    className="w-full rounded-[var(--radius)] border border-border bg-muted"
+                    crop="face"
                   />
                   {maskSrc ? (
-                    <img
+                    <MirrorStill
                       src={maskSrc}
                       alt="Skin overlay map"
-                      className="w-full rounded-[var(--radius)] border border-border bg-muted"
+                      crop="face"
                     />
                   ) : null}
                 </div>
@@ -797,6 +827,7 @@ export function MirrorPage() {
       ) : null}
 
       {tab === "makeup" && status ? (
+        <div className={elevatedCardClass}>
         <MirrorStudioPanel
           status={status}
           scans={scans}
@@ -810,9 +841,11 @@ export function MirrorPage() {
           }}
           friendlyError={friendlyError}
         />
+        </div>
       ) : null}
 
       {tab === "hair" && status ? (
+        <div className={elevatedCardClass}>
         <MirrorHairPanel
           status={status}
           scans={scans}
@@ -822,9 +855,11 @@ export function MirrorPage() {
           onError={(msg) => setError(msg)}
           friendlyError={friendlyError}
         />
+        </div>
       ) : null}
 
       {tab === "wardrobe" && status ? (
+        <div className={elevatedCardClass}>
         <MirrorWardrobePanel
           status={status}
           market={profile?.market ?? "UK"}
@@ -837,9 +872,11 @@ export function MirrorPage() {
           }}
           friendlyError={friendlyError}
         />
+        </div>
       ) : null}
 
       {tab === "accessories" && status ? (
+        <div className={elevatedCardClass}>
         <MirrorAccessoriesPanel
           status={status}
           scans={scans}
@@ -849,15 +886,16 @@ export function MirrorPage() {
           onError={(msg) => setError(msg)}
           friendlyError={friendlyError}
         />
+        </div>
       ) : null}
 
       {tab === "tryon" ? (
-        <div className="grid gap-4 border-t border-border pt-6">
+        <div className={cn(elevatedCardClass)}>
           <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
             Apparel try-on
           </h2>
           <p className={leadClass}>
-            Choose a look, then upload a full-body photo in similar lighting.
+            Choose a look, then take a full-body photo in similar lighting.
             Mix a top and bottom with the same photo — no swimwear in this
             catalogue.
           </p>
@@ -919,29 +957,18 @@ export function MirrorPage() {
               </li>
             ))}
           </ul>
-          <input
-            ref={bodyInput}
-            id="mirror-body"
-            className="sr-only"
-            type="file"
-            accept="image/*"
-            capture="environment"
+          <CameraStillCapture
             disabled={captureOff || !pickedItem}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              pickPreview("body", file);
-            }}
+            facingMode="environment"
+            guide="body"
+            captureLabel="Take a full-body photo"
+            videoLabel="Live camera for a full-body try-on still"
+            photoKind="body"
+            onFile={(file) => pickPreview("body", file)}
+            onError={(msg) => setError(msg)}
           />
-          <ActionRow>
-            <Button
-              type="button"
-              disabled={captureOff || !pickedItem}
-              onClick={() => bodyInput.current?.click()}
-            >
-              Take a full-body photo
-            </Button>
-            {lastBodyB64 ? (
+          {lastBodyB64 ? (
+            <ActionRow>
               <Button
                 type="button"
                 variant="outline"
@@ -950,13 +977,13 @@ export function MirrorPage() {
               >
                 Use last photo
               </Button>
-            ) : null}
-          </ActionRow>
+            </ActionRow>
+          ) : null}
           {tryonResult ? (
-            <img
+            <MirrorStill
               src={tryonResult}
               alt="Apparel try-on result"
-              className="w-full rounded-[var(--radius)] border border-border"
+              crop="body"
             />
           ) : activeTryOn?.status === "error" ? (
             <ErrorBanner message="Try-on could not finish. Try another photo." />
@@ -973,7 +1000,7 @@ export function MirrorPage() {
       ) : null}
 
       {tab === "timeline" ? (
-        <div className="grid gap-4 border-t border-border pt-6">
+        <div className={cn(elevatedCardClass)}>
           <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
             Progress timeline
           </h2>
@@ -1167,10 +1194,10 @@ export function MirrorPage() {
                           {formatWhen(a.createdAt)} · {phaseLabel(a.cyclePhaseAtScan)}
                         </p>
                         {compareSrc.a ? (
-                          <img
+                          <MirrorStill
                             src={compareSrc.a}
                             alt={`Scan from ${formatWhen(a.createdAt)}`}
-                            className="w-full rounded-[var(--radius)] border border-border bg-muted"
+                            crop="face"
                           />
                         ) : (
                           <p className={leadClass}>
@@ -1185,10 +1212,10 @@ export function MirrorPage() {
                           {formatWhen(b.createdAt)} · {phaseLabel(b.cyclePhaseAtScan)}
                         </p>
                         {compareSrc.b ? (
-                          <img
+                          <MirrorStill
                             src={compareSrc.b}
                             alt={`Scan from ${formatWhen(b.createdAt)}`}
-                            className="w-full rounded-[var(--radius)] border border-border bg-muted"
+                            crop="face"
                           />
                         ) : (
                           <p className={leadClass}>
@@ -1257,6 +1284,41 @@ export function MirrorPage() {
       ) : null}
 
       <PredictionDisclaimer message="Mirror scores and cycle overlays are wellness tools, not a diagnosis or medical advice." />
+        </div>
+
+        <div className="order-1 grid gap-4 lg:order-none">
+          <MirrorPhotoTray
+            preferredKind={
+              tab === "tryon" ? "body" : tab === "wardrobe" ? "garment" : "face"
+            }
+            acceptedKinds={
+              tab === "tryon"
+                ? ["body"]
+                : tab === "wardrobe"
+                  ? ["garment", "body"]
+                  : tab === "accessories"
+                    ? ["face", "hand"]
+                    : ["face"]
+            }
+            useLabel={
+              tab === "tryon"
+                ? "Use for apparel try-on"
+                : tab === "makeup"
+                  ? "Use for this makeup look"
+                  : tab === "hair"
+                    ? "Use for Hair Studio"
+                    : tab === "wardrobe"
+                      ? "Use in Wardrobe"
+                      : tab === "accessories"
+                        ? "Use for accessories"
+                        : "Use for skin scan"
+            }
+            disabled={!status.youcamConfigured || !online}
+          />
+          {tab === "makeup" ? <MakeupFeatureRail /> : null}
+        </div>
+      </div>
+      </MakeupLookProvider>
     </AppPage>
   );
 }

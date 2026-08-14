@@ -9,7 +9,7 @@ import { isDsqlEnabled } from "../db/client";
 import { deleteObject, getObject } from "../db/s3";
 import {
   packYoucamIds,
-  pollTask,
+  pollUntilSettled,
   requestYoucamFileDeletion,
   startHairAnalysis,
   startHairTryOn,
@@ -108,27 +108,25 @@ function publicHair(row: HairScanRecord, insight: HairInsight | null): HairScan 
 async function resolveFaceFileId(
   sub: string,
   opts: { scanId?: string; imageB64?: string },
-  uploadKind: "hair-analysis" | "hair-tryon",
+  uploadKind: "hair-length-detection" | "hair-tryon",
 ): Promise<string> {
+  if (opts.imageB64) {
+    const { bytes, contentType } = decodeImage(opts.imageB64);
+    return uploadYoucamFile(uploadKind, bytes, contentType, `hair-${Date.now()}.jpg`);
+  }
   const scan = await getStudioScanRef(sub, opts.scanId);
-  if (scan && skinScanReusableForShade(scan.createdAt)) {
-    const packed = unpackYoucamIds(scan.youcamTaskId).fileId;
-    if (packed) return packed;
-    if (scan.sourceS3Key) {
-      const bytes = await getObject(scan.sourceS3Key);
-      if (bytes) {
-        return uploadYoucamFile(
-          uploadKind,
-          bytes,
-          "image/jpeg",
-          `hair-${Date.now()}.jpg`,
-        );
-      }
+  if (scan && skinScanReusableForShade(scan.createdAt) && scan.sourceS3Key) {
+    const bytes = await getObject(scan.sourceS3Key);
+    if (bytes) {
+      return uploadYoucamFile(
+        uploadKind,
+        bytes,
+        "image/jpeg",
+        `hair-${Date.now()}.jpg`,
+      );
     }
   }
-  if (!opts.imageB64) throw new Error("STUDIO_FACE_REQUIRED");
-  const { bytes, contentType } = decodeImage(opts.imageB64);
-  return uploadYoucamFile(uploadKind, bytes, contentType, `hair-${Date.now()}.jpg`);
+  throw new Error("STUDIO_FACE_REQUIRED");
 }
 
 async function settleHair(
@@ -136,9 +134,9 @@ async function settleHair(
   row: HairScanRecord,
 ): Promise<HairScanRecord | undefined> {
   if (row.status !== "pending") return row;
-  const capability = row.kind === "tryon" ? "hair-tryon" : "hair-analysis";
+  const capability = row.kind === "tryon" ? "hair-tryon" : "hair-length-detection";
   try {
-    const task = await pollTask(capability, row.youcamTaskId);
+    const task = await pollUntilSettled(capability, row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as const };
@@ -227,7 +225,7 @@ export async function createHairScan(
     hairstyleId?: string;
   },
 ): Promise<HairScan> {
-  const uploadKind = opts.kind === "tryon" ? "hair-tryon" : "hair-analysis";
+  const uploadKind = opts.kind === "tryon" ? "hair-tryon" : "hair-length-detection";
   const fileId = await resolveFaceFileId(sub, opts, uploadKind);
   const taskRaw =
     opts.kind === "tryon"
