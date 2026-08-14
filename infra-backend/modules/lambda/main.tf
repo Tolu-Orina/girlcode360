@@ -50,6 +50,11 @@ variable "bedrock_enabled" {
   default = true
 }
 
+variable "api_gateway_execution_arn" {
+  type        = string
+  description = "REST API execution ARN. Permissions wait on the function resource; integrations do not."
+}
+
 data "archive_file" "api" {
   type        = "zip"
   source_dir  = "${path.module}/codes/dist"

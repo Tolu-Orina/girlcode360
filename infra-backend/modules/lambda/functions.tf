@@ -76,3 +76,13 @@ resource "aws_lambda_function" "fn" {
     variables = local.lambda_env
   }
 }
+
+resource "aws_lambda_permission" "apigw" {
+  for_each = aws_lambda_function.fn
+
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = each.value.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${var.api_gateway_execution_arn}/*/*"
+}

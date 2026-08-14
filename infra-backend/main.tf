@@ -88,16 +88,17 @@ module "dsql" {
 }
 
 module "lambda" {
-  source               = "./modules/lambda"
-  environment          = var.environment
-  cognito_user_pool_id = module.cognito.user_pool_id
-  cognito_client_id    = module.cognito.client_id
-  dsql_endpoint        = module.dsql.endpoint
-  dsql_enabled         = var.enable_dsql
-  data_bucket_name     = module.s3_data.bucket_id
-  kms_key_arn          = module.kms.key_arn
-  alena_model_id       = var.alena_model_id
-  bedrock_enabled      = var.bedrock_enabled
+  source                    = "./modules/lambda"
+  environment               = var.environment
+  cognito_user_pool_id      = module.cognito.user_pool_id
+  cognito_client_id         = module.cognito.client_id
+  dsql_endpoint             = module.dsql.endpoint
+  dsql_enabled              = var.enable_dsql
+  data_bucket_name          = module.s3_data.bucket_id
+  kms_key_arn               = module.kms.key_arn
+  alena_model_id            = var.alena_model_id
+  bedrock_enabled           = var.bedrock_enabled
+  api_gateway_execution_arn = module.apigw.execution_arn
 }
 
 module "apigw" {
@@ -105,7 +106,6 @@ module "apigw" {
   environment                  = var.environment
   lambda_invoke_arns           = module.lambda.invoke_arns
   lambda_streaming_invoke_arns = module.lambda.streaming_invoke_arns
-  lambda_function_names        = module.lambda.function_names
   cognito_user_pool_arn        = module.cognito.user_pool_arn
   enable_custom_domain         = var.enable_api_custom_domain
   domain_name                  = var.enable_api_custom_domain ? local.api_fqdn : ""
@@ -172,4 +172,9 @@ output "lambda_role_arn" {
 
 output "dsql_endpoint" {
   value = module.dsql.endpoint
+}
+
+moved {
+  from = module.apigw.aws_lambda_permission.apigw
+  to   = module.lambda.aws_lambda_permission.apigw
 }

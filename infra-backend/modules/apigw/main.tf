@@ -23,11 +23,6 @@ variable "lambda_streaming_invoke_arns" {
   description = "InvokeWithResponseStream ARNs keyed by capability Lambda name."
 }
 
-variable "lambda_function_names" {
-  type        = map(string)
-  description = "Function names keyed by capability Lambda name."
-}
-
 variable "cognito_user_pool_arn" {
   type = string
 }
@@ -401,16 +396,6 @@ resource "aws_api_gateway_integration" "proxy_options" {
   uri                     = var.lambda_invoke_arns["identity"]
 }
 
-resource "aws_lambda_permission" "apigw" {
-  for_each = var.lambda_function_names
-
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = each.value
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
-}
-
 resource "aws_api_gateway_deployment" "main" {
   rest_api_id = aws_api_gateway_rest_api.main.id
 
@@ -500,6 +485,10 @@ output "regional_zone_id" {
 
 output "rest_api_id" {
   value = aws_api_gateway_rest_api.main.id
+}
+
+output "execution_arn" {
+  value = aws_api_gateway_rest_api.main.execution_arn
 }
 
 data "aws_region" "current" {}
