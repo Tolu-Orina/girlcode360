@@ -34,19 +34,15 @@ resource "aws_acm_certificate" "api" {
 }
 
 resource "aws_route53_record" "validation" {
-  for_each = var.create_certificate ? {
-    for dvo in aws_acm_certificate.api[0].domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  } : {}
+  # count (not for_each over domain_validation_options) so plan does not depend on
+  # ACM attributes that only exist after the certificate is created.
+  count = var.create_certificate ? 1 : 0
 
   allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
+  name            = tolist(aws_acm_certificate.api[0].domain_validation_options)[0].resource_record_name
+  records         = [tolist(aws_acm_certificate.api[0].domain_validation_options)[0].resource_record_value]
   ttl             = 60
-  type            = each.value.type
+  type            = tolist(aws_acm_certificate.api[0].domain_validation_options)[0].resource_record_type
   zone_id         = var.zone_id
 }
 
@@ -54,7 +50,7 @@ resource "aws_acm_certificate_validation" "api" {
   count = var.create_certificate ? 1 : 0
 
   certificate_arn         = aws_acm_certificate.api[0].arn
-  validation_record_fqdns = [for record in aws_route53_record.validation : record.fqdn]
+  validation_record_fqdns = [aws_route53_record.validation[0].fqdn]
 
   timeouts {
     create = "45m"

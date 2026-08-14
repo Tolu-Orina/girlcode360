@@ -35,6 +35,12 @@ variable "certificate_arn" {
   default = ""
 }
 
+variable "enable_custom_domain" {
+  type        = bool
+  default     = false
+  description = "Must be a plan-time boolean. Do not derive this from certificate_arn (unknown until ACM issues)."
+}
+
 resource "aws_api_gateway_rest_api" "main" {
   name        = "girlcode360-${var.environment}"
   description = "GirlCode360 API ${var.environment}"
@@ -458,12 +464,11 @@ resource "aws_api_gateway_stage" "main" {
 }
 
 locals {
-  use_custom_domain = var.domain_name != "" && var.certificate_arn != ""
-  execute_api_url   = "https://${aws_api_gateway_rest_api.main.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/${aws_api_gateway_stage.main.stage_name}"
+  execute_api_url = "https://${aws_api_gateway_rest_api.main.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/${aws_api_gateway_stage.main.stage_name}"
 }
 
 resource "aws_api_gateway_domain_name" "custom" {
-  count = local.use_custom_domain ? 1 : 0
+  count = var.enable_custom_domain ? 1 : 0
 
   domain_name              = var.domain_name
   regional_certificate_arn = var.certificate_arn
@@ -475,7 +480,7 @@ resource "aws_api_gateway_domain_name" "custom" {
 }
 
 resource "aws_api_gateway_base_path_mapping" "custom" {
-  count = local.use_custom_domain ? 1 : 0
+  count = var.enable_custom_domain ? 1 : 0
 
   api_id      = aws_api_gateway_rest_api.main.id
   stage_name  = aws_api_gateway_stage.main.stage_name
@@ -483,15 +488,15 @@ resource "aws_api_gateway_base_path_mapping" "custom" {
 }
 
 output "api_base_url" {
-  value = local.use_custom_domain ? "https://${var.domain_name}" : local.execute_api_url
+  value = var.enable_custom_domain ? "https://${var.domain_name}" : local.execute_api_url
 }
 
 output "regional_domain_name" {
-  value = local.use_custom_domain ? aws_api_gateway_domain_name.custom[0].regional_domain_name : ""
+  value = var.enable_custom_domain ? aws_api_gateway_domain_name.custom[0].regional_domain_name : ""
 }
 
 output "regional_zone_id" {
-  value = local.use_custom_domain ? aws_api_gateway_domain_name.custom[0].regional_zone_id : ""
+  value = var.enable_custom_domain ? aws_api_gateway_domain_name.custom[0].regional_zone_id : ""
 }
 
 output "rest_api_id" {

@@ -106,6 +106,7 @@ module "apigw" {
   lambda_invoke_arn     = module.lambda.invoke_arn
   lambda_function_name  = module.lambda.function_name
   cognito_user_pool_arn = module.cognito.user_pool_arn
+  enable_custom_domain  = var.enable_api_custom_domain
   domain_name           = var.enable_api_custom_domain ? local.api_fqdn : ""
   certificate_arn = var.enable_api_custom_domain ? (
     var.api_certificate_arn != "" ? var.api_certificate_arn : module.acm_api.certificate_arn
