@@ -256,7 +256,50 @@ resource "aws_api_gateway_integration" "privacy_purge_tick_post" {
   uri                     = var.lambda_invoke_arn
 }
 
-# ——— Authenticated catch-all ———
+# ——— Public: POST /v1/guest/alena (landing FAB; rate-limited in Lambda) ———
+resource "aws_api_gateway_resource" "guest" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.v1.id
+  path_part   = "guest"
+}
+
+resource "aws_api_gateway_resource" "guest_alena" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.guest.id
+  path_part   = "alena"
+}
+
+resource "aws_api_gateway_method" "guest_alena_post" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.guest_alena.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "guest_alena_post" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.guest_alena.id
+  http_method             = aws_api_gateway_method.guest_alena_post.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
+
+resource "aws_api_gateway_method" "guest_alena_options" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.guest_alena.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "guest_alena_options" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.guest_alena.id
+  http_method             = aws_api_gateway_method.guest_alena_options.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = var.lambda_invoke_arn
+}
 resource "aws_api_gateway_resource" "proxy" {
   rest_api_id = aws_api_gateway_rest_api.main.id
   parent_id   = aws_api_gateway_resource.v1.id
@@ -327,6 +370,11 @@ resource "aws_api_gateway_deployment" "main" {
       aws_api_gateway_resource.privacy_purge_tick.id,
       aws_api_gateway_method.privacy_purge_tick_post.id,
       aws_api_gateway_integration.privacy_purge_tick_post.id,
+      aws_api_gateway_resource.guest_alena.id,
+      aws_api_gateway_method.guest_alena_post.id,
+      aws_api_gateway_integration.guest_alena_post.id,
+      aws_api_gateway_method.guest_alena_options.id,
+      aws_api_gateway_integration.guest_alena_options.id,
       aws_api_gateway_resource.proxy.id,
       aws_api_gateway_method.proxy_any.id,
       aws_api_gateway_integration.proxy_any.id,
@@ -346,6 +394,8 @@ resource "aws_api_gateway_deployment" "main" {
     aws_api_gateway_integration.billing_webhooks_stripe_post,
     aws_api_gateway_integration.billing_webhooks_paystack_post,
     aws_api_gateway_integration.privacy_purge_tick_post,
+    aws_api_gateway_integration.guest_alena_post,
+    aws_api_gateway_integration.guest_alena_options,
     aws_api_gateway_integration.proxy_any,
     aws_api_gateway_integration.proxy_options,
   ]

@@ -1,5 +1,27 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { PredictionDisclaimer } from "../components/PredictionDisclaimer";
+import { Link } from "react-router-dom";
+import {
+  AppPage,
+  formStackClass,
+  leadClass,
+  listClass,
+  listItemClass,
+} from "@/components/blocks/app-page";
+import { PageHeader } from "@/components/blocks/page-header";
+import { AskAlenaLink } from "@/components/blocks/ask-alena-link";
+import { SheMatchBanner } from "@/components/blocks/shematch-banner";
+import {
+  EmptyState,
+  ErrorBanner,
+  OfflineBanner,
+  SkeletonBlock,
+} from "@/components/blocks/states";
+import { Chip } from "@/components/primitives/chip";
+import { Field, FieldInput, FieldSelect } from "@/components/primitives/field";
+import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
+import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
+import { Button } from "@/components/ui/button";
+import { useOnline } from "@/hooks/use-online";
 import type {
   BiometricLog,
   HealthModule,
@@ -8,6 +30,7 @@ import type {
   PcosInsight,
   UserProfile,
 } from "../../../../packages/api-types/src/index";
+import { libraryArticles } from "../../../../packages/domain/src/index";
 import {
   ApiError,
   createPcosMedication,
@@ -17,16 +40,33 @@ import {
   getPcosBiometrics,
   getPcosInsights,
   getPcosMedications,
+  getVapidPublicKey,
   patchModules,
   registerPushSubscription,
   upsertPcosBiometric,
 } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
-import articlesLocal from "../data/pcos-articles.json";
+import symptoms from "../data/symptoms.json";
+import { enqueueAndStore, loadLocalState } from "../lib/sync";
 import { PregnancyPanel } from "./PregnancyPanel";
 import { TtcPanel } from "./TtcPanel";
 import { WalletPanel } from "./WalletPanel";
-import "./health.css";
+
+type Symptom = {
+  id: string;
+  label: string;
+  surfaces?: Array<"cycle" | "pmos">;
+};
+
+const PMOS_SYMPTOMS = (symptoms as Symptom[]).filter(
+  (s) => !s.surfaces || s.surfaces.includes("pmos"),
+);
+
+const MED_HINT: Record<"UK" | "NG" | "GH", string> = {
+  UK: "Name, dose, time, and how often. People in the UK often add metformin, inositol, or letrozole if a clinician already advised them — this is a reminder list, not a prescription.",
+  NG: "Name, dose, time, and how often. Add clinic-prescribed meds or supplements you already use. This is a reminder list, not a prescription.",
+  GH: "Name, dose, time, and how often. Add clinic-prescribed meds or supplements you already use. This is a reminder list, not a prescription.",
+};
 
 function todayYmd(): string {
   const d = new Date();
@@ -41,10 +81,11 @@ export function HealthPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const online = useOnline();
 
   const [insights, setInsights] = useState<PcosInsight[]>([]);
   const [disclaimer, setDisclaimer] = useState(
-    "Possible patterns only — not a diagnosis or medical advice.",
+    "Possible patterns only. Not a diagnosis or medical advice.",
   );
   const [articles, setArticles] = useState<PcosArticle[]>([]);
   const [meds, setMeds] = useState<MedicationReminder[]>([]);
@@ -58,16 +99,21 @@ export function HealthPage() {
   const [medName, setMedName] = useState("");
   const [medDose, setMedDose] = useState("");
   const [medTime, setMedTime] = useState("08:00");
+  const [medFreq, setMedFreq] = useState<"daily" | "weekdays" | "custom">(
+    "daily",
+  );
+  const [diaryDate, setDiaryDate] = useState(todayYmd);
+  const [diaryIds, setDiaryIds] = useState<string[]>([]);
+  const [diaryPending, setDiaryPending] = useState(0);
+  const [acneBanner, setAcneBanner] = useState(false);
 
-  const pcosOn = profile?.modules.includes("pcos_manager") ?? false;
+  const pmosOn =
+    !apiBaseUrl || (profile?.modules.includes("pcos_manager") ?? false);
 
   async function refreshPcos(market: string) {
+    const m = market as "UK" | "NG" | "GH";
     if (!apiBaseUrl) {
-      setArticles(
-        (articlesLocal as PcosArticle[]).filter((a) =>
-          a.markets.includes(market as "UK" | "NG" | "GH"),
-        ),
-      );
+      setArticles(libraryArticles(m, "pcos"));
       setInsights([
         {
           id: "offline",
@@ -101,16 +147,12 @@ export function HealthPage() {
         if (me.modules.includes("pcos_manager")) {
           await refreshPcos(me.market);
         } else {
-          setArticles(
-            (articlesLocal as PcosArticle[]).filter((a) =>
-              a.markets.includes(me.market),
-            ),
-          );
+          setArticles(libraryArticles(me.market, "pcos"));
         }
       } catch (err) {
         if (!cancelled) {
           if (err instanceof ApiError && err.code === "api_base_url_missing") {
-            setArticles(articlesLocal as PcosArticle[]);
+            setArticles(libraryArticles("UK", "pcos"));
             setError(null);
           } else {
             setError(
@@ -127,6 +169,19 @@ export function HealthPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void loadLocalState().then((s) => {
+      if (cancelled) return;
+      setDiaryPending(s.pendingCount);
+      const day = s.days.find((d) => d.date === diaryDate);
+      setDiaryIds(day?.symptomIds ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [diaryDate, pmosOn]);
+
   async function enablePcos() {
     setBusy(true);
     setError(null);
@@ -140,7 +195,27 @@ export function HealthPage() {
       await refreshPcos(me.market);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not enable PCOS module",
+        err instanceof Error ? err.message : "Could not enable PMOS module",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveDiary(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await enqueueAndStore({
+        op: "upsert_day",
+        day: { date: diaryDate, symptomIds: diaryIds },
+      });
+      setDiaryPending(next.pendingCount);
+      if (diaryIds.includes("acne")) setAcneBanner(true);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not save diary",
       );
     } finally {
       setBusy(false);
@@ -183,7 +258,7 @@ export function HealthPage() {
         name: medName.trim(),
         dosage: medDose.trim() || null,
         timeLocal: medTime,
-        frequency: "daily",
+        frequency: medFreq,
       });
       setMeds((prev) => [...prev, medication]);
       setMedName("");
@@ -222,10 +297,34 @@ export function HealthPage() {
         setError("Notification permission was not granted.");
         return;
       }
-      await registerPushSubscription({
-        endpoint: `local://${crypto.randomUUID()}`,
-        keys: { p256dh: "pending-vapid", auth: "pending-vapid" },
-      });
+      const vapid = apiBaseUrl ? await getVapidPublicKey() : { publicKey: null };
+      const reg = await navigator.serviceWorker.ready;
+      if (vapid.publicKey && "PushManager" in window) {
+        const bytes = Uint8Array.from(
+          atob(vapid.publicKey.replace(/-/g, "+").replace(/_/g, "/")),
+          (c) => c.charCodeAt(0),
+        );
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: bytes,
+        });
+        const json = sub.toJSON();
+        await registerPushSubscription({
+          endpoint: json.endpoint ?? sub.endpoint,
+          keys: {
+            p256dh: json.keys?.p256dh ?? "",
+            auth: json.keys?.auth ?? "",
+          },
+        });
+      } else {
+        await registerPushSubscription({
+          endpoint: `local://${crypto.randomUUID()}`,
+          keys: { p256dh: "pending-vapid", auth: "pending-vapid" },
+        });
+        setError(
+          "Push delivery needs a VAPID key on the server. Permission is saved; bodies stay generic.",
+        );
+      }
       if (Notification.permission === "granted") {
         new Notification("GirlCode360", {
           body: "You have a note in GirlCode360",
@@ -240,83 +339,123 @@ export function HealthPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <section className="health-page">
-        <p className="health-lead">Loading health…</p>
-      </section>
-    );
-  }
-
   return (
-    <section className="health-page">
-      <h1>Health</h1>
-      <p className="health-lead">
-        Opt-in modules only. Wellness tracking and education — clinicians
-        diagnose; we help you prepare.
-      </p>
+    <AppPage>
+      <PageHeader
+        eyebrow="Health"
+        title="Modules you opt into"
+        lead="Wellness tracking and education. Clinicians diagnose; we help you prepare."
+      />
+      <AskAlenaLink from="health" />
 
-      <div className="health-tabs" role="tablist" aria-label="Health modules">
-        {(
-          [
-            ["pcos", "PCOS"],
-            ["pregnancy", "Pregnancy"],
-            ["ttc", "TTC"],
-            ["wallet", "Wallet"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            className={tab === id ? "on" : ""}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {!online ? (
+        <OfflineBanner message="You are offline. The PMOS diary still saves on this device. Medication reminders need a connection." />
+      ) : null}
+      {error ? <ErrorBanner message={error} /> : null}
 
-      {tab === "pcos" ? (
+      {loading ? (
+        <div className="grid gap-4" aria-busy="true" aria-label="Loading health">
+          <SkeletonBlock className="h-12" />
+          <SkeletonBlock className="h-40" />
+        </div>
+      ) : (
         <>
-          {!pcosOn ? (
-            <div className="health-section">
-              <h2>Enable PCOS Manager</h2>
-              <p className="health-lead">
-                Turn on insights, biometrics, medication reminders, and
-                education. Period-only users never see this until you opt in.
-              </p>
-              <button
-                type="button"
-                className="primary"
-                onClick={enablePcos}
-                disabled={busy}
-              >
-                {busy ? "Enabling…" : "Enable PCOS Manager"}
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="health-section">
-                <h2>Insights</h2>
-                <PredictionDisclaimer message={disclaimer} />
-                <ul className="insight-list">
-                  {insights.map((i) => (
-                    <li key={i.id}>
-                      <strong>{i.title}</strong>
-                      <p>{i.body}</p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          <SegmentedTabs
+            ariaLabel="Health modules"
+            value={tab}
+            onChange={(id) => setTab(id as Tab)}
+            items={[
+              { id: "pcos", label: "PMOS" },
+              { id: "pregnancy", label: "Pregnancy" },
+              { id: "ttc", label: "TTC" },
+              { id: "wallet", label: "Wallet" },
+            ]}
+          />
 
-              <div className="health-section">
-                <h2>Biometrics (optional)</h2>
-                <form className="health-form" onSubmit={saveBiometrics}>
-                  <label>
-                    Weight (kg)
-                    <input
+          {tab === "pcos" ? (
+            !pmosOn ? (
+              <EmptyState
+                title="PMOS Manager is off"
+                body="Turn on the symptom diary, medication reminders, and education. Cycle-only accounts never see this until you opt in."
+                action={
+                  <Button
+                    type="button"
+                    onClick={() => void enablePcos()}
+                    disabled={busy}
+                  >
+                    {busy ? "Enabling…" : "Enable PMOS Manager"}
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="grid gap-6">
+                {acneBanner || diaryIds.includes("acne") ? (
+                  <SheMatchBanner trigger="pcos_acne" />
+                ) : null}
+                {meds.length ? <SheMatchBanner trigger="medication_due" /> : null}
+                <form className={formStackClass} onSubmit={(e) => void saveDiary(e)}>
+                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+                    Symptom diary
+                  </h2>
+                  <p className={leadClass}>
+                    {PMOS_SYMPTOMS.length} wellness symptoms. Saves on this
+                    device first, then syncs with Cycle. Not a diagnosis.
+                    {diaryPending
+                      ? ` ${diaryPending} change(s) waiting to sync.`
+                      : ""}
+                  </p>
+                  <Field id="diary-date" label="Date">
+                    <FieldInput
+                      id="diary-date"
+                      type="date"
+                      value={diaryDate}
+                      onChange={(e) => setDiaryDate(e.target.value)}
+                    />
+                  </Field>
+                  <div className="flex flex-wrap gap-2">
+                    {PMOS_SYMPTOMS.map((s) => (
+                      <Chip
+                        key={s.id}
+                        pressed={diaryIds.includes(s.id)}
+                        onClick={() =>
+                          setDiaryIds((prev) =>
+                            prev.includes(s.id)
+                              ? prev.filter((x) => x !== s.id)
+                              : [...prev, s.id],
+                          )
+                        }
+                      >
+                        {s.label}
+                      </Chip>
+                    ))}
+                  </div>
+                  <Button type="submit" disabled={busy}>
+                    {busy ? "Saving…" : "Save diary"}
+                  </Button>
+                </form>
+
+                <section className="grid gap-4">
+                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+                    Insights
+                  </h2>
+                  <PredictionDisclaimer message={disclaimer} />
+                  <ul className={listClass}>
+                    {insights.map((i) => (
+                      <li key={i.id} className={listItemClass}>
+                        <strong className="block text-foreground">{i.title}</strong>
+                        <p className={leadClass}>{i.body}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+
+                <form className={formStackClass} onSubmit={saveBiometrics}>
+                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+                    Biometrics (optional)
+                  </h2>
+                  <Field id="weight" label="Weight (kg)">
+                    <FieldInput
+                      id="weight"
                       type="number"
                       step="0.1"
                       min={20}
@@ -324,10 +463,10 @@ export function HealthPage() {
                       value={weight}
                       onChange={(e) => setWeight(e.target.value)}
                     />
-                  </label>
-                  <label>
-                    Sleep (hours)
-                    <input
+                  </Field>
+                  <Field id="sleep" label="Sleep (hours)">
+                    <FieldInput
+                      id="sleep"
                       type="number"
                       step="0.5"
                       min={0}
@@ -335,149 +474,185 @@ export function HealthPage() {
                       value={sleep}
                       onChange={(e) => setSleep(e.target.value)}
                     />
-                  </label>
-                  <label>
-                    Water (glasses)
-                    <input
+                  </Field>
+                  <Field id="water" label="Water (glasses)">
+                    <FieldInput
+                      id="water"
                       type="number"
                       min={0}
                       max={20}
                       value={water}
                       onChange={(e) => setWater(e.target.value)}
                     />
-                  </label>
-                  <div>
-                    <p style={{ margin: "0 0 0.35rem", fontSize: "0.9rem" }}>
+                  </Field>
+                  <div className="grid gap-2">
+                    <p className="m-0 text-[length:var(--text-label)] font-medium">
                       Stress (1–5)
                     </p>
-                    <div className="stress-row">
+                    <div className="flex flex-wrap gap-2">
                       {([1, 2, 3, 4, 5] as const).map((n) => (
-                        <button
+                        <Chip
                           key={n}
-                          type="button"
-                          className={stress === n ? "on" : ""}
+                          pressed={stress === n}
                           onClick={() => setStress(n)}
+                          className="w-12"
                         >
                           {n}
-                        </button>
+                        </Chip>
                       ))}
                     </div>
                   </div>
-                  <button type="submit" className="primary" disabled={busy}>
+                  <Button type="submit" disabled={busy}>
                     Save today
-                  </button>
+                  </Button>
+                  {bios.length > 0 ? (
+                    <p className={leadClass}>
+                      Last saved: {bios[bios.length - 1]!.date}
+                    </p>
+                  ) : null}
                 </form>
-                {bios.length > 0 ? (
-                  <p className="health-lead">
-                    Last saved: {bios[bios.length - 1]!.date}
-                  </p>
-                ) : null}
-              </div>
 
-              <div className="health-section">
-                <h2>Medication reminders</h2>
-                <form className="health-form" onSubmit={addMedication}>
-                  <label>
-                    Name
-                    <input
+                <form className={formStackClass} onSubmit={addMedication}>
+                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+                    Medication reminders
+                  </h2>
+                  <p className={leadClass}>
+                    {MED_HINT[profile?.market ?? "UK"]}
+                  </p>
+                  <Field id="med-name" label="Name">
+                    <FieldInput
+                      id="med-name"
                       required
                       value={medName}
                       onChange={(e) => setMedName(e.target.value)}
                     />
-                  </label>
-                  <label>
-                    Dosage
-                    <input
+                  </Field>
+                  <Field id="med-dose" label="Dosage">
+                    <FieldInput
+                      id="med-dose"
                       value={medDose}
                       onChange={(e) => setMedDose(e.target.value)}
                     />
-                  </label>
-                  <label>
-                    Time
-                    <input
+                  </Field>
+                  <Field id="med-time" label="Time">
+                    <FieldInput
+                      id="med-time"
                       type="time"
                       required
                       value={medTime}
                       onChange={(e) => setMedTime(e.target.value)}
                     />
-                  </label>
-                  <button type="submit" className="primary" disabled={busy}>
+                  </Field>
+                  <Field id="med-freq" label="How often">
+                    <FieldSelect
+                      id="med-freq"
+                      value={medFreq}
+                      onChange={(e) =>
+                        setMedFreq(
+                          e.target.value as "daily" | "weekdays" | "custom",
+                        )
+                      }
+                    >
+                      <option value="daily">Every day</option>
+                      <option value="weekdays">Weekdays</option>
+                      <option value="custom">Custom</option>
+                    </FieldSelect>
+                  </Field>
+                  <Button type="submit" disabled={busy}>
                     Add reminder
-                  </button>
+                  </Button>
                 </form>
-                <ul className="med-list">
+                <ul className={listClass}>
                   {meds.map((m) => (
-                    <li key={m.id}>
-                      <div className="row">
+                    <li key={m.id} className={listItemClass}>
+                      <div className="flex items-start justify-between gap-4">
                         <div>
-                          <strong>
+                          <strong className="block text-foreground">
                             {m.name}
                             {m.dosage ? ` · ${m.dosage}` : ""}
                           </strong>
-                          <p>
+                          <p className={leadClass}>
                             {m.timeLocal} · {m.frequency}
                           </p>
                         </div>
-                        <button type="button" onClick={() => removeMed(m.id)}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void removeMed(m.id)}
+                        >
                           Remove
-                        </button>
+                        </Button>
                       </div>
                     </li>
                   ))}
                 </ul>
-                <button type="button" onClick={enablePush} disabled={busy}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void enablePush()}
+                  disabled={busy}
+                >
                   Enable generic push reminders
-                </button>
+                </Button>
+
+                <section className="grid gap-4">
+                  <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+                    Education
+                  </h2>
+                  <p className={leadClass}>
+                    Full articles, review dates, and reporting live in Library.
+                  </p>
+                  <ul className={listClass}>
+                    {articles.map((a) => (
+                      <li key={a.id} className={listItemClass}>
+                        <strong className="block text-foreground">{a.title}</strong>
+                        <p className={leadClass}>{a.summary}</p>
+                        <Link
+                          className="mt-2 inline-flex min-h-[var(--tap)] items-center text-[length:var(--text-label)] font-semibold text-primary"
+                          to={`/app/library?id=${encodeURIComponent(a.id)}`}
+                        >
+                          Open in Library
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               </div>
-            </>
-          )}
+            )
+          ) : null}
 
-          <div className="health-section">
-            <h2>Education</h2>
-            <ul className="article-list">
-              {articles.map((a) => (
-                <li key={a.id}>
-                  <strong>{a.title}</strong>
-                  <p>{a.summary}</p>
-                  <p>{a.body}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {tab === "pregnancy" ? (
+            <PregnancyPanel
+              profile={profile}
+              onProfile={setProfile}
+              busy={busy}
+              setBusy={setBusy}
+              setError={setError}
+            />
+          ) : null}
+
+          {tab === "ttc" ? (
+            <TtcPanel
+              profile={profile}
+              onProfile={setProfile}
+              busy={busy}
+              setBusy={setBusy}
+              setError={setError}
+            />
+          ) : null}
+
+          {tab === "wallet" ? (
+            <WalletPanel
+              profile={profile}
+              onProfile={setProfile}
+              busy={busy}
+              setBusy={setBusy}
+              setError={setError}
+            />
+          ) : null}
         </>
-      ) : null}
-
-      {tab === "pregnancy" ? (
-        <PregnancyPanel
-          profile={profile}
-          onProfile={setProfile}
-          busy={busy}
-          setBusy={setBusy}
-          setError={setError}
-        />
-      ) : null}
-
-      {tab === "ttc" ? (
-        <TtcPanel
-          profile={profile}
-          onProfile={setProfile}
-          busy={busy}
-          setBusy={setBusy}
-          setError={setError}
-        />
-      ) : null}
-
-      {tab === "wallet" ? (
-        <WalletPanel
-          profile={profile}
-          onProfile={setProfile}
-          busy={busy}
-          setBusy={setBusy}
-          setError={setError}
-        />
-      ) : null}
-
-      {error ? <p className="auth-error">{error}</p> : null}
-    </section>
+      )}
+    </AppPage>
   );
 }

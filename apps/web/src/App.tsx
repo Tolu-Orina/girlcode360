@@ -10,6 +10,11 @@ import { HealthPage } from "./pages/HealthPage";
 import { HomePage } from "./pages/HomePage";
 import { LandingPage } from "./pages/LandingPage";
 import { LibraryPage } from "./pages/LibraryPage";
+import { MarketplacePage } from "./pages/MarketplacePage";
+import { ListingDetailPage } from "./pages/ListingDetailPage";
+import { BusinessPortalPage } from "./pages/BusinessPortalPage";
+import { MirrorPage } from "./pages/MirrorPage";
+import { OAuthCallbackPage } from "./pages/OAuthCallbackPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { SharePage } from "./pages/SharePage";
@@ -26,8 +31,10 @@ export default function App() {
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/verify" element={<VerifyPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
+      <Route path="/business" element={<BusinessPortalPage />} />
       <Route path="/share/:token" element={<SharePage />} />
 
       <Route
@@ -52,9 +59,12 @@ export default function App() {
         <Route index element={<HomePage />} />
         <Route path="cycle" element={<CyclePage />} />
         <Route path="health" element={<HealthPage />} />
+        <Route path="mirror" element={<MirrorPage />} />
         <Route path="alena" element={<AlenaPage />} />
         <Route path="zara" element={<Navigate to="/app/alena" replace />} />
         <Route path="library" element={<LibraryPage />} />
+        <Route path="marketplace" element={<MarketplacePage />} />
+        <Route path="marketplace/:id" element={<ListingDetailPage />} />
         <Route path="account" element={<AccountPage />} />
       </Route>
     </Routes>

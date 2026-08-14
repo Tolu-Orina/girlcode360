@@ -29,6 +29,14 @@ variable "cognito_user_pool_region" {
   type = string
 }
 
+variable "cognito_domain" {
+  type = string
+}
+
+variable "cognito_google_idp" {
+  type = string
+}
+
 variable "data_bucket_name" {
   type = string
 }
@@ -59,6 +67,18 @@ resource "aws_ssm_parameter" "cognito_region" {
   name  = "/girlcode360/${var.environment}/backend/cognito_region"
   type  = "String"
   value = var.cognito_user_pool_region
+}
+
+resource "aws_ssm_parameter" "cognito_domain" {
+  name  = "/girlcode360/${var.environment}/backend/cognito_domain"
+  type  = "String"
+  value = var.cognito_domain
+}
+
+resource "aws_ssm_parameter" "cognito_google_idp" {
+  name  = "/girlcode360/${var.environment}/backend/cognito_google_idp"
+  type  = "String"
+  value = var.cognito_google_idp
 }
 
 resource "aws_ssm_parameter" "data_bucket" {

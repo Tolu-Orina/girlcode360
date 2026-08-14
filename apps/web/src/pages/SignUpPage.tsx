@@ -1,14 +1,21 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AuthShell } from "@/components/AuthShell";
+import { AuthAlert, AuthShell } from "@/components/AuthShell";
+import { Field, FieldInput } from "@/components/primitives/field";
+import {
+  AuthOfflineNote,
+  PasswordField,
+} from "@/components/primitives/password-field";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useOnline } from "@/hooks/use-media-query";
+import { mapAuthError } from "@/lib/auth-errors";
 import { signUp } from "@/lib/cognito";
+import { PASSWORD_HINT, passwordPolicyError } from "@/lib/password-policy";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 export function SignUpPage() {
   const navigate = useNavigate();
+  const online = useOnline();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -17,13 +24,23 @@ export function SignUpPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!online) {
+      setError("You are offline. Connect, then try again.");
+      return;
+    }
     setBusy(true);
     setError(null);
+    const policy = passwordPolicyError(password);
+    if (policy) {
+      setError(policy);
+      setBusy(false);
+      return;
+    }
     try {
       await signUp(email.trim(), password);
       navigate(`/verify?email=${encodeURIComponent(email.trim())}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed");
+      setError(mapAuthError(err, "signup"));
     } finally {
       setBusy(false);
     }
@@ -32,62 +49,55 @@ export function SignUpPage() {
   return (
     <AuthShell
       title="Create your account"
-      lead="You must be 18+. We’ll email a verification code."
+      lead="You must be 18 or older. We will email a verification code."
       panelImage="/images/auth-panel-morning.png"
       panelAlt="Woman starting her morning with a calm, welcoming smile"
       footer={
-        <p className="mt-2 flex flex-wrap gap-4 text-[0.95rem]">
+        <p className="m-0 text-[length:var(--text-label)]">
           <Link
             to="/signin"
             className="inline-flex min-h-[var(--tap)] items-center font-semibold text-primary no-underline hover:underline"
           >
-            Already have an account?
+            Already have an account? Sign in
           </Link>
         </p>
       }
     >
-      <form className="mt-2 grid w-full gap-4" onSubmit={(e) => void onSubmit(e)}>
-        <div className="grid gap-1.5">
-          <Label htmlFor="signup-email">Email</Label>
-          <Input
+      <GoogleSignInButton
+        disabled={busy || !online}
+        onError={setError}
+      />
+      <form className="grid w-full gap-4" onSubmit={(e) => void onSubmit(e)}>
+        <Field id="signup-email" label="Email">
+          <FieldInput
             id="signup-email"
+            name="email"
             type="email"
             autoComplete="email"
             inputMode="email"
+            autoFocus
             required
-            className="h-12"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="signup-password">Password</Label>
-          <Input
-            id="signup-password"
-            type={showPw ? "text" : "password"}
-            autoComplete="new-password"
-            required
-            minLength={8}
-            className="h-12"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <label className="flex cursor-pointer items-center gap-2.5 text-sm font-normal text-muted-foreground">
-          <Checkbox
-            checked={showPw}
-            onCheckedChange={(v) => setShowPw(v === true)}
-            aria-label="Show password"
-          />
-          Show password
-        </label>
-        {error ? (
-          <p className="m-0 text-[0.92rem] text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <Button className="w-full" type="submit" disabled={busy}>
-          {busy ? "Creating…" : "Create account"}
+        </Field>
+        <PasswordField
+          id="signup-password"
+          name="password"
+          label="Password"
+          hint={PASSWORD_HINT}
+          autoComplete="new-password"
+          required
+          minLength={8}
+          value={password}
+          onChange={setPassword}
+          show={showPw}
+          onToggleShow={() => setShowPw((v) => !v)}
+        />
+        <AuthOfflineNote online={online} />
+        {error ? <AuthAlert>{error}</AuthAlert> : null}
+        <Button className="w-full" type="submit" disabled={busy || !online}>
+          {busy ? "Creating account…" : "Create account"}
         </Button>
       </form>
     </AuthShell>

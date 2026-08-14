@@ -32,6 +32,17 @@ import {
   ttcStatus,
 } from "./journey";
 import { countWalletDocsAll, listWalletDocs, purgeUserWallet } from "./wallet";
+import {
+  listSkinScansForExport,
+  listTryOnsForExport,
+  purgeUserMirror,
+} from "./mirror";
+import {
+  getSheMatchPrefs,
+  listMyListings,
+  purgeUserMarketplace,
+} from "./marketplace";
+import { countMyReports, listMyReports, purgeUserReports } from "./contentReports";
 import * as dsqlPrivacy from "./dsql/privacy";
 
 const COOLING_OFF_MS = 24 * 60 * 60 * 1000;
@@ -94,9 +105,16 @@ async function loadExportPayload(
 export async function getMyData(sub: string) {
   const profile = await getUser(sub);
   if (!profile) return null;
+  const consents = await latestConsentsByPurpose(sub);
+  const she = await getSheMatchPrefs(sub);
+  const notif = await getNotificationPrefs(sub);
+  const deletion = await getDeletion(sub);
+  const appointments = (await listAppointments(sub)).length;
+  const marketplaceOwned = (await listMyListings(sub)).length;
+  const reportsFiled = await countMyReports(sub);
   return {
     profile,
-    consents: await latestConsentsByPurpose(sub),
+    consents,
     modules: profile.modules,
     counts: {
       cycles: (await listCycles(sub)).length,
@@ -107,9 +125,32 @@ export async function getMyData(sub: string) {
       pregnancyDays: (await listPregnancyDays(sub)).length,
       ttcDays: (await listTtcDays(sub)).length,
       healthLensReports: await countHealthLensReports(sub),
+      skinScans: (await listSkinScansForExport(sub)).length,
+      apparelTryons: (await listTryOnsForExport(sub)).length,
+      appointments,
+      marketplaceListingsOwned: marketplaceOwned,
+      reportsFiled,
+    },
+    inventory: {
+      email: profile.email ?? null,
+      market: profile.market,
+      locale: profile.locale,
+      modules: profile.modules,
+      consentsGranted: consents.filter((c) => c.granted).map((c) => c.purpose),
+      shematchGranted: she.granted,
+      shematchModulesOn: (Object.entries(she.modules) as Array<[string, boolean]>)
+        .filter(([, on]) => on)
+        .map(([mod]) => mod),
+      notifications: {
+        masterEnabled: notif.masterEnabled,
+        quietHoursStart: notif.quietHoursStart,
+        quietHoursEnd: notif.quietHoursEnd,
+      },
+      deletionStatus: deletion?.status ?? "none",
+      purgeAfter: deletion?.status === "cooling_off" ? deletion.purgeAfter : null,
     },
     premium: await isPremium(sub),
-    deletion: await getDeletion(sub),
+    deletion,
     exportedAt: new Date().toISOString(),
   };
 }
@@ -141,6 +182,11 @@ export async function buildExportPayload(
     })),
     healthLensReports: await listHealthLensReportsForExport(sub),
     billing: await getBillingStatus(sub),
+    skinScans: await listSkinScansForExport(sub),
+    apparelTryons: await listTryOnsForExport(sub),
+    shematch: await getSheMatchPrefs(sub),
+    marketplaceListings: await listMyListings(sub),
+    contentReports: await listMyReports(sub),
   };
 }
 
@@ -287,6 +333,9 @@ async function wipeUser(sub: string) {
   await purgeUserWallet(sub);
   await purgeUserJourney(sub);
   await purgeUserBilling(sub);
+  await purgeUserMirror(sub);
+  await purgeUserMarketplace(sub);
+  await purgeUserReports(sub);
   await purgeUserMemory(sub);
   if (isDsqlEnabled()) {
     await dsqlPrivacy.deleteExportJobsForUser(sub);

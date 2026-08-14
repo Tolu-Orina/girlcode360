@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Syne:wght@700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -29,15 +29,20 @@
   --color-ok: var(--ok);
   --color-brand-soft: var(--brand-soft);
   --color-surface-soft: var(--surface-soft);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --color-border-strong: var(--border-strong);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-xl: var(--radius-sheet);
+  --shadow-2: var(--shadow-2);
+  --shadow-modal: var(--shadow-modal);
 }
 
-/* GirlCode360 rose wellness theme */
+/* GirlCode360 rose wellness tokens — hex lives here only */
 :root {
-  --radius: 0.55rem;
+  --radius: 8px;
+  --radius-sheet: 16px;
+
   --background: #fbf4f7;
   --foreground: #2a1520;
   --card: #ffffff;
@@ -53,39 +58,72 @@
   --accent: #f0c4db;
   --accent-foreground: #2a1520;
   --destructive: #a12d2d;
-  --border: #edd8e3;
-  --input: #edd8e3;
+  --border: #a87d92;
+  --input: #a87d92;
   --ring: #b0126a;
   --ok: #1a6b45;
-  --brand-soft: #d44a8f;
+  --brand-soft: #c43a7e;
   --surface-soft: #fbf4f7;
-  --brand-rgb: 176, 18, 106;
+  --cta-fill: linear-gradient(105deg, #8a0d52 0%, var(--primary) 42%, var(--brand-soft) 100%);
+  --hero-card-fill: linear-gradient(155deg, #ffffff 0%, #fff8fb 42%, var(--muted) 100%);
+  --orb-a: #f0c4db;
+  --orb-b: #d44a8f;
+
+  /*
+    Contrast sample (WCAG 2.2, relative luminance, 13 Aug 2026)
+    Body ≥4.5:1 — fg/bg 15.80, muted-fg/bg 7.06, white/primary 6.69,
+    white/brand-soft 4.94, white/cta-start(#8a0d52) 9.29, destructive/white 7.17, ok/bg 6.00
+    UI ≥3:1 — border/white 3.49, border/bg 3.22, ring/bg 6.17
+    Orbs stay lighter (#d44a8f) — decoration only, never text.
+  */
+
   --tap: 48px;
+  --header-height: 56px;
+  --tabbar-height: 96px;
   --shell-max: 1180px;
   --auth-max: 420px;
   --page-max: min(100%, 960px);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --shadow-soft: 0 12px 40px rgba(42, 21, 32, 0.1);
+
+  --shadow-2: 0 8px 24px color-mix(in srgb, var(--foreground) 10%, transparent);
+  --shadow-modal: 0 16px 48px color-mix(in srgb, var(--foreground) 16%, transparent);
+
+  --glass-tint: 18%;
+  --glass-blur: 16px;
+  --glass-bg: color-mix(in srgb, var(--card) 82%, transparent);
+  --glass-border: color-mix(in srgb, white 40%, var(--border));
+
+  --text-caption: 12px;
+  --text-label: 14px;
+  --text-body: 16px;
+  --text-sub: 20px;
+  --text-section: 24px;
+  --text-page: 32px;
+  --text-hero: 48px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
 
   /* Legacy aliases for pages still on plain CSS */
   --ink: var(--foreground);
   --ink-muted: var(--muted-foreground);
   --brand: var(--primary);
-  --brand-hover: #8f0e55;
+  --brand-hover: color-mix(in srgb, var(--primary) 82%, #000000);
   --surface: var(--card);
-  --border-strong: #d9b5c8;
+  --border-strong: color-mix(in srgb, var(--primary) 28%, var(--border));
   --danger: var(--destructive);
   --focus: var(--ring);
-  --radius-lg: 1rem;
+  --radius-lg: var(--radius-sheet);
   --font-display: "Syne", "Avenir Next", sans-serif;
   --font-body: "Figtree", "Segoe UI", sans-serif;
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.5rem;
-  --space-6: 2rem;
-  --space-7: 3rem;
+  --shadow-soft: var(--shadow-2);
 }
 
 @layer base {
@@ -97,6 +135,13 @@
     scroll-behavior: smooth;
   }
 
+  @media (display-mode: standalone) {
+    html,
+    body {
+      overscroll-behavior-y: contain;
+    }
+  }
+
   html,
   body,
   #root {
@@ -106,7 +151,7 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
-    font-size: 1.025rem;
+    font-size: var(--text-body);
     line-height: 1.5;
     text-rendering: optimizeLegibility;
   }
@@ -116,7 +161,9 @@
   h3,
   .brand-mark {
     font-family: var(--font-display);
-    @apply font-bold tracking-tight text-foreground;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--foreground);
     line-height: 1.15;
   }
 
@@ -145,6 +192,24 @@
   }
 }
 
+@keyframes orb-drift-a {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(24px, 16px);
+  }
+}
+
+@keyframes orb-drift-b {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-20px, 12px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -154,12 +219,53 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  .landing-atmosphere,
+  .landing-atmosphere * {
+    animation-duration: unset !important;
+    animation-iteration-count: unset !important;
+    transition-duration: unset !important;
+  }
+
+  .ambient-orb {
+    animation: none !important;
+  }
 }
 
-/* Temporary bridges while app pages migrate off plain CSS class names */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .glass-surface {
+    background: var(--card) !important;
+    backdrop-filter: none !important;
+  }
+}
+
 @layer components {
+  .glass-surface {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    border-color: var(--glass-border);
+  }
+
+  .ambient-orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(80px);
+    opacity: 0.18;
+  }
+
+  .ambient-orb-a {
+    background: var(--orb-a);
+    animation: orb-drift-a 28s ease-in-out infinite alternate;
+  }
+
+  .ambient-orb-b {
+    background: var(--orb-b);
+    animation: orb-drift-b 36s ease-in-out infinite alternate;
+  }
+
   .btn {
-    @apply inline-flex min-h-[var(--tap)] cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent px-5 py-2.5 text-base font-semibold no-underline transition;
+    @apply inline-flex min-h-[var(--tap)] cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent px-4 py-2 text-base font-semibold no-underline transition;
   }
 
   .btn:disabled {
@@ -167,11 +273,11 @@
   }
 
   .btn.primary {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    @apply border-transparent bg-[image:var(--cta-fill)] text-primary-foreground hover:brightness-110;
   }
 
   .btn.secondary {
-    @apply border-[#d9b5c8] bg-transparent text-primary hover:bg-card;
+    @apply border-border-strong bg-transparent text-primary hover:bg-card;
   }
 
   .btn.ghost {
@@ -183,42 +289,42 @@
   }
 
   .field {
-    @apply grid gap-1.5 text-[0.95rem] font-medium text-foreground;
+    @apply grid gap-2 text-[length:var(--text-label)] font-medium text-foreground;
   }
 
   .field input:not([type="checkbox"]):not([type="radio"]),
   .field select,
   .field textarea {
-    @apply min-h-[var(--tap)] w-full rounded-md border border-input bg-card px-3.5 py-2.5 font-[inherit] text-foreground;
+    @apply min-h-[var(--tap)] w-full rounded-md border border-input bg-card px-4 py-2 font-[inherit] text-foreground;
   }
 
   .field input:not([type="checkbox"]):not([type="radio"]):focus,
   .field select:focus,
   .field textarea:focus {
-    @apply border-brand-soft outline-none;
+    @apply border-ring outline-none;
   }
 
   .field-check {
-    @apply flex cursor-pointer flex-row items-center gap-2.5 font-normal text-muted-foreground;
+    @apply flex cursor-pointer flex-row items-center gap-2 font-normal text-muted-foreground;
   }
 
   .field-check input[type="checkbox"] {
-    @apply m-0 h-[1.15rem] w-[1.15rem] shrink-0 accent-primary;
+    @apply m-0 size-6 shrink-0 accent-primary;
   }
 
   .form-error {
-    @apply m-0 text-[0.92rem] text-destructive;
+    @apply m-0 text-[length:var(--text-label)] text-destructive;
   }
 
   .form-ok {
-    @apply m-0 text-[0.92rem] text-ok;
+    @apply m-0 text-[length:var(--text-label)] text-ok;
   }
 
   .brand-lockup {
-    @apply inline-flex items-center gap-2.5;
+    @apply inline-flex items-center gap-2;
   }
 
   .brand-lockup-mark {
-    @apply block shrink-0 rounded-[0.45rem] object-cover;
+    @apply block shrink-0 rounded-[var(--radius)] object-cover;
   }
 }

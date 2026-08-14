@@ -15,13 +15,18 @@ export type ConsentPurpose =
   | "marketing"
   | "location"
   | "ai_alena"
-  | "ai_healthlens";
+  | "ai_healthlens"
+  | "mirror_biometric"
+  | "shematch";
 
 export type HealthResponse = {
   ok: boolean;
   service: string;
   environment: string;
   ts: string;
+  policyVersion?: string;
+  viewerCountry?: string | null;
+  suggestedMarket?: Market | null;
 };
 
 export type UserProfile = {
@@ -219,6 +224,8 @@ export type PcosArticle = {
   markets: Market[];
   summary: string;
   body: string;
+  reviewedAt?: string;
+  outdated?: boolean;
 };
 
 export type PushSubscriptionRequest = {
@@ -295,6 +302,7 @@ export type WeekContent = {
   maternal: string;
   nutrition: string;
   priority: boolean;
+  clinicalNote?: string;
 };
 
 export type TtcProfile = {
@@ -373,6 +381,8 @@ export type AlenaChatRequest = {
   message: string;
   mode: AlenaMode;
   moduleHint?: HealthModule;
+  openedFrom?: "cycle" | "health" | "mirror" | "home" | "library";
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
 };
 
 export type AlenaChatResponse = {
@@ -381,7 +391,7 @@ export type AlenaChatResponse = {
   stub: boolean;
   quota: { used: number; limit: number | null; remaining: number | null };
   disclaimer: string;
-  actions: Array<{ id: "prep_card"; label: string }>;
+  actions: Array<{ id: string; label: string }>;
 };
 
 export type HealthLensStatus = {
@@ -434,12 +444,39 @@ export const WALLET_CATEGORIES: WalletCategory[] = [
   "other",
 ];
 
+/** FR-046 — PDF, JPEG, PNG only. */
+export const WALLET_ALLOWED_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+] as const;
+
+export function isAllowedWalletUpload(
+  filename: string,
+  contentType: string,
+): boolean {
+  const name = filename.toLowerCase();
+  const extOk =
+    name.endsWith(".pdf") ||
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".png");
+  const type = contentType.toLowerCase();
+  const typeOk =
+    !type ||
+    type === "application/octet-stream" ||
+    (WALLET_ALLOWED_TYPES as readonly string[]).includes(type) ||
+    type === "image/jpg";
+  return extOk && typeOk;
+}
+
 export type WalletDocMeta = {
   id: string;
   filename: string;
   contentType: string;
   sizeBytes: number;
   category: WalletCategory;
+  customLabel: string | null;
   noteCiphertext: string | null;
   noteIv: string | null;
   wrappedDek: string;
@@ -456,11 +493,19 @@ export type CreateWalletUploadRequest = {
   contentType: string;
   sizeBytes: number;
   category: WalletCategory;
+  customLabel?: string | null;
   noteCiphertext?: string | null;
   noteIv?: string | null;
   wrappedDek: string;
   wrappedDekIv: string;
   fileIv: string;
+};
+
+export type PatchWalletDocRequest = {
+  category?: WalletCategory;
+  customLabel?: string | null;
+  noteCiphertext?: string | null;
+  noteIv?: string | null;
 };
 
 export type CreateWalletUploadResponse = {
@@ -516,6 +561,27 @@ export type MyDataSnapshot = {
     pregnancyDays: number;
     ttcDays: number;
     healthLensReports: number;
+    skinScans?: number;
+    apparelTryons?: number;
+    appointments?: number;
+    marketplaceListingsOwned?: number;
+    reportsFiled?: number;
+  };
+  inventory?: {
+    email: string | null;
+    market: Market;
+    locale: string;
+    modules: HealthModule[];
+    consentsGranted: ConsentPurpose[];
+    shematchGranted: boolean;
+    shematchModulesOn: string[];
+    notifications: {
+      masterEnabled: boolean;
+      quietHoursStart: string;
+      quietHoursEnd: string;
+    };
+    deletionStatus: string;
+    purgeAfter: string | null;
   };
   premium: boolean;
   deletion: DeletionRequest | null;
@@ -571,5 +637,175 @@ export type ContentArticle = {
   body: string;
   topic: "pcos" | "cycle" | "pregnancy" | "ttc" | "privacy" | "general";
   markets: Market[];
+  reviewedAt: string;
+  outdated: boolean;
 };
+
+export type ContentReportReason =
+  | "inaccurate"
+  | "harmful"
+  | "spam"
+  | "privacy"
+  | "other";
+
+export type ContentReport = {
+  id: string;
+  reporterSub: string;
+  targetType: "article" | "post" | "listing" | "review";
+  targetId: string;
+  reason: ContentReportReason;
+  details: string;
+  status: "open" | "reviewed" | "dismissed";
+  createdAt: string;
+};
+
+export type CreateContentReportRequest = {
+  targetType: ContentReport["targetType"];
+  targetId: string;
+  reason: ContentReportReason;
+  details?: string;
+};
+
+/* ——— Phase 1.4 Mirror ——— */
+
+export type CyclePhase = "menstrual" | "follicular" | "ovulation" | "luteal";
+
+export type MirrorTaskStatus = "pending" | "success" | "error";
+
+export type MirrorInsight = {
+  title: string;
+  body: string;
+  confidence: "Low" | "Medium" | "High";
+  enoughScans: boolean;
+  patternFound: boolean;
+};
+
+export type SkinScan = {
+  id: string;
+  status: MirrorTaskStatus;
+  createdAt: string;
+  cycleDayAtScan: number | null;
+  cyclePhaseAtScan: CyclePhase | null;
+  overallScore: number | null;
+  scores: Record<string, number>;
+  skinType?: string;
+  hasResultImage: boolean;
+  hasMask: boolean;
+  insight: MirrorInsight | null;
+  seeded: boolean;
+  scanQuality: "sd" | "hd";
+};
+
+export type ApparelTryOn = {
+  id: string;
+  status: MirrorTaskStatus;
+  createdAt: string;
+  catalogueItemId: string;
+  hasResultImage: boolean;
+};
+
+export type MirrorCatalogueItem = {
+  id: string;
+  kind: "skincare" | "apparel";
+  title: string;
+  subtitle: string;
+  tags: string[];
+  garmentCategory?: "upper_body" | "lower_body" | "full_body";
+  /** Internal YouCam styling hint — never shown as model internals. */
+  tryOnPrompt?: string;
+  refImageUrl?: string;
+  boutiqueName: string;
+  boutiqueArea: string;
+  trimester?: 1 | 2 | 3 | null;
+  pmosFit: boolean;
+};
+
+export type MirrorStatus = {
+  consented: boolean;
+  youcamConfigured: boolean;
+  youcamAvailable: boolean;
+};
+
+export type CreateSkinScanRequest = {
+  imageB64: string;
+  contentType?: string;
+};
+
+export type CreateTryOnRequest = {
+  imageB64: string;
+  contentType?: string;
+  catalogueItemId: string;
+};
+
+/* ——— Phase 1.7 Marketplace / SheMatch ——— */
+
+export type MarketplaceCategory =
+  | "beauty"
+  | "boutique"
+  | "pharmacy"
+  | "clinic";
+
+export type MarketplaceListingStatus = "pending" | "live" | "rejected";
+
+export type MarketplaceListing = {
+  id: string;
+  name: string;
+  category: MarketplaceCategory;
+  market: Market;
+  address: string;
+  phone: string | null;
+  lat: number;
+  lng: number;
+  hours: Record<
+    "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun",
+    [string, string] | null
+  >;
+  rating: number;
+  tags: string[];
+  services: string[];
+  registrationNumber: string | null;
+  seeded: boolean;
+  status: MarketplaceListingStatus;
+  catalogueItemId: string | null;
+  sponsored: boolean;
+  distanceKm: number | null;
+  openNow: boolean | null;
+};
+
+export type CreateBusinessListingRequest = {
+  name: string;
+  category: MarketplaceCategory;
+  market: Market;
+  address: string;
+  phone: string;
+  lat: number;
+  lng: number;
+  hours?: MarketplaceListing["hours"];
+  tags?: string[];
+  services?: string[];
+  registrationNumber?: string | null;
+};
+
+export type SheMatchTriggerId =
+  | "period_start"
+  | "fertile_window"
+  | "pregnancy_scan"
+  | "pregnancy_emergency"
+  | "pcos_acne"
+  | "medication_due"
+  | "mirror_skin";
+
+export type SheMatchSuggestion = {
+  listing: MarketplaceListing;
+  triggerId: SheMatchTriggerId;
+  why: string;
+  label: "Suggested based on your health activity";
+  sponsoredLabel: "Sponsored" | null;
+};
+
+export type SheMatchPrefs = {
+  granted: boolean;
+  modules: Record<HealthModule, boolean>;
+};
+
 

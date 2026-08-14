@@ -13,15 +13,18 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.png", "logo.png", "og-girlcode360.png"],
+      includeAssets: ["favicon.png", "logo.png", "og-girlcode360.png", "push-handler.js"],
+      workbox: {
+        importScripts: ["/push-handler.js"],
+      },
       manifest: {
         name: "GirlCode360",
         short_name: "GirlCode360",
         description: "Women's health & wellness companion",
-        theme_color: "#b0126a",
+        theme_color: "#fbf4f7",
         background_color: "#fbf4f7",
         display: "standalone",
-        start_url: "/",
+        start_url: "/app",
         icons: [
           {
             src: "pwa-192.png",

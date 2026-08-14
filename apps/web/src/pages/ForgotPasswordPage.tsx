@@ -1,44 +1,70 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { AuthShell } from "@/components/AuthShell";
+import { AuthAlert, AuthShell } from "@/components/AuthShell";
+import { Field, FieldInput } from "@/components/primitives/field";
+import {
+  AuthOfflineNote,
+  PasswordField,
+} from "@/components/primitives/password-field";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useOnline } from "@/hooks/use-media-query";
+import { isAuthConfigError, mapAuthError } from "@/lib/auth-errors";
 import { confirmForgotPassword, forgotPassword } from "@/lib/cognito";
+import { PASSWORD_HINT, passwordPolicyError } from "@/lib/password-policy";
 
 export function ForgotPasswordPage() {
+  const online = useOnline();
   const [step, setStep] = useState<"request" | "confirm">("request");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function onRequest(e: FormEvent) {
     e.preventDefault();
+    if (!online) {
+      setError("You are offline. Connect, then try again.");
+      return;
+    }
     setBusy(true);
     setError(null);
+    const generic = `If an account exists for ${email.trim()}, we sent a code.`;
     try {
       await forgotPassword(email.trim());
-      setMessage("If that email exists, a code is on its way.");
-      setStep("confirm");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
-    } finally {
-      setBusy(false);
+      if (isAuthConfigError(err) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        setError(mapAuthError(err, "reset"));
+        setBusy(false);
+        return;
+      }
     }
+    setMessage(generic);
+    setStep("confirm");
+    setBusy(false);
   }
 
   async function onConfirm(e: FormEvent) {
     e.preventDefault();
+    if (!online) {
+      setError("You are offline. Connect, then try again.");
+      return;
+    }
     setBusy(true);
     setError(null);
+    const policy = passwordPolicyError(password);
+    if (policy) {
+      setError(policy);
+      setBusy(false);
+      return;
+    }
     try {
       await confirmForgotPassword(email.trim(), code.trim(), password);
       setMessage("Password updated. You can sign in.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reset failed");
+      setError(mapAuthError(err, "reset"));
     } finally {
       setBusy(false);
     }
@@ -47,11 +73,11 @@ export function ForgotPasswordPage() {
   return (
     <AuthShell
       title="Reset password"
-      lead="We’ll email a code, then you choose a new password."
+      lead="We will email a code, then you choose a new password."
       panelImage="/images/auth-panel-journal.png"
       panelAlt="Quiet journaling moment suggesting a calm reset"
       footer={
-        <p className="mt-2 flex flex-wrap gap-4 text-[0.95rem]">
+        <p className="m-0 text-[length:var(--text-label)]">
           <Link
             to="/signin"
             className="inline-flex min-h-[var(--tap)] items-center font-semibold text-primary no-underline hover:underline"
@@ -62,71 +88,62 @@ export function ForgotPasswordPage() {
       }
     >
       {step === "request" ? (
-        <form
-          className="mt-2 grid w-full gap-4"
-          onSubmit={(e) => void onRequest(e)}
-        >
-          <div className="grid gap-1.5">
-            <Label htmlFor="forgot-email">Email</Label>
-            <Input
+        <form className="grid w-full gap-4" onSubmit={(e) => void onRequest(e)}>
+          <Field id="forgot-email" label="Email">
+            <FieldInput
               id="forgot-email"
+              name="email"
               type="email"
               autoComplete="email"
+              autoFocus
               required
-              className="h-12"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-          </div>
-          {error ? (
-            <p className="m-0 text-[0.92rem] text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <Button className="w-full" type="submit" disabled={busy}>
+          </Field>
+          <AuthOfflineNote online={online} />
+          {error ? <AuthAlert>{error}</AuthAlert> : null}
+          <Button className="w-full" type="submit" disabled={busy || !online}>
             {busy ? "Sending…" : "Send code"}
           </Button>
         </form>
       ) : (
-        <form
-          className="mt-2 grid w-full gap-4"
-          onSubmit={(e) => void onConfirm(e)}
-        >
-          <div className="grid gap-1.5">
-            <Label htmlFor="forgot-code">Code</Label>
-            <Input
+        <form className="grid w-full gap-4" onSubmit={(e) => void onConfirm(e)}>
+          {message ? (
+            <p className="m-0 text-[length:var(--text-label)] text-ok" role="status">
+              {message}
+            </p>
+          ) : null}
+          <Field id="forgot-code" label="Code">
+            <FieldInput
               id="forgot-code"
+              name="one-time-code"
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
+              autoFocus
               required
-              className="h-12"
+              maxLength={8}
               value={code}
               onChange={(e) => setCode(e.target.value)}
             />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="forgot-password">New password</Label>
-            <Input
-              id="forgot-password"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-              className="h-12"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          {error ? (
-            <p className="m-0 text-[0.92rem] text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {message ? (
-            <p className="m-0 text-[0.92rem] text-ok">{message}</p>
-          ) : null}
-          <Button className="w-full" type="submit" disabled={busy}>
+          </Field>
+          <PasswordField
+            id="forgot-password"
+            name="new-password"
+            label="New password"
+            hint={PASSWORD_HINT}
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={password}
+            onChange={setPassword}
+            show={showPw}
+            onToggleShow={() => setShowPw((v) => !v)}
+          />
+          <AuthOfflineNote online={online} />
+          {error ? <AuthAlert>{error}</AuthAlert> : null}
+          <Button className="w-full" type="submit" disabled={busy || !online}>
             {busy ? "Saving…" : "Update password"}
           </Button>
         </form>

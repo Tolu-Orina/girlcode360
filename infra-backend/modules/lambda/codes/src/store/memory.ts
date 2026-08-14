@@ -427,6 +427,31 @@ export async function listPushSubscriptions(sub: string) {
   return pushByUser.get(sub) ?? [];
 }
 
+export function listAllPushMemory(): Array<{
+  userSub: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}> {
+  const out: Array<{
+    userSub: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+  }> = [];
+  for (const [userSub, list] of pushByUser) {
+    for (const row of list) {
+      out.push({
+        userSub,
+        endpoint: row.endpoint,
+        p256dh: row.p256dh,
+        auth: row.auth,
+      });
+    }
+  }
+  return out;
+}
+
 /** Due reminders for scheduling (generic push body applied at send time). */
 export async function dueMedications(
   sub: string,

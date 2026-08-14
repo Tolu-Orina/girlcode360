@@ -9,7 +9,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default:
+          "border-transparent bg-[image:var(--cta-fill)] text-primary-foreground shadow-[var(--shadow-2)] hover:brightness-110",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
         outline:
@@ -21,9 +22,9 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-12 min-h-[var(--tap)] px-5 py-2 text-base has-[>svg]:px-4",
-        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-9 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
+        default: "h-12 min-h-[var(--tap)] px-4 py-2 text-base has-[>svg]:px-4",
+        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-10 min-h-10 gap-1 rounded-md px-3 has-[>svg]:px-2",
         lg: "h-12 min-h-[var(--tap)] rounded-md px-6 text-base has-[>svg]:px-4",
         icon: "size-12",
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",

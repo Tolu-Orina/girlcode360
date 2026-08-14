@@ -13,7 +13,9 @@ export type ConsentPurpose =
   | "marketing"
   | "location"
   | "ai_alena"
-  | "ai_healthlens";
+  | "ai_healthlens"
+  | "mirror_biometric"
+  | "shematch";
 
 export type UserProfile = {
   sub: string;
@@ -292,6 +294,7 @@ export type WalletDocMeta = {
   contentType: string;
   sizeBytes: number;
   category: WalletCategory;
+  customLabel: string | null;
   noteCiphertext: string | null;
   noteIv: string | null;
   wrappedDek: string;
@@ -308,6 +311,7 @@ export type CreateWalletUploadRequest = {
   contentType: string;
   sizeBytes: number;
   category: WalletCategory;
+  customLabel?: string | null;
   noteCiphertext?: string | null;
   noteIv?: string | null;
   wrappedDek: string;
@@ -318,4 +322,125 @@ export type CreateWalletUploadRequest = {
 export type CreateWalletShareRequest = {
   expiresIn: "24h" | "48h" | "7d";
 };
+
+export type CyclePhase = "menstrual" | "follicular" | "ovulation" | "luteal";
+export type MirrorTaskStatus = "pending" | "success" | "error";
+
+export type MirrorInsight = {
+  title: string;
+  body: string;
+  confidence: "Low" | "Medium" | "High";
+  enoughScans: boolean;
+  patternFound: boolean;
+};
+
+export type SkinScan = {
+  id: string;
+  status: MirrorTaskStatus;
+  createdAt: string;
+  cycleDayAtScan: number | null;
+  cyclePhaseAtScan: CyclePhase | null;
+  overallScore: number | null;
+  scores: Record<string, number>;
+  skinType?: string;
+  hasResultImage: boolean;
+  hasMask: boolean;
+  insight: MirrorInsight | null;
+  seeded: boolean;
+  scanQuality: "sd" | "hd";
+};
+
+export type ApparelTryOn = {
+  id: string;
+  status: MirrorTaskStatus;
+  createdAt: string;
+  catalogueItemId: string;
+  hasResultImage: boolean;
+};
+
+export type MirrorCatalogueItem = {
+  id: string;
+  kind: "skincare" | "apparel";
+  title: string;
+  subtitle: string;
+  tags: string[];
+  garmentCategory?: "upper_body" | "lower_body" | "full_body";
+  tryOnPrompt?: string;
+  refImageUrl?: string;
+  boutiqueName: string;
+  boutiqueArea: string;
+  trimester?: 1 | 2 | 3 | null;
+  pmosFit: boolean;
+};
+
+export type CreateSkinScanRequest = {
+  imageB64: string;
+  contentType?: string;
+};
+
+export type CreateTryOnRequest = {
+  imageB64: string;
+  contentType?: string;
+  catalogueItemId: string;
+};
+
+export type MarketplaceCategory =
+  | "beauty"
+  | "boutique"
+  | "pharmacy"
+  | "clinic";
+
+export type MarketplaceListingStatus = "pending" | "live" | "rejected";
+
+export type MarketplaceHours = Record<
+  "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun",
+  [string, string] | null
+>;
+
+export type MarketplaceListing = {
+  id: string;
+  name: string;
+  category: MarketplaceCategory;
+  market: Market;
+  address: string;
+  phone: string | null;
+  lat: number;
+  lng: number;
+  hours: MarketplaceHours;
+  rating: number;
+  tags: string[];
+  services: string[];
+  registrationNumber: string | null;
+  seeded: boolean;
+  status: MarketplaceListingStatus;
+  catalogueItemId: string | null;
+  sponsored: boolean;
+  distanceKm: number | null;
+  openNow: boolean | null;
+  ownerSub?: string | null;
+};
+
+export type CreateBusinessListingRequest = {
+  name: string;
+  category: MarketplaceCategory;
+  market: Market;
+  address: string;
+  phone: string;
+  lat: number;
+  lng: number;
+  hours?: MarketplaceHours;
+  tags?: string[];
+  services?: string[];
+  registrationNumber?: string | null;
+};
+
+export type SheMatchTriggerId =
+  | "period_start"
+  | "fertile_window"
+  | "pregnancy_scan"
+  | "pregnancy_emergency"
+  | "pcos_acne"
+  | "medication_due"
+  | "mirror_skin";
+
 

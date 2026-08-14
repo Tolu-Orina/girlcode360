@@ -229,6 +229,13 @@ export function findDeniedPhrases(text: string): string[] {
   return DIAGNOSIS_DENYLIST.filter((p) => lower.includes(p));
 }
 
+/** Strip emails/phones before any model payload (ALN-F-02). */
+export function redactPii(text: string): string {
+  return text
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted]")
+    .replace(/\b(?:\+?\d[\d\s.-]{8,}\d)\b/g, "[redacted]");
+}
+
 /* ——— Phase 4: Pregnancy + TTC ——— */
 
 export type EddResult = {
@@ -314,7 +321,10 @@ export const EMERGENCY_BY_MARKET: Record<
     { label: "Emergency services", number: "999" },
     { label: "NHS non-emergency", number: "111" },
   ],
-  NG: [{ label: "Emergency services", number: "112" }],
+  NG: [
+    { label: "Emergency services", number: "112" },
+    { label: "Lagos State Emergency", number: "767" },
+  ],
   GH: [
     { label: "Emergency services", number: "999" },
     { label: "Ambulance", number: "193" },
@@ -345,8 +355,11 @@ function parseYmd(iso: string): { y: number; m: number; d: number } {
 export const CRISIS_PHRASES = [
   "kill myself",
   "suicide",
+  "suicidal",
   "end my life",
   "want to die",
+  "don't want to live",
+  "dont want to live",
   "self harm",
   "self-harm",
   "hurt myself",
@@ -354,19 +367,43 @@ export const CRISIS_PHRASES = [
 
 export function detectCrisis(text: string): boolean {
   const lower = text.toLowerCase();
-  return CRISIS_PHRASES.some((p) => lower.includes(p));
+  if (CRISIS_PHRASES.some((p) => lower.includes(p))) return true;
+  const bleeding = /heavy bleeding|soaking through|haemorrhage|hemorrhage/.test(
+    lower,
+  );
+  const shock = /dizz|faint|passed out|pass out/.test(lower);
+  if (bleeding && shock) return true;
+  if (
+    /(baby|foetal|fetal).{0,24}(not moving|hasn't moved|hasnt moved|stopped moving)/.test(
+      lower,
+    ) ||
+    /no (foetal|fetal) movement/.test(lower)
+  ) {
+    return true;
+  }
+  return false;
 }
 
-export function crisisMessage(market: "UK" | "NG" | "GH"): string {
+export function crisisMessage(
+  market: "UK" | "NG" | "GH",
+  nearby?: { name: string; distanceKm: number } | null,
+): string {
   const numbers = EMERGENCY_BY_MARKET[market]
     .map((n) => `${n.label}: ${n.number}`)
     .join(" · ");
+  const hospitalLine = nearby
+    ? `A seeded directory listing within 5 km: ${nearby.name} (${nearby.distanceKm.toFixed(1)} km). Confirm the address before you travel — this is not an emergency dispatch.`
+    : "No clinic listing is within 5 km of the location you shared this session. Use the numbers above, or someone with you, to get to urgent care.";
   return [
     "I’m concerned about your safety. Please seek help right now — contact emergency services or someone you trust.",
     numbers,
+    hospitalLine,
     "GirlCode360 cannot provide crisis counselling. Local emergency services and clinicians are the right next step.",
   ].join("\n\n");
 }
+
+export * from "./shematch.ts";
+export * from "./library.ts";
 
 export type HealthLensInput = {
   cycleIntervalsDays: number[];
@@ -377,6 +414,17 @@ export type HealthLensInput = {
   pregnancyWeek?: number | null;
   kicksLast7Days?: number | null;
   pcosModule: boolean;
+  /** MIR-F-02 reused by HealthLens — already computed, never invented here. */
+  mirrorInsight?: {
+    title: string;
+    body: string;
+    confidence: "Low" | "Medium" | "High";
+    enoughScans: boolean;
+    patternFound: boolean;
+  } | null;
+  symptomCountRecent30?: number;
+  symptomCountPrev30?: number;
+  movementReducedLast7?: boolean | null;
 };
 
 export type HealthLensFinding = {
@@ -391,7 +439,8 @@ export type HealthLensFinding = {
     | "co_occurrence"
     | "foetal_movement"
     | "activation"
-    | "steady";
+    | "steady"
+    | "skin_cycle";
 };
 
 export type HealthLensActivation = {
@@ -510,10 +559,38 @@ export function runHealthLensRules(input: HealthLensInput): HealthLensFinding[] 
   }
 
   if (
+    (input.symptomCountRecent30 ?? 0) >= 8 &&
+    (input.symptomCountPrev30 ?? 0) > 0 &&
+    (input.symptomCountRecent30 ?? 0) >= (input.symptomCountPrev30 ?? 0) * 1.5
+  ) {
+    findings.push({
+      id: "symptom-rising",
+      kind: "co_occurrence",
+      title: "Symptoms logged more often lately",
+      body: "You logged more symptom entries in the last 30 days than in the 30 days before that. That is a possible pattern in your diary — not proof that anything has worsened medically. A clinician can help you interpret it.",
+      confidence: "Medium",
+      discussWithProvider: true,
+    });
+  }
+
+  if (input.mirrorInsight?.enoughScans) {
+    findings.push({
+      id: "skin-cycle",
+      kind: "skin_cycle",
+      title: input.mirrorInsight.title,
+      body: input.mirrorInsight.body,
+      confidence: input.mirrorInsight.confidence,
+      discussWithProvider: input.mirrorInsight.patternFound,
+    });
+  }
+
+  if (
     input.pregnancyWeek != null &&
-    input.pregnancyWeek >= 24 &&
-    input.kicksLast7Days != null &&
-    input.kicksLast7Days === 0
+    input.pregnancyWeek >= 20 &&
+    (input.movementReducedLast7 === true ||
+      (input.pregnancyWeek >= 24 &&
+        input.kicksLast7Days != null &&
+        input.kicksLast7Days === 0))
   ) {
     findings.push({
       id: "foetal-movement",
@@ -543,6 +620,9 @@ export function buildPrepCardText(opts: {
   market: string;
   findings: HealthLensFinding[];
   cycleSummary: string;
+  symptomSummary: string;
+  medicationSummary: string;
+  walletSummary: string;
   questions: string[];
 }): string {
   const lines = [
@@ -551,6 +631,15 @@ export function buildPrepCardText(opts: {
     "",
     "Cycle summary",
     opts.cycleSummary,
+    "",
+    "Symptom log (recent)",
+    opts.symptomSummary,
+    "",
+    "Medication reminders (as logged)",
+    opts.medicationSummary,
+    "",
+    "Health Wallet documents (titles only)",
+    opts.walletSummary,
     "",
     "Possible patterns from rules",
     ...opts.findings.map(
@@ -563,9 +652,186 @@ export function buildPrepCardText(opts: {
       ? opts.questions.map((q, i) => `${i + 1}. ${q}`)
       : ["1. What investigations, if any, would you recommend based on this timeline?"]),
     "",
-    "Generated by GirlCode360 HealthLens. AI-assisted wellness tool.",
+    "Generated by GirlCode360 HealthLens. AI-assisted wellness tool. Not a diagnosis.",
   ];
   return lines.join("\n");
+}
+
+/** Encode FR-031 daily pregnancy fields into the existing symptoms array (no schema change). */
+export function encodePregnancyDaily(opts: {
+  nausea?: 0 | 1 | 2 | 3 | null;
+  fatigue?: 0 | 1 | 2 | 3 | null;
+  sleepHours?: number | null;
+  movementFelt?: boolean | null;
+  extra?: string[];
+}): string[] {
+  const out = [...(opts.extra ?? [])].filter(
+    (s) =>
+      !s.startsWith("nausea_") &&
+      !s.startsWith("fatigue_") &&
+      !s.startsWith("sleep_") &&
+      s !== "movement_felt" &&
+      s !== "movement_reduced",
+  );
+  if (opts.nausea != null) out.push(`nausea_${opts.nausea}`);
+  if (opts.fatigue != null) out.push(`fatigue_${opts.fatigue}`);
+  if (opts.sleepHours != null && Number.isFinite(opts.sleepHours)) {
+    out.push(`sleep_${Math.max(0, Math.min(24, Math.round(opts.sleepHours)))}`);
+  }
+  if (opts.movementFelt === true) out.push("movement_felt");
+  if (opts.movementFelt === false) out.push("movement_reduced");
+  return out;
+}
+
+export type CyclePhase = "menstrual" | "follicular" | "ovulation" | "luteal";
+
+export function cyclePhaseFromDay(dayInCycle: number | null): CyclePhase | null {
+  if (dayInCycle == null || dayInCycle < 1) return null;
+  if (dayInCycle <= 5) return "menstrual";
+  if (dayInCycle <= 13) return "follicular";
+  if (dayInCycle <= 16) return "ovulation";
+  return "luteal";
+}
+
+export function dayInCycle(
+  scanDate: string,
+  cycleStarts: string[],
+): number | null {
+  const starts = [...cycleStarts].filter(Boolean).sort();
+  let start: string | null = null;
+  for (const s of starts) {
+    if (s <= scanDate) start = s;
+  }
+  if (!start) return null;
+  return daysBetween(start, scanDate) + 1;
+}
+
+const SKIN_SYMPTOM_IDS = new Set([
+  "acne",
+  "oily_skin",
+  "dry_skin",
+  "breakout",
+  "skin_flare",
+]);
+
+export type MirrorScanPoint = {
+  id: string;
+  createdAt: string;
+  cyclePhase: CyclePhase | null;
+  scores: Record<string, number>;
+  symptomIds: string[];
+  seeded?: boolean;
+};
+
+export type MirrorInsight = {
+  title: string;
+  body: string;
+  confidence: "Low" | "Medium" | "High";
+  enoughScans: boolean;
+  patternFound: boolean;
+};
+
+/**
+ * MIR-F-02: no cycle claims until 2+ scans in genuinely different phases.
+ * Never fabricates a trend. Wellness language only.
+ */
+export function correlateSkinAndCycle(scans: MirrorScanPoint[]): MirrorInsight {
+  const real = scans.filter((s) => !s.seeded);
+  const phases = new Set(
+    real.map((s) => s.cyclePhase).filter((p): p is CyclePhase => Boolean(p)),
+  );
+  if (real.length < 2 || phases.size < 2) {
+    return {
+      title: "Skin report ready",
+      body: "We need at least two scans from different cycle phases before we can look for a pattern. This is a snapshot of today — not a cycle claim.",
+      confidence: "Low",
+      enoughScans: false,
+      patternFound: false,
+    };
+  }
+
+  const luteal = real.filter((s) => s.cyclePhase === "luteal");
+  const follicular = real.filter(
+    (s) => s.cyclePhase === "follicular" || s.cyclePhase === "menstrual",
+  );
+  const mean = (rows: MirrorScanPoint[], key: string) => {
+    const vals = rows
+      .map((r) => r.scores[key])
+      .filter((n): n is number => typeof n === "number");
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  };
+
+  const lutealAcne = mean(luteal, "acne");
+  const follAcne = mean(follicular, "acne");
+  const lutealOil = mean(luteal, "oiliness");
+  const follOil = mean(follicular, "oiliness");
+
+  const acneDelta =
+    lutealAcne != null && follAcne != null ? lutealAcne - follAcne : 0;
+  const oilDelta =
+    lutealOil != null && follOil != null ? lutealOil - follOil : 0;
+
+  const skinSymptoms = real.some((s) =>
+    s.symptomIds.some((id) => SKIN_SYMPTOM_IDS.has(id) || id.includes("acne")),
+  );
+
+  if (acneDelta < 8 && oilDelta < 8) {
+    return {
+      title: "No clear cycle pattern yet",
+      body: "Your acne and oiliness scores look similar across the phases we have. We have not detected a clear pattern — that is still useful information to take to a clinician if you want to discuss skin changes.",
+      confidence: "Low",
+      enoughScans: true,
+      patternFound: false,
+    };
+  }
+
+  const bits: string[] = [];
+  if (acneDelta >= 8) {
+    bits.push(
+      `acne scores have been higher around the luteal phase than earlier in the cycle (about ${Math.round(acneDelta)} points on YouCam’s 0–100 scale)`,
+    );
+  }
+  if (oilDelta >= 8) {
+    bits.push(
+      `oiliness scores have also been higher later in the cycle (about ${Math.round(oilDelta)} points)`,
+    );
+  }
+  if (skinSymptoms) {
+    bits.push(
+      "that lines up with skin-related symptoms you logged on some of those days",
+    );
+  }
+
+  return {
+    title: "Possible cycle-linked skin pattern",
+    body: `Looking at your scans together, ${bits.join(", ")}. This is a correlation in your own logs — not a diagnosis or proof of a hormonal cause. A clinician can help you interpret it.`,
+    confidence: acneDelta >= 15 || oilDelta >= 15 ? "High" : "Medium",
+    enoughScans: true,
+    patternFound: true,
+  };
+}
+
+/** MIR-F-04: SheMatch-style banner only when a concern is clearly elevated. */
+export const ELEVATED_SKIN_SCORE = 60;
+
+export function elevatedSkinConcerns(
+  scores: Record<string, number>,
+): string[] {
+  return Object.entries(scores)
+    .filter(([, n]) => typeof n === "number" && n > ELEVATED_SKIN_SCORE)
+    .map(([k]) => k);
+}
+
+export function matchSkincareByScores<
+  T extends { kind: string; tags: string[] },
+>(items: T[], scores: Record<string, number>): T[] {
+  const keys = new Set(elevatedSkinConcerns(scores));
+  if (!keys.size) return [];
+  return items.filter(
+    (item) =>
+      item.kind === "skincare" && item.tags.some((tag) => keys.has(tag)),
+  );
 }
 
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useStandalone } from "@/hooks/use-media-query";
 import { track } from "@/lib/analytics";
 
 type BeforeInstallPromptEvent = Event & {
@@ -8,6 +9,7 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 export function InstallPrompt() {
+  const standalone = useStandalone();
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
     null,
   );
@@ -24,7 +26,7 @@ export function InstallPrompt() {
     return () => window.removeEventListener("beforeinstallprompt", onBip);
   }, []);
 
-  if (!deferred || dismissed) return null;
+  if (standalone || !deferred || dismissed) return null;
 
   async function install() {
     if (!deferred) return;
@@ -49,7 +51,7 @@ export function InstallPrompt() {
 
   return (
     <div
-      className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-3"
+      className="glass-surface relative z-20 flex flex-wrap items-center justify-between gap-4 border-b px-4 py-3"
       role="region"
       aria-label="Install app"
     >

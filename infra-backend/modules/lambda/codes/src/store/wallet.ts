@@ -15,6 +15,33 @@ import type {
   WalletDocMeta,
 } from "../types";
 
+const WALLET_CATEGORIES: WalletCategory[] = [
+  "test_results",
+  "prescriptions",
+  "scan_images",
+  "vaccination",
+  "insurance",
+  "other",
+];
+
+function isAllowedWalletUpload(filename: string, contentType: string): boolean {
+  const name = filename.toLowerCase();
+  const extOk =
+    name.endsWith(".pdf") ||
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".png");
+  const type = contentType.toLowerCase();
+  const typeOk =
+    !type ||
+    type === "application/octet-stream" ||
+    type === "application/pdf" ||
+    type === "image/jpeg" ||
+    type === "image/jpg" ||
+    type === "image/png";
+  return extOk && typeOk;
+}
+
 export type WalletShareCreated = {
   id: string;
   token: string;
@@ -158,6 +185,16 @@ export async function createWalletUpload(
   if (body.sizeBytes <= 0 || body.sizeBytes > MAX_BYTES) {
     throw new Error("SIZE_LIMIT");
   }
+  if (!isAllowedWalletUpload(body.filename, body.contentType)) {
+    throw new Error("TYPE_LIMIT");
+  }
+  if (!WALLET_CATEGORIES.includes(body.category)) {
+    throw new Error("INVALID_UPLOAD");
+  }
+  const customLabel =
+    body.category === "other" && body.customLabel?.trim()
+      ? body.customLabel.trim().slice(0, 40)
+      : null;
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   const doc: WalletDocMeta = {
@@ -166,6 +203,7 @@ export async function createWalletUpload(
     contentType: body.contentType,
     sizeBytes: body.sizeBytes,
     category: body.category,
+    customLabel,
     noteCiphertext: body.noteCiphertext ?? null,
     noteIv: body.noteIv ?? null,
     wrappedDek: body.wrappedDek,
@@ -233,6 +271,7 @@ export async function patchWalletMeta(
   id: string,
   patch: {
     category?: WalletCategory;
+    customLabel?: string | null;
     noteCiphertext?: string | null;
     noteIv?: string | null;
   },
@@ -250,6 +289,8 @@ export async function patchWalletMeta(
   const next: WalletDocMeta = {
     ...cur,
     category: patch.category ?? cur.category,
+    customLabel:
+      patch.customLabel !== undefined ? patch.customLabel : cur.customLabel,
     noteCiphertext:
       patch.noteCiphertext !== undefined
         ? patch.noteCiphertext

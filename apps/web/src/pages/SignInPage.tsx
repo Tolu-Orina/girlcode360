@@ -1,14 +1,20 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AuthShell } from "@/components/AuthShell";
+import { AuthAlert, AuthShell } from "@/components/AuthShell";
+import { Field, FieldInput } from "@/components/primitives/field";
+import {
+  AuthOfflineNote,
+  PasswordField,
+} from "@/components/primitives/password-field";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useOnline } from "@/hooks/use-media-query";
+import { mapAuthError } from "@/lib/auth-errors";
 import { signIn } from "@/lib/cognito";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 export function SignInPage() {
   const navigate = useNavigate();
+  const online = useOnline();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -17,13 +23,17 @@ export function SignInPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!online) {
+      setError("You are offline. Connect, then try again.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await signIn(email.trim(), password);
       navigate("/onboarding");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign in failed");
+      setError(mapAuthError(err, "signin"));
     } finally {
       setBusy(false);
     }
@@ -36,62 +46,56 @@ export function SignInPage() {
       panelImage="/images/auth-panel-welcome.png"
       panelAlt="Woman resting by a sunlit window with a calm wellness moment"
       footer={
-        <p className="mt-2 flex flex-wrap justify-between gap-4 text-[0.95rem]">
+        <p className="m-0 text-[length:var(--text-label)]">
           <Link
             to="/signup"
             className="inline-flex min-h-[var(--tap)] items-center font-semibold text-primary no-underline hover:underline"
           >
             Create account
           </Link>
-          <Link
-            to="/forgot-password"
-            className="inline-flex min-h-[var(--tap)] items-center font-semibold text-primary no-underline hover:underline"
-          >
-            Forgot password
-          </Link>
         </p>
       }
     >
-      <form className="mt-2 grid w-full gap-4" onSubmit={(e) => void onSubmit(e)}>
-        <div className="grid gap-1.5">
-          <Label htmlFor="signin-email">Email</Label>
-          <Input
+      <GoogleSignInButton
+        disabled={busy || !online}
+        onError={setError}
+      />
+      <form className="grid w-full gap-4" onSubmit={(e) => void onSubmit(e)}>
+        <Field id="signin-email" label="Email">
+          <FieldInput
             id="signin-email"
+            name="email"
             type="email"
             autoComplete="email"
             inputMode="email"
+            autoFocus
             required
-            className="h-12"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="signin-password">Password</Label>
-          <Input
-            id="signin-password"
-            type={showPw ? "text" : "password"}
-            autoComplete="current-password"
-            required
-            className="h-12"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <label className="flex cursor-pointer items-center gap-2.5 text-sm font-normal text-muted-foreground">
-          <Checkbox
-            checked={showPw}
-            onCheckedChange={(v) => setShowPw(v === true)}
-            aria-label="Show password"
-          />
-          Show password
-        </label>
-        {error ? (
-          <p className="m-0 text-[0.92rem] text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <Button className="w-full" type="submit" disabled={busy}>
+        </Field>
+        <PasswordField
+          id="signin-password"
+          name="password"
+          label="Password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={setPassword}
+          show={showPw}
+          onToggleShow={() => setShowPw((v) => !v)}
+          extra={
+            <Link
+              to="/forgot-password"
+              className="inline-flex min-h-[var(--tap)] items-center text-[length:var(--text-label)] font-semibold text-primary no-underline hover:underline"
+            >
+              Forgot password?
+            </Link>
+          }
+        />
+        <AuthOfflineNote online={online} />
+        {error ? <AuthAlert>{error}</AuthAlert> : null}
+        <Button className="w-full" type="submit" disabled={busy || !online}>
           {busy ? "Signing in…" : "Sign in"}
         </Button>
       </form>

@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { GateScreen } from "@/components/blocks/gate-screen";
 import { getCurrentSession } from "../lib/cognito";
 import { cognitoConfig } from "../lib/config";
-import "../pages/onboarding.css";
 
 /**
  * When Cognito is configured, require a valid session.
@@ -33,11 +33,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   }, []);
 
   if (state === "loading") {
-    return (
-      <main className="onboarding-page">
-        <p className="onboarding-lead">Checking session…</p>
-      </main>
-    );
+    return <GateScreen message="Checking session…" />;
   }
   if (state === "no") {
     return <Navigate to="/signin" replace state={{ from: location }} />;

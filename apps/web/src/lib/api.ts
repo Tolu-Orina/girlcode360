@@ -23,6 +23,7 @@ import {
 } from "../../../../packages/api-types/src/index";
 import { apiBaseUrl, cognitoConfig } from "./config";
 import { getCurrentSession } from "./cognito";
+import { marketplaceQuery } from "./session-geo";
 
 export {
   ALL_MODULES,
@@ -119,13 +120,18 @@ async function request<T>(
 async function publicRequest<T>(
   method: string,
   path: string,
+  body?: unknown,
 ): Promise<T> {
   if (!apiBaseUrl) {
     throw new ApiError(0, "api_base_url_missing");
   }
   const res = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${path}`, {
     method,
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
     let code = `http_${res.status}`;
@@ -433,10 +439,25 @@ export function getAlenaQuota() {
 export function postAlenaChat(body: {
   message: string;
   mode: "context" | "anonymous";
+  openedFrom?: "cycle" | "health" | "mirror" | "home" | "library";
+  moduleHint?: import("../../../../packages/api-types/src/index").HealthModule;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
+  lat?: number;
+  lng?: number;
 }) {
   return request<
     import("../../../../packages/api-types/src/index").AlenaChatResponse
   >("POST", "/v1/alena/chat", body);
+}
+
+export function postGuestAlenaChat(message: string, market: Market) {
+  return publicRequest<{
+    reply: string;
+    crisis: boolean;
+    stub: boolean;
+    remaining: number;
+    disclaimer: string;
+  }>("POST", "/v1/guest/alena", { message, market });
 }
 
 export function getHealthLensStatus() {
@@ -552,13 +573,188 @@ export function getContentArticles(market?: string, topic?: string) {
   }>("GET", `/v1/content/articles${qs ? `?${qs}` : ""}`);
 }
 
+export function submitContentReport(
+  body: import("../../../../packages/api-types/src/index").CreateContentReportRequest,
+) {
+  return request<{
+    report: import("../../../../packages/api-types/src/index").ContentReport;
+  }>("POST", "/v1/content/reports", body);
+}
+
+export function getMyContentReports() {
+  return request<{
+    reports: import("../../../../packages/api-types/src/index").ContentReport[];
+  }>("GET", "/v1/content/reports/mine");
+}
+
 export function detectMarket(): Market {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz === "Africa/Lagos") return "NG";
+    if (tz === "Africa/Accra") return "GH";
+    if (tz === "Europe/London") return "UK";
+  } catch {
+    /* Intl missing */
+  }
   const lang = (navigator.language || "en-GB").toUpperCase();
   if (lang.includes("NG") || lang.endsWith("-NG")) return "NG";
   if (lang.includes("GH") || lang.endsWith("-GH")) return "GH";
+  if (lang.includes("GB") || lang.endsWith("-GB") || lang.startsWith("EN-UK")) {
+    return "UK";
+  }
   return "UK";
 }
 
 export function detectLocale(): string {
   return navigator.language || "en-GB";
+}
+
+/** Public health ping — used for policy version + CloudFront country hint. */
+export function getApiHealth() {
+  return publicRequest<
+    import("../../../../packages/api-types/src/index").HealthResponse
+  >("GET", "/v1/health");
+}
+
+export function getMirrorStatus() {
+  return request<
+    import("../../../../packages/api-types/src/index").MirrorStatus
+  >("GET", "/v1/mirror/status");
+}
+
+export function postMirrorConsent(granted: boolean) {
+  return request<
+    import("../../../../packages/api-types/src/index").MirrorStatus
+  >("POST", "/v1/mirror/consent", { granted });
+}
+
+export function getMirrorCatalogue(opts?: {
+  kind?: "skincare" | "apparel";
+  mode?: "all" | "maternity" | "pmos";
+}) {
+  const q = new URLSearchParams();
+  if (opts?.kind) q.set("kind", opts.kind);
+  if (opts?.mode) q.set("mode", opts.mode);
+  const qs = q.toString();
+  return request<{
+    items: import("../../../../packages/api-types/src/index").MirrorCatalogueItem[];
+    pregnancyWeek: number | null;
+    emptyReason?: string;
+  }>("GET", `/v1/mirror/catalogue${qs ? `?${qs}` : ""}`);
+}
+
+export function listMirrorScans() {
+  return request<{
+    scans: import("../../../../packages/api-types/src/index").SkinScan[];
+  }>("GET", "/v1/mirror/scans");
+}
+
+export function createMirrorScan(imageB64: string) {
+  return request<{
+    scan: import("../../../../packages/api-types/src/index").SkinScan;
+  }>("POST", "/v1/mirror/scans", { imageB64 });
+}
+
+export function getMirrorScan(id: string) {
+  return request<{
+    scan: import("../../../../packages/api-types/src/index").SkinScan;
+  }>("GET", `/v1/mirror/scans/${encodeURIComponent(id)}`);
+}
+
+export function deleteMirrorScan(id: string) {
+  return request<{ ok: boolean }>(
+    "DELETE",
+    `/v1/mirror/scans/${encodeURIComponent(id)}`,
+  );
+}
+
+export function getMirrorScanMedia(id: string, kind: "result" | "mask") {
+  return request<{ contentType: string; imageB64: string }>(
+    "GET",
+    `/v1/mirror/scans/${encodeURIComponent(id)}/media?kind=${kind}`,
+  );
+}
+
+export function listMirrorTryOns() {
+  return request<{
+    tryons: import("../../../../packages/api-types/src/index").ApparelTryOn[];
+  }>("GET", "/v1/mirror/tryons");
+}
+
+export function createMirrorTryOn(imageB64: string, catalogueItemId: string) {
+  return request<{
+    tryon: import("../../../../packages/api-types/src/index").ApparelTryOn;
+  }>("POST", "/v1/mirror/tryons", { imageB64, catalogueItemId });
+}
+
+export function getMirrorTryOn(id: string) {
+  return request<{
+    tryon: import("../../../../packages/api-types/src/index").ApparelTryOn;
+  }>("GET", `/v1/mirror/tryons/${encodeURIComponent(id)}`);
+}
+
+export function getMirrorTryOnMedia(id: string) {
+  return request<{ contentType: string; imageB64: string }>(
+    "GET",
+    `/v1/mirror/tryons/${encodeURIComponent(id)}/media`,
+  );
+}
+
+export function listMarketplace(query: string) {
+  return request<{
+    listings: import("../../../../packages/api-types/src/index").MarketplaceListing[];
+    note: string;
+  }>("GET", `/v1/marketplace/listings${query}`);
+}
+
+export function getMarketplaceListing(id: string, query: string) {
+  return request<{
+    listing: import("../../../../packages/api-types/src/index").MarketplaceListing;
+  }>("GET", `/v1/marketplace/listings/${encodeURIComponent(id)}${query}`);
+}
+
+export function submitBusinessListing(
+  body: import("../../../../packages/api-types/src/index").CreateBusinessListingRequest,
+) {
+  return request<{
+    listing: import("../../../../packages/api-types/src/index").MarketplaceListing;
+    message: string;
+  }>("POST", "/v1/marketplace/business", body);
+}
+
+export function listMyBusinessListings() {
+  return request<{
+    listings: import("../../../../packages/api-types/src/index").MarketplaceListing[];
+  }>("GET", "/v1/marketplace/mine");
+}
+
+export function getSheMatchPrefs() {
+  return request<import("../../../../packages/api-types/src/index").SheMatchPrefs>(
+    "GET",
+    "/v1/shematch/prefs",
+  );
+}
+
+export function patchSheMatchPrefs(modules: Partial<Record<HealthModule, boolean>>) {
+  return request<import("../../../../packages/api-types/src/index").SheMatchPrefs>(
+    "PATCH",
+    "/v1/shematch/prefs",
+    { modules },
+  );
+}
+
+export function getSheMatchSuggest(
+  trigger: import("../../../../packages/api-types/src/index").SheMatchTriggerId,
+  extra?: { tags?: string },
+) {
+  return request<{
+    suggestions: import("../../../../packages/api-types/src/index").SheMatchSuggestion[];
+  }>(
+    "GET",
+    `/v1/shematch/suggest${marketplaceQuery({ trigger, tags: extra?.tags })}`,
+  );
+}
+
+export function getVapidPublicKey() {
+  return request<{ publicKey: string | null }>("GET", "/v1/notifications/vapid");
 }

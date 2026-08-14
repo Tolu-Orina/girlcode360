@@ -38,9 +38,11 @@ module "kms" {
 module "cognito" {
   source      = "./modules/cognito"
   environment = var.environment
-  # Custom auth pages in PWA — Hosted UI disabled / not used
-  callback_urls = var.cognito_callback_urls
-  logout_urls   = var.cognito_logout_urls
+  # Custom auth pages in PWA — Cognito domain is OAuth plumbing for Google only
+  callback_urls        = var.cognito_callback_urls
+  logout_urls          = var.cognito_logout_urls
+  google_client_id     = var.google_oauth_client_id
+  google_client_secret = var.google_oauth_client_secret
 }
 
 module "s3_data" {
@@ -85,6 +87,8 @@ module "ssm" {
   cognito_user_pool_id     = module.cognito.user_pool_id
   cognito_client_id        = module.cognito.client_id
   cognito_user_pool_region = var.aws_region
+  cognito_domain           = "${module.cognito.hosted_ui_domain}.auth.${var.aws_region}.amazoncognito.com"
+  cognito_google_idp       = module.cognito.google_idp_enabled ? "true" : "false"
   data_bucket_name         = module.s3_data.bucket_id
   dsql_endpoint            = module.dsql.endpoint
 }

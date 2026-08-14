@@ -11,6 +11,16 @@ phases:
       - cd infra-backend/modules/lambda/codes && npm ci && npm run build
       - cd "$CODEBUILD_SRC_DIR/infra-backend"
       - |
+        set +e
+        SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "girlcode360/${TF_VAR_environment}/app" --query SecretString --output text 2>/dev/null)
+        set -e
+        export SECRET_JSON
+        export TF_VAR_google_oauth_client_id
+        export TF_VAR_google_oauth_client_secret
+        TF_VAR_google_oauth_client_id=$(python3 -c "import json,os; print(json.loads(os.environ.get('SECRET_JSON') or '{}').get('google_client_id') or '')")
+        TF_VAR_google_oauth_client_secret=$(python3 -c "import json,os; print(json.loads(os.environ.get('SECRET_JSON') or '{}').get('google_client_secret') or '')")
+        unset SECRET_JSON
+      - |
         terraform init \
           -backend-config="bucket=girlcode360-tf-state" \
           -backend-config="key=backend/${TF_VAR_environment}/terraform.tfstate" \

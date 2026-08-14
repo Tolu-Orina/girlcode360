@@ -6,6 +6,13 @@ export type WeekRow = {
   maternal: string;
   nutrition: string;
   priority: boolean;
+  clinicalNote: string;
+};
+
+const MARKET_NOTE: Record<"UK" | "NG" | "GH", string> = {
+  UK: "UK: follow NHS antenatal guidance and your midwife or GP. This is wellness copy, not clinical advice.",
+  NG: "Nigeria: follow Federal Ministry of Health antenatal guidance and your clinic. This is wellness copy, not clinical advice.",
+  GH: "Ghana: follow Ghana Health Service antenatal guidance and your clinician. This is wellness copy, not clinical advice.",
 };
 
 const PRIORITY = new Set([
@@ -84,7 +91,7 @@ const FILLED: Record<
   },
 };
 
-export function allWeekContent(): WeekRow[] {
+export function allWeekContent(market: "UK" | "NG" | "GH" = "UK"): WeekRow[] {
   const rows: WeekRow[] = [];
   for (let w = 4; w <= 42; w++) {
     const filled = FILLED[w];
@@ -101,11 +108,15 @@ export function allWeekContent(): WeekRow[] {
         filled?.nutrition ??
         "Eat regularly, drink water, and follow clinician advice for supplements.",
       priority: PRIORITY.has(w),
+      clinicalNote: MARKET_NOTE[market],
     });
   }
   return rows;
 }
 
-export function weekContent(week: number): WeekRow | undefined {
-  return allWeekContent().find((r) => r.week === week);
+export function weekContent(
+  week: number,
+  market: "UK" | "NG" | "GH" = "UK",
+): WeekRow | undefined {
+  return allWeekContent(market).find((r) => r.week === week);
 }

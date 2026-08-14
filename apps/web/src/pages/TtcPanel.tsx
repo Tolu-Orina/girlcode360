@@ -1,6 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { PredictionDisclaimer } from "../components/PredictionDisclaimer";
+import { SheMatchBanner } from "@/components/blocks/shematch-banner";
+import { EmptyState } from "@/components/blocks/states";
+import { Field, FieldInput, FieldSelect } from "@/components/primitives/field";
+import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { formStackClass, leadClass, listClass, listItemClass } from "@/components/blocks/app-page";
 import type {
+  ContentArticle,
   FertileWindowResponse,
   HealthModule,
   MucusType,
@@ -8,6 +16,8 @@ import type {
 } from "../../../../packages/api-types/src/index";
 import {
   deleteTtcIntimacy,
+  getContentArticles,
+  getCycles,
   getFertileWindow,
   getTtc,
   initTtc,
@@ -17,6 +27,8 @@ import {
 import { apiBaseUrl } from "../lib/config";
 import {
   calculateFertileWindow,
+  dayInCycle,
+  predictNextPeriods,
   ttcMonthCount,
   ttcTwelveMonthPrompt,
 } from "../../../../packages/domain/src/index";
@@ -49,6 +61,10 @@ export function TtcPanel({
   const [intimacy, setIntimacy] = useState(false);
   const [intimacyConsent, setIntimacyConsent] = useState(false);
   const [active, setActive] = useState(false);
+  const [cycleDay, setCycleDay] = useState<number | null>(null);
+  const [lastPeriod, setLastPeriod] = useState<string | null>(null);
+  const [nextPeriod, setNextPeriod] = useState<string | null>(null);
+  const [articles, setArticles] = useState<ContentArticle[]>([]);
 
   async function load() {
     if (!on) return;
@@ -64,6 +80,25 @@ export function TtcPanel({
       setMonths(status.monthsTrying);
       setPrompt(status.twelveMonthPrompt);
       setFertile(await getFertileWindow());
+      try {
+        const { cycles } = await getCycles();
+        const starts = cycles.map((c) => c.startDate).sort();
+        const last = starts[starts.length - 1] ?? null;
+        setLastPeriod(last);
+        setCycleDay(dayInCycle(todayYmd(), starts));
+        const pred = predictNextPeriods(
+          cycles.map((c) => ({ startDate: c.startDate, endDate: c.endDate })),
+        );
+        setNextPeriod(pred?.nextStarts[0] ?? null);
+      } catch {
+        /* cycle data optional */
+      }
+      try {
+        const res = await getContentArticles(profile?.market, "ttc");
+        setArticles(res.articles);
+      } catch {
+        setArticles([]);
+      }
     } catch {
       /* not started */
     }
@@ -155,73 +190,100 @@ export function TtcPanel({
 
   if (!on) {
     return (
-      <div className="health-section">
-        <h2>Trying to conceive</h2>
-        <p className="health-lead">
-          Overlay fertile-window estimates on your cycle calendar and log BBT /
-          mucus when you want.
-        </p>
-        <button type="button" className="primary" onClick={enable} disabled={busy}>
-          Enable TTC
-        </button>
-      </div>
+      <EmptyState
+        title="Trying to conceive is off"
+        body="Fertile-window estimates overlay your cycle calendar. Log BBT and mucus only if you want to."
+        action={
+          <Button type="button" onClick={() => void enable()} disabled={busy}>
+            Enable TTC
+          </Button>
+        }
+      />
     );
   }
 
   return (
-    <div className="health-section">
-      <h2>Trying to conceive</h2>
+    <div className="grid gap-6">
+      <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+        Trying to conceive
+      </h2>
       {!active ? (
-        <form className="health-form" onSubmit={start}>
-          <label>
-            When did you start trying?
-            <input
+        <form className={formStackClass} onSubmit={start}>
+          <Field id="ttc-start" label="When did you start trying?">
+            <FieldInput
+              id="ttc-start"
               type="date"
               required
               value={startedOn}
               onChange={(e) => setStartedOn(e.target.value)}
             />
-          </label>
-          <button type="submit" className="primary" disabled={busy}>
+          </Field>
+          <Button type="submit" disabled={busy}>
             Start TTC timeline
-          </button>
+          </Button>
         </form>
       ) : (
         <>
-          <p className="health-lead">
+          <p className={leadClass}>
             Month {months} on your timeline
             {prompt ? ` · ${prompt}` : ""}
           </p>
           {fertile ? (
             <>
               <PredictionDisclaimer message={fertile.message} />
-              <ul className="insight-list">
-                <li>
-                  <strong>Fertile window (estimate)</strong>
-                  <p>
+              <ul className={listClass}>
+                <li className={listItemClass}>
+                  <strong className="block text-foreground">Timeline</strong>
+                  <p className={leadClass}>
+                    Cycle day {cycleDay ?? "—"} · last period {lastPeriod ?? "—"} ·
+                    next predicted period {nextPeriod ?? "Need two logged periods"}
+                  </p>
+                </li>
+                <li className={listItemClass}>
+                  <strong className="block text-foreground">
+                    Fertile window (estimate)
+                  </strong>
+                  <p className={leadClass}>
                     {fertile.enoughData
                       ? `${fertile.fertileStart} → ${fertile.fertileEnd} · ovulation ${fertile.ovulationDay}`
                       : fertile.message}
                   </p>
                 </li>
               </ul>
+              {fertile.enoughData && fertile.fertileDates.includes(todayYmd()) ? (
+                <SheMatchBanner trigger="fertile_window" />
+              ) : null}
             </>
           ) : null}
 
-          <h2>Today’s fertility signs</h2>
-          <form className="health-form" onSubmit={saveDay}>
-            <label>
-              BBT (°C)
-              <input
+          {articles.length ? (
+            <ul className={listClass}>
+              {articles.map((a) => (
+                <li key={a.id} className={listItemClass}>
+                  <strong className="block text-foreground">{a.title}</strong>
+                  <p className={leadClass}>{a.summary}</p>
+                  <p className={leadClass}>{a.body}</p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <form className={formStackClass} onSubmit={saveDay}>
+            <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+              Today’s fertility signs
+            </h2>
+            <Field id="bbt" label="BBT (°C)">
+              <FieldInput
+                id="bbt"
                 type="number"
                 step="0.01"
                 value={bbt}
                 onChange={(e) => setBbt(e.target.value)}
               />
-            </label>
-            <label>
-              Cervical mucus
-              <select
+            </Field>
+            <Field id="mucus" label="Cervical mucus">
+              <FieldSelect
+                id="mucus"
                 value={mucus}
                 onChange={(e) => setMucus(e.target.value as MucusType | "")}
               >
@@ -232,32 +294,31 @@ export function TtcPanel({
                 <option value="watery">Watery</option>
                 <option value="egg_white">Egg white</option>
                 <option value="not_sure">Not sure</option>
-              </select>
-            </label>
-            <label className="consent-row" style={{ display: "flex", gap: "0.5rem" }}>
-              <input
-                type="checkbox"
+              </FieldSelect>
+            </Field>
+            <Label className="flex min-h-[var(--tap)] items-center gap-3 text-[length:var(--text-body)] font-normal">
+              <Checkbox
                 checked={intimacy}
-                onChange={(e) => setIntimacy(e.target.checked)}
+                onCheckedChange={(v) => setIntimacy(v === true)}
               />
               Log intimacy (encrypted; deletable)
-            </label>
+            </Label>
             {intimacy ? (
-              <label className="consent-row" style={{ display: "flex", gap: "0.5rem" }}>
-                <input
-                  type="checkbox"
-                  required
+              <Label className="flex min-h-[var(--tap)] items-center gap-3 text-[length:var(--text-body)] font-normal">
+                <Checkbox
                   checked={intimacyConsent}
-                  onChange={(e) => setIntimacyConsent(e.target.checked)}
+                  onCheckedChange={(v) => setIntimacyConsent(v === true)}
+                  required
                 />
                 I consent to store this intimacy log
-              </label>
+              </Label>
             ) : null}
-            <button type="submit" className="primary" disabled={busy}>
+            <Button type="submit" disabled={busy}>
               Save day
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
               onClick={() =>
                 void deleteTtcIntimacy(todayYmd()).catch((err) =>
                   setError(err instanceof Error ? err.message : "Delete failed"),
@@ -265,7 +326,7 @@ export function TtcPanel({
               }
             >
               Delete today’s intimacy log
-            </button>
+            </Button>
           </form>
         </>
       )}

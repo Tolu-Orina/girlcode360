@@ -1,50 +1,94 @@
 import { Link } from "react-router-dom";
+import { MarketingFooter, MarketingHeader } from "@/components/blocks/marketing-chrome";
+import { marketingPad } from "@/components/blocks/marketing-layout";
 import { CURRENT_POLICY_VERSION } from "../lib/api";
-import "./onboarding.css";
 
 export function PrivacyPage() {
   return (
-    <main className="legal-page">
-      <h1>Privacy Policy</h1>
-      <p>
-        Placeholder policy for GirlCode360 internal beta (version{" "}
-        <code>{CURRENT_POLICY_VERSION}</code>). This is not legal advice and
-        will be replaced before public launch.
-      </p>
-      <ul>
-        <li>
-          We process health and wellness data only with your explicit consent.
-        </li>
-        <li>
-          Data is encrypted in transit (TLS) and at rest (AWS KMS) on our
-          backend.
-        </li>
-        <li>
-          You can withdraw optional consents (analytics, marketing, AI) at any
-          time from Account.
-        </li>
-        <li>
-          Notification bodies never include health content.
-        </li>
-        <li>
-          Markets: UK (UK GDPR), Nigeria, and Ghana — jurisdiction chosen during
-          onboarding.
-        </li>
-        <li>
-          <strong>Health Wallet threat model:</strong> documents are encrypted
-          on your device (Argon2id → KEK, per-file DEK, AES-GCM) before upload.
-          Servers store ciphertext and wrapped keys only — never your
-          passphrase or plaintext. Time-limited share links carry the file
-          decryption key in the URL fragment (`#k=…`) so it is not sent to our
-          servers or written to access logs. Soft-deleted files are purged
-          within 30 days.
-        </li>
-      </ul>
-      <p>
-        <Link to="/onboarding">Back to onboarding</Link>
-        {" · "}
-        <Link to="/terms">Terms of Service</Link>
-      </p>
-    </main>
+    <div className="min-h-dvh bg-background text-foreground">
+      <MarketingHeader />
+      <main
+        className={`${marketingPad} pt-[calc(var(--space-6)+env(safe-area-inset-top))] pb-[calc(var(--space-8)+env(safe-area-inset-bottom))]`}
+      >
+        <article className="mx-auto grid w-full max-w-[720px] gap-8">
+          <header className="grid gap-4">
+            <h1 className="m-0 text-[length:var(--text-page)] text-foreground max-lg:text-[28px]">
+              Privacy
+            </h1>
+            <p className="m-0 text-[length:var(--text-body)] text-muted-foreground">
+              Notification bodies never include health content. You can export or
+              delete your data. Policy version {CURRENT_POLICY_VERSION}. This
+              page is a placeholder for internal beta and is not legal advice.
+            </p>
+          </header>
+
+          <dl className="m-0 grid gap-8">
+            <div className="grid gap-2">
+              <dt className="font-[family-name:var(--font-display)] text-[length:var(--text-sub)] font-bold text-foreground">
+                Your consents, your call
+              </dt>
+              <dd className="m-0 text-[length:var(--text-body)] text-muted-foreground">
+                Turn analytics, Alena, HealthLens, and Mirror on or off in
+                Account.
+              </dd>
+            </div>
+            <div className="grid gap-2">
+              <dt className="font-[family-name:var(--font-display)] text-[length:var(--text-sub)] font-bold text-foreground">
+                Export or delete
+              </dt>
+              <dd className="m-0 text-[length:var(--text-body)] text-muted-foreground">
+                Download your data as JSON, or request deletion with a 24-hour
+                cooling-off window.
+              </dd>
+            </div>
+            <div className="grid gap-2">
+              <dt className="font-[family-name:var(--font-display)] text-[length:var(--text-sub)] font-bold text-foreground">
+                Wellness only
+              </dt>
+              <dd className="m-0 text-[length:var(--text-body)] text-muted-foreground">
+                We never diagnose. Patterns and Prep Cards help you talk to a
+                clinician.
+              </dd>
+            </div>
+          </dl>
+
+          <ul className="m-0 grid list-disc gap-3 pl-6 text-[length:var(--text-body)] text-muted-foreground">
+            <li>
+              We process health and wellness data only with your explicit
+              consent.
+            </li>
+            <li>
+              Data is encrypted in transit (TLS) and at rest (AWS KMS) on our
+              backend.
+            </li>
+            <li>
+              <strong className="text-foreground">Mirror photos:</strong> face
+              and body images used for skin scores and apparel try-on are stored
+              only after you grant Mirror consent. They are encrypted at rest,
+              never sent to Alena, and are deleted with your account. You can
+              withdraw Mirror consent in Account without affecting Cycle, Alena,
+              or Wallet.
+            </li>
+            <li>
+              Your region, chosen during onboarding, sets which privacy rules
+              apply.
+            </li>
+            <li>
+              <strong className="text-foreground">Health Wallet:</strong>{" "}
+              documents are encrypted on your device before upload. Servers
+              store ciphertext and wrapped keys only. Time-limited share links
+              carry the file key in the URL fragment so it is not sent to our
+              servers. Soft-deleted files are purged within 30 days.
+            </li>
+          </ul>
+
+          <p className="m-0 flex flex-wrap gap-4 text-[length:var(--text-body)]">
+            <Link to="/">Back to home</Link>
+            <Link to="/terms">Terms of Service</Link>
+          </p>
+        </article>
+      </main>
+      <MarketingFooter />
+    </div>
   );
 }

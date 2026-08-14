@@ -1,525 +1,681 @@
+import { useRef, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import {
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from "framer-motion";
+import { AlenaFab } from "@/components/blocks/alena-fab";
+import { LandingAtmosphere } from "@/components/blocks/landing-atmosphere";
+import { GlowFrame, ShineSweep } from "@/components/blocks/motion-glow";
+import { MarketingFooter, MarketingHeader } from "@/components/blocks/marketing-chrome";
+import { marketingHeroPad, marketingPad } from "@/components/blocks/marketing-layout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const modules = [
+const easeOut = [0.22, 1, 0.36, 1] as const;
+
+const CORE = [
   {
-    to: "/signup",
-    title: "Track what's really happening",
-    body: "Cycle, PCOS, pregnancy, and TTC tracking built around real symptoms — not generic charts that ignore what you're going through.",
+    src: "/images/landing-wallet.png",
+    alt: "Private paper records on a table",
+    title: "Health Wallet",
+    body: "Labs, scripts, and scans stay encrypted on this device, and you control every share.",
   },
   {
-    to: "/signup",
-    title: "Your Health Wallet",
-    body: "Labs, scripts, and scans encrypted on your device before they ever leave it. Share links you control, that expire on your terms.",
+    src: "/images/period-tracker.jpg",
+    alt: "Illustrated calendar with period days circled, next to pads, a menstrual cup, and a pill pack",
+    title: "Cycle and PMOS",
+    body: "Log period days and PMOS without assuming a 28-day cycle. One optional module, not the whole product.",
   },
   {
-    to: "/signup",
-    title: "Ask Alena",
-    body: "A health companion that actually knows your data — your cycle, your history, your budget. Ask her anything, skip the search bar.",
-  },
-  {
-    to: "/signup",
-    title: "Find it near you",
-    body: "SheMatch connects what's happening with your health right now to real pharmacies, clinics, and beauty pros close by — bookable, not just listed.",
+    src: "/images/fashion-girlcode.jpg",
+    alt: "Fashion and style editorial portrait",
+    title: "Mirror",
+    body: "Face or full-body photos for skin scores and try-on, next to your cycle log. Not a diagnosis.",
   },
 ] as const;
 
-const steps = [
+const CITY = [
   {
+    src: "/images/beauty-clinic.webp",
+    alt: "Beauty clinic waiting area with soft lighting",
+    title: "Near you",
+    body: "Pharmacies, clinics, and beauty nearby from the logs you keep. The listings here are a sample, not live places.",
+  },
+  {
+    src: "/images/landing-alena.png",
+    alt: "Woman journaling at a table",
+    title: "Alena",
+    body: "Ask in plain language using the cycle, PMOS, and wallet context you allow. Alena will not diagnose.",
+  },
+] as const;
+
+const STEPS = [
+  {
+    src: "/images/woman-smile1.jpg",
+    alt: "Woman smiling in soft light",
     n: "01",
     title: "Create your account",
-    body: "Email sign-up, age gate, and market-aware consent in a few calm steps.",
+    body: "Use email, confirm you are 18 or older, then choose which optional tools to turn on.",
   },
   {
+    src: "/images/auth-panel-morning.png",
+    alt: "Woman in morning light",
     n: "02",
     title: "Choose your modules",
-    body: "Cycle, PCOS, pregnancy, TTC, and Wallet — turn on only what you need.",
+    body: "Switch on Cycle, PMOS, Wallet, or Mirror in Account. Nothing extra appears until you do.",
   },
   {
+    src: "/images/auth-panel-journal.png",
+    alt: "Woman journaling",
     n: "03",
     title: "Log and prepare",
-    body: "Build a clear picture for yourself and your clinician, when you're ready.",
+    body: "Save days as they happen, even offline, then generate a Prep Card of patterns. Not a diagnosis.",
   },
 ] as const;
 
-const privacyPoints = [
-  {
-    title: "Your consents, your call",
-    body: "Turn analytics, Alena, and HealthLens on or off anytime in Account.",
-  },
-  {
-    title: "Export or delete",
-    body: "Download your data as JSON, or request deletion with a 24-hour cooling-off window.",
-  },
-  {
-    title: "Wellness only",
-    body: "We never diagnose. Patterns and Prep Cards help you talk to a clinician.",
-  },
-] as const;
+const page = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } },
+};
 
-const wrap = "mx-auto w-full max-w-[1180px] px-[clamp(1.25rem,4vw,2rem)]";
+function rise(reduce: boolean | null) {
+  if (reduce) {
+    return {
+      hidden: { opacity: 1 },
+      show: { opacity: 1, transition: { duration: 0.15 } },
+    };
+  }
+  return {
+    hidden: { opacity: 0, y: 40 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.7, ease: easeOut },
+    },
+  };
+}
 
-function BrandMark({
-  className = "",
-  size = 36,
-  light = false,
+function mediaRise(reduce: boolean | null) {
+  if (reduce) {
+    return {
+      hidden: { opacity: 1, clipPath: "inset(0% 0% 0% 0% round 16px)" },
+      show: { opacity: 1, clipPath: "inset(0% 0% 0% 0% round 16px)" },
+    };
+  }
+  return {
+    hidden: {
+      opacity: 0,
+      y: 48,
+      clipPath: "inset(14% 10% 14% 10% round 28px)",
+    },
+    show: {
+      opacity: 1,
+      y: 0,
+      clipPath: "inset(0% 0% 0% 0% round 16px)",
+      transition: { duration: 0.8, ease: easeOut },
+    },
+  };
+}
+
+function TiltStage({
+  children,
+  reduce,
+  className,
 }: {
+  children: ReactNode;
+  reduce: boolean | null;
   className?: string;
-  size?: number;
-  light?: boolean;
 }) {
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const rotateX = useSpring(useTransform(my, [-0.5, 0.5], [8, -8]), {
+    stiffness: 220,
+    damping: 18,
+  });
+  const rotateY = useSpring(useTransform(mx, [-0.5, 0.5], [-10, 10]), {
+    stiffness: 220,
+    damping: 18,
+  });
+
+  function onMove(e: MouseEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    mx.set((e.clientX - r.left) / r.width - 0.5);
+    my.set((e.clientY - r.top) / r.height - 0.5);
+  }
+
+  function onLeave() {
+    mx.set(0);
+    my.set(0);
+  }
+
   return (
-    <span className={cn("brand-lockup inline-flex items-center gap-2.5", className)}>
-      <img
-        src="/logo.png"
-        alt=""
-        width={size}
-        height={size}
-        className="brand-lockup-mark shrink-0 rounded-[0.45rem] object-cover"
-        decoding="async"
-      />
-      <span className={cn("brand-mark", light && "text-white")}>GirlCode360</span>
-    </span>
+    <motion.div
+      className={className}
+      style={
+        reduce
+          ? undefined
+          : { perspective: 900, rotateX, rotateY, transformStyle: "preserve-3d" }
+      }
+      onMouseMove={reduce ? undefined : onMove}
+      onMouseLeave={reduce ? undefined : onLeave}
+    >
+      {children}
+    </motion.div>
   );
 }
 
-function Eyebrow({ children }: { children: string }) {
+function MirrorGauge({ score }: { score: number }) {
+  const reduce = useReducedMotion();
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-primary/14 bg-primary/8 px-3.5 py-1.5 text-[0.78rem] font-bold tracking-[0.08em] text-[#6e0d3d] uppercase before:size-1.5 before:rounded-full before:bg-[#e24e93] before:content-['']">
+    <div className="relative grid size-24 place-items-center">
+      <svg viewBox="0 0 36 36" className="size-24 -rotate-90" aria-hidden="true">
+        <circle cx="18" cy="18" r="15.5" fill="none" className="stroke-muted" strokeWidth="3" />
+        <motion.circle
+          cx="18"
+          cy="18"
+          r="15.5"
+          fill="none"
+          className="stroke-primary"
+          strokeWidth="3"
+          strokeLinecap="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: reduce ? score / 100 : score / 100 }}
+          transition={
+            reduce
+              ? { duration: 0.15 }
+              : { duration: 1.2, ease: easeOut, delay: 0.4 }
+          }
+        />
+      </svg>
+      <span className="absolute grid place-items-center text-center">
+        <strong className="text-[length:var(--text-sub)] leading-none text-foreground">
+          {score}
+        </strong>
+        <span className="text-[length:var(--text-caption)] font-semibold tracking-wide text-muted-foreground uppercase">
+          Score
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function MotionScoreBar({ label, value }: { label: string; value: number }) {
+  const reduce = useReducedMotion();
+  return (
+    <div className="grid gap-1">
+      <p className="m-0 text-[length:var(--text-label)] text-foreground">
+        {label} {value} of 100
+      </p>
+      <span className="block h-2 overflow-hidden rounded-sm bg-muted" aria-hidden="true">
+        <motion.span
+          className="block h-full w-full origin-left bg-primary"
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: value / 100 }}
+          transition={
+            reduce
+              ? { duration: 0.15 }
+              : { duration: 0.9, ease: easeOut, delay: 0.45 }
+          }
+        />
+      </span>
+    </div>
+  );
+}
+
+function PhotoCard({
+  src,
+  alt,
+  title,
+  body,
+  eyebrow,
+  reduce,
+  aspect = "aspect-[4/3]",
+  glowDelay = 0,
+}: {
+  src: string;
+  alt: string;
+  title: string;
+  body: string;
+  eyebrow?: string;
+  reduce: boolean | null;
+  aspect?: string;
+  glowDelay?: number;
+}) {
+  return (
+    <motion.li className="h-full min-h-0" variants={mediaRise(reduce)}>
+      <motion.div
+        className="h-full"
+        whileHover={reduce ? undefined : { y: -8, scale: 1.02 }}
+        whileTap={reduce ? undefined : { scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 380, damping: 22 }}
+      >
+        <GlowFrame
+          className="h-full"
+          innerClassName="flex h-[calc(100%-4px)] flex-col bg-card"
+          delay={glowDelay}
+        >
+          <div className={cn(aspect, "shrink-0 overflow-hidden")}>
+            <motion.img
+              src={src}
+              alt={alt}
+              width={1200}
+              height={900}
+              className="size-full object-cover object-[center_20%]"
+              decoding="async"
+              loading="lazy"
+              whileHover={reduce ? undefined : { scale: 1.06 }}
+              transition={{ type: "spring", stiffness: 280, damping: 24 }}
+            />
+          </div>
+          <div className="grid gap-1 px-4 py-3">
+            {eyebrow ? (
+              <span className="text-[length:var(--text-caption)] font-bold text-primary">
+                {eyebrow}
+              </span>
+            ) : null}
+            <h3 className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-label)] text-foreground">
+              {title}
+            </h3>
+            <p className="m-0 text-[length:var(--text-caption)] leading-snug text-muted-foreground">
+              {body}
+            </p>
+          </div>
+        </GlowFrame>
+      </motion.div>
+    </motion.li>
+  );
+}
+
+function CardGrid({
+  cols,
+  children,
+  reduce,
+}: {
+  cols: string;
+  children: ReactNode;
+  reduce: boolean | null;
+}) {
+  return (
+    <motion.ul
+      className={cn("m-0 grid w-full list-none items-stretch gap-6 p-0", cols)}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, amount: 0.2 }}
+      variants={{
+        hidden: {},
+        show: {
+          transition: { staggerChildren: reduce ? 0 : 0.1, delayChildren: 0.06 },
+        },
+      }}
+    >
       {children}
-    </span>
+    </motion.ul>
   );
 }
 
 export function LandingPage() {
+  const reduce = useReducedMotion();
+  const text = rise(reduce);
+  const heroRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+    restDelta: 0.001,
+  });
+  const { scrollYProgress: heroProgress } = useScroll({
+    target: heroRef,
+    offset: ["start start", "end start"],
+  });
+  const floatY = useTransform(heroProgress, [0, 1], ["0%", "14%"]);
+
   return (
-    <div className="min-h-dvh bg-[#fffbfc] text-foreground">
-      <header
-        className={cn(
-          "sticky top-0 z-20 border-b border-primary/14 bg-[#fffbfc]/85 backdrop-blur-[10px]",
-          "animate-[fade-in_500ms_var(--ease-out)]",
-          "pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3",
-        )}
+    <div className="relative min-h-dvh bg-background text-foreground">
+      <LandingAtmosphere />
+      {reduce ? null : (
+        <motion.div
+          className="fixed top-0 right-0 left-0 z-40 h-0.5 origin-left bg-primary"
+          style={{ scaleX }}
+          aria-hidden="true"
+        />
+      )}
+      <a
+        href="#hero"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[var(--radius)] focus:bg-card focus:px-4 focus:py-3 focus:text-sm focus:font-semibold focus:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
       >
-        <div className={cn("relative flex h-[3.25rem] items-center justify-between gap-3", wrap)}>
-          <Link
-            to="/"
-            className="relative z-10 min-w-0 shrink text-inherit no-underline"
-            aria-label="GirlCode360 home"
-          >
-            <BrandMark size={32} className="text-[1.15rem] text-foreground" />
-          </Link>
+        Skip to content
+      </a>
+      <MarketingHeader />
 
-          <nav
-            className="pointer-events-none absolute inset-x-0 hidden items-center justify-center gap-[clamp(1.5rem,3vw,2.25rem)] px-48 lg:flex"
-            aria-label="Page sections"
-          >
-            {[
-              ["#modules", "Features"],
-              ["#how", "How it works"],
-              ["#private", "Privacy"],
-            ].map(([href, label]) => (
-              <a
-                key={href}
-                href={href}
-                className="pointer-events-auto inline-flex min-h-[var(--tap)] items-center text-[0.95rem] font-semibold text-foreground/80 no-underline hover:text-foreground"
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-
-          <div className="relative z-10 flex shrink-0 items-center justify-end gap-2 sm:gap-4">
-            <Button
-              variant="ghost"
-              className="hidden text-foreground lg:inline-flex"
-              asChild
-            >
-              <Link to="/signin">Sign in</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/signup">Create account</Link>
-            </Button>
-          </div>
-        </div>
-
-        <nav
-          className={cn("mt-1 flex items-center gap-4 lg:hidden", wrap)}
-          aria-label="Page sections"
+      <main className="relative z-[2]">
+        <section
+          id="hero"
+          ref={heroRef}
+          className="relative overflow-hidden py-16 lg:py-24"
+          aria-labelledby="hero-heading"
         >
-          {[
-            ["#modules", "Features"],
-            ["#how", "How it works"],
-            ["#private", "Privacy"],
-          ].map(([href, label]) => (
-            <a
-              key={href}
-              href={href}
-              className="inline-flex min-h-[var(--tap)] items-center text-sm font-extrabold text-muted-foreground no-underline hover:text-primary"
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-      </header>
-
-      {/* Hero: full-bleed gradient, one composition — brand + USP + marketplace visual */}
-      <section
-        className="relative min-h-[calc(100dvh-5.5rem)] overflow-hidden bg-[radial-gradient(1100px_500px_at_85%_-10%,rgba(226,78,147,0.20),transparent_60%),linear-gradient(180deg,#f7e1ea_0%,#fff6f9_100%)] py-[clamp(3rem,8vw,5.5rem)]"
-        aria-label="GirlCode360"
-      >
-        <div
-          className={cn(
-            "grid animate-[rise-in_700ms_var(--ease-out)] items-center gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14",
-            wrap,
-          )}
-        >
-          <div className="grid max-w-[40rem] gap-4">
-            <p className="brand-mark m-0 text-[clamp(1.85rem,4.5vw,2.75rem)] text-primary">
-              GirlCode360
-            </p>
-            <Eyebrow>Not just tracking</Eyebrow>
-            <h1 className="m-0 max-w-[14ch] font-[family-name:var(--font-display)] text-[clamp(2rem,4.4vw,3.35rem)] font-semibold tracking-tight text-foreground">
-              Your cycle, your records, your city — in one app
-            </h1>
-            <p className="m-0 max-w-[44ch] text-[1.125rem] leading-relaxed text-[#4a3540]">
-              Track your cycle, PCOS, pregnancy, and TTC journey with notes your
-              doctor will actually use. Keep every health document in one secure
-              vault. Then find and book real pharmacies, clinics, and beauty pros
-              near you — no switching apps.
-            </p>
-            <p className="m-0 max-w-[46ch] text-[0.95rem] text-muted-foreground">
-              No diagnosis theatre, no scattered records, no guessing who&apos;s
-              nearby and open. Just your health, handled — end to end.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-3">
-              <Button asChild>
-                <Link to="/signup">Start free</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link to="/signin">I already have an account</Link>
-              </Button>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[0.8125rem] font-bold tracking-wide text-[#6e0d3d]">
-              {["Private by default", "On-device encryption", "You control every share"].map(
-                (t) => (
-                  <span
-                    key={t}
-                    className="inline-flex items-center gap-1.5 before:size-1.5 before:rounded-full before:bg-[#e24e93] before:content-['']"
-                  >
-                    {t}
-                  </span>
-                ),
-              )}
-            </div>
-          </div>
-
           <div
-            className="relative mx-auto h-[min(420px,70vw)] w-full max-w-[28rem] lg:mx-0 lg:h-[520px] lg:max-w-none"
-            aria-hidden="true"
+            className={cn(
+              "relative z-10 grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16",
+              marketingHeroPad,
+            )}
           >
-            <div className="absolute top-[6%] right-0 z-[1] w-[78%] rotate-[4deg] rounded-[1.35rem] border border-primary/14 bg-[#fffbfc] p-5 shadow-[0_20px_50px_-20px_rgba(110,13,61,0.35)] sm:p-6">
-              <h3 className="m-0 font-[family-name:var(--font-display)] text-[1.05rem] font-semibold text-foreground">
-                Near you
-              </h3>
-              <ul className="mt-3.5 m-0 grid list-none gap-2.5 p-0">
-                {[
-                  ["B", "Boots Pharmacy — 0.4mi", "Open now"],
-                  ["C", "Cheveux Hair Studio — 0.8mi", "Books today"],
-                  ["+", "6 more nearby", "Pharmacies · Clinics · Beauty"],
-                ].map(([pin, title, sub]) => (
-                  <li
-                    key={title}
-                    className="flex items-start gap-2.5 text-[0.8125rem] font-bold text-foreground"
-                  >
-                    <span className="grid size-[26px] shrink-0 place-items-center rounded-lg bg-[#f2cfdf] text-[0.75rem] text-[#6e0d3d]">
-                      {pin}
-                    </span>
-                    <span>
-                      {title}
-                      <small className="mt-0.5 block text-[0.72rem] font-medium text-muted-foreground">
-                        {sub}
-                      </small>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="absolute bottom-0 left-0 z-[2] w-[88%] animate-[floaty_7s_ease-in-out_infinite] rounded-[1.35rem] border border-primary/14 bg-[#fffbfc] px-5 pt-7 pb-6 shadow-[0_20px_50px_-20px_rgba(110,13,61,0.35)] sm:px-6 motion-reduce:animate-none">
-              <h3 className="m-0 font-[family-name:var(--font-display)] text-[1.35rem] font-semibold text-foreground">
-                Cycle
-              </h3>
-              <div className="mt-4 grid grid-cols-7 gap-1.5">
-                {Array.from({ length: 21 }, (_, i) => {
-                  const day = i + 1;
-                  const on = day >= 3 && day <= 5;
-                  const peak = day === 14 || day === 15;
-                  return (
-                    <span
-                      key={day}
-                      className={cn(
-                        "grid aspect-square place-items-center rounded-[9px] text-[0.8125rem] font-bold",
-                        on && "bg-primary text-primary-foreground",
-                        peak && "bg-[#e24e93] text-white",
-                        !on && !peak && "bg-[#f7e1ea] text-foreground",
-                      )}
-                    >
-                      {day}
-                    </span>
-                  );
-                })}
-              </div>
-              <p className="mt-3.5 m-0 text-[0.78rem] font-semibold text-muted-foreground">
-                Next period window · private on-device · 6 pharmacies near you
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="modules"
-        className={cn("scroll-mt-[4.5rem] py-[clamp(4.5rem,10vw,6.5rem)]", wrap)}
-        aria-labelledby="modules-heading"
-      >
-        <div className="mb-12 grid max-w-[40rem] gap-3.5">
-          <Eyebrow>Everything in one place</Eyebrow>
-          <h2
-            id="modules-heading"
-            className="m-0 font-[family-name:var(--font-display)] text-[clamp(1.75rem,3.2vw,2.5rem)] font-semibold text-foreground"
-          >
-            Four tools that actually talk to each other
-          </h2>
-          <p className="m-0 text-[1.05rem] text-muted-foreground">
-            Built as one private space, not four separate apps stitched together.
-            Tap a card to start.
-          </p>
-        </div>
-
-        <ul className="m-0 grid list-none gap-5 p-0 sm:grid-cols-2 xl:grid-cols-4">
-          {modules.map((m) => (
-            <li key={m.title}>
-              <Link
-                to={m.to}
-                className="flex h-full flex-col rounded-2xl border border-primary/14 bg-[#fff6f9] px-6 pt-7 pb-6 text-inherit no-underline transition hover:-translate-y-1 hover:border-transparent hover:shadow-[0_24px_40px_-26px_rgba(110,13,61,0.4)]"
+            <motion.div
+              className="grid gap-6"
+              initial="hidden"
+              animate="show"
+              variants={page}
+            >
+              <motion.h1
+                id="hero-heading"
+                className="m-0 max-w-[16ch] font-[family-name:var(--font-display)] text-[length:var(--text-hero)] font-bold tracking-tight text-foreground max-lg:text-[32px]"
+                variants={text}
               >
-                <span
-                  className="mb-5 grid size-[46px] grid-cols-2 gap-0.5 rounded-xl bg-[#f7e1ea] p-1.5"
-                  aria-hidden="true"
+                Your vault, your glow, your city — one ecosystem
+              </motion.h1>
+              <motion.p
+                className="m-0 max-w-[44ch] text-[length:var(--text-body)] leading-relaxed text-foreground"
+                variants={text}
+              >
+                GirlCode360 keeps a private health vault, Mirror for skin and
+                style, Alena for questions, and a city layer with pharmacies and
+                clinics nearby. Cycle and PMOS tracking is one optional tool,
+                not the whole product.
+              </motion.p>
+              <motion.p
+                className="m-0 max-w-[46ch] text-[length:var(--text-label)] leading-relaxed text-muted-foreground"
+                variants={text}
+              >
+                Records stay in one place. Listings on this page are samples,
+                not live places.
+              </motion.p>
+              <motion.div className="mt-2 flex flex-wrap gap-3" variants={text}>
+                <motion.div
+                  whileHover={reduce ? undefined : { scale: 1.04 }}
+                  whileTap={reduce ? undefined : { scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
                 >
-                  <i className="rounded-sm bg-primary opacity-100" />
-                  <i className="rounded-sm bg-primary opacity-35" />
-                  <i className="rounded-sm bg-primary opacity-70" />
-                  <i className="rounded-sm bg-primary opacity-35" />
-                </span>
-                <strong className="mb-2.5 font-[family-name:var(--font-display)] text-[1.2rem] font-semibold text-foreground">
-                  {m.title}
-                </strong>
-                <span className="flex-1 text-[0.9rem] leading-snug text-muted-foreground">
-                  {m.body}
-                </span>
-                <span className="mt-4 inline-flex items-center gap-1.5 text-[0.85rem] font-bold text-[#6e0d3d]">
-                  Get started →
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section
-        className="bg-[linear-gradient(180deg,#fff6f9,#f7e1ea_80%)] py-[clamp(4.5rem,10vw,6.5rem)]"
-        aria-labelledby="alena-heading"
-      >
-        <div
-          className={cn(
-            "grid items-center gap-10 lg:grid-cols-2 lg:gap-14",
-            wrap,
-          )}
-        >
-          <div className="grid gap-4">
-            <Eyebrow>Meet Alena</Eyebrow>
-            <h2
-              id="alena-heading"
-              className="m-0 max-w-[14ch] font-[family-name:var(--font-display)] text-[clamp(1.75rem,3.2vw,2.35rem)] font-semibold text-foreground"
-            >
-              The one part of your wellness stack that actually knows you
-            </h2>
-            <p className="m-0 max-w-[42ch] text-[1.05rem] text-muted-foreground">
-              Alena isn&apos;t a search bar. She&apos;s read your cycle data, your
-              vault, and what&apos;s actually open near you — so you get answers,
-              not a list of links.
-            </p>
-            <p className="m-0 text-[0.85rem] font-bold text-[#6e0d3d]">
-              Ask Alena anything. She already knows your cycle, your history, and
-              your postcode.
-            </p>
-          </div>
-
-          <div
-            className="rounded-[1.25rem] border border-primary/14 bg-[#fffbfc] p-6 shadow-[0_20px_50px_-20px_rgba(110,13,61,0.35)]"
-            aria-hidden="true"
-          >
-            <div className="mb-4 flex items-center gap-2.5 border-b border-primary/14 pb-4 text-sm font-bold">
-              <span className="size-[30px] rounded-[9px] bg-[linear-gradient(135deg,#e24e93,#a6115c)]" />
-              Alena
-            </div>
-            <div className="grid gap-3">
-              <p className="ml-auto mb-0 max-w-[82%] rounded-[14px] rounded-br-sm bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">
-                What skincare can I get with £20?
-              </p>
-              <p className="mb-0 max-w-[82%] rounded-[14px] rounded-bl-sm bg-[#f7e1ea] px-4 py-3 text-sm font-semibold text-foreground">
-                A gentle cleanser and a niacinamide serum from Boots, both in
-                stock 0.4mi away.
-                <small className="mt-1 block text-xs font-medium text-muted-foreground">
-                  Based on your logged skin concerns
-                </small>
-              </p>
-              <p className="ml-auto mb-0 max-w-[82%] rounded-[14px] rounded-br-sm bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">
-                When am I ovulating?
-              </p>
-              <p className="mb-0 max-w-[82%] rounded-[14px] rounded-bl-sm bg-[#f7e1ea] px-4 py-3 text-sm font-semibold text-foreground">
-                Your fertile window opens in 3 days, peaking around day 14.
-                <small className="mt-1 block text-xs font-medium text-muted-foreground">
-                  No calendar-checking needed
-                </small>
-              </p>
-              <p className="ml-auto mb-0 max-w-[82%] rounded-[14px] rounded-br-sm bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">
-                Where&apos;s the closest Boots to me?
-              </p>
-              <p className="mb-0 max-w-[82%] rounded-[14px] rounded-bl-sm bg-[#f7e1ea] px-4 py-3 text-sm font-semibold text-foreground">
-                0.4 miles away on Deansgate — open until 8pm today.
-                <small className="mt-1 block text-xs font-medium text-muted-foreground">
-                  Live from SheMatch
-                </small>
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="how"
-        className={cn(
-          "scroll-mt-[4.5rem] bg-[#fffbfc] py-[clamp(4.5rem,10vw,6.5rem)]",
-          wrap,
-        )}
-        aria-labelledby="steps-heading"
-      >
-        <div className="mb-10 grid max-w-[40rem] gap-3.5">
-          <Eyebrow>How it works</Eyebrow>
-          <h2
-            id="steps-heading"
-            className="m-0 font-[family-name:var(--font-display)] text-[clamp(1.75rem,3.2vw,2.5rem)] font-semibold text-foreground"
-          >
-            Three short steps to a private wellness space
-          </h2>
-          <p className="m-0 text-[1.05rem] text-muted-foreground">
-            Order matters here — each step unlocks the next.
-          </p>
-        </div>
-
-        <ol className="m-0 grid list-none gap-8 p-0 md:grid-cols-3 md:gap-8">
-          {steps.map((s) => (
-            <li key={s.n} className="border-t-2 border-primary/14 pt-5">
-              <span className="mb-3.5 block font-[family-name:var(--font-display)] text-[0.95rem] font-semibold text-[#e24e93]">
-                {s.n}
-              </span>
-              <strong className="mb-2.5 block font-[family-name:var(--font-display)] text-[1.2rem] font-semibold text-foreground">
-                {s.title}
-              </strong>
-              <p className="m-0 text-[0.9rem] leading-snug text-muted-foreground">
-                {s.body}
-              </p>
-            </li>
-          ))}
-        </ol>
-
-        <div className="mt-10">
-          <Button asChild>
-            <Link to="/signup">Create your account</Link>
-          </Button>
-        </div>
-      </section>
-
-      <section
-        id="private"
-        className="scroll-mt-[4.5rem] bg-[linear-gradient(180deg,#f7e1ea_0%,#f2cfdf_100%)] py-[clamp(4.5rem,10vw,6.5rem)]"
-        aria-labelledby="privacy-heading"
-      >
-        <div className={wrap}>
-          <div className="mb-8 grid max-w-[40rem] gap-3.5">
-            <Eyebrow>Private by design</Eyebrow>
-            <h2
-              id="privacy-heading"
-              className="m-0 font-[family-name:var(--font-display)] text-[clamp(1.75rem,3.2vw,2.5rem)] font-semibold text-foreground"
-            >
-              Built to earn your trust, everywhere
-            </h2>
-            <p className="m-0 text-[1.05rem] text-muted-foreground">
-              With consent you control, and no health content in notification
-              bodies.
-            </p>
-          </div>
-
-          <ul className="m-0 grid list-none gap-8 p-0 md:grid-cols-3">
-            {privacyPoints.map((p) => (
-              <li key={p.title} className="grid gap-2.5">
-                <strong className="font-[family-name:var(--font-display)] text-[1.05rem] font-semibold text-foreground">
-                  {p.title}
-                </strong>
-                <span className="text-[0.9rem] leading-snug text-[#5a4550]">
-                  {p.body}
-                </span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-10 flex flex-wrap gap-3">
-            <Button asChild>
-              <Link to="/signup">Start free</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link to="/privacy">Read privacy</Link>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <footer className="bg-foreground py-11 text-[#f3e4ec]">
-        <div
-          className={cn(
-            "flex flex-wrap items-center justify-between gap-4 pb-[env(safe-area-inset-bottom)]",
-            wrap,
-          )}
-        >
-          <BrandMark size={28} className="text-[1.1rem]" light />
-          <nav className="flex flex-wrap gap-6" aria-label="Legal">
-            {[
-              ["/privacy", "Privacy"],
-              ["/terms", "Terms"],
-              ["/signin", "Sign in"],
-            ].map(([to, label]) => (
-              <Link
-                key={to}
-                to={to}
-                className="inline-flex min-h-[var(--tap)] items-center text-sm font-semibold text-[#e7c7d6] no-underline hover:text-white"
+                  <Button asChild className="relative h-12 min-h-[var(--tap)] overflow-hidden rounded-full px-6">
+                    <Link to="/signup">
+                      Start free
+                      <ShineSweep />
+                    </Link>
+                  </Button>
+                </motion.div>
+                <Button asChild variant="outline" className="h-12 min-h-[var(--tap)] rounded-full px-6">
+                  <Link to="/signin">I already have an account</Link>
+                </Button>
+              </motion.div>
+              <motion.ul
+                className="m-0 mt-2 flex list-none flex-wrap gap-x-6 gap-y-2 p-0 text-[length:var(--text-caption)] font-semibold text-primary"
+                variants={text}
               >
-                {label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </footer>
+                {["Private by default", "On-device encryption", "You control every share"].map(
+                  (t) => (
+                    <motion.li
+                      key={t}
+                      className="inline-flex items-center gap-2"
+                      variants={text}
+                    >
+                      <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+                      {t}
+                    </motion.li>
+                  ),
+                )}
+              </motion.ul>
+            </motion.div>
 
-      <style>{`
-        @keyframes floaty {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-10px); }
-        }
-      `}</style>
+            <TiltStage
+              reduce={reduce}
+              className="relative h-[420px] lg:h-[520px]"
+            >
+              <motion.div
+                className="absolute inset-0"
+                style={reduce ? undefined : { y: floatY }}
+                aria-hidden="true"
+              >
+                <motion.div
+                  className="absolute top-[6%] right-0 z-[1] w-[78%] rotate-[4deg] shadow-[var(--shadow-modal)]"
+                  initial={reduce ? false : { opacity: 0, x: 32, rotate: 8 }}
+                  animate={{ opacity: 1, x: 0, rotate: 4 }}
+                  transition={{ duration: 0.8, ease: easeOut, delay: 0.15 }}
+                  whileHover={reduce ? undefined : { rotate: 2, scale: 1.03 }}
+                >
+                  <GlowFrame
+                    delay={0.2}
+                    innerClassName="bg-[image:var(--hero-card-fill)] p-4"
+                  >
+                  <h2 className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-label)] font-bold text-foreground">
+                    Near you
+                  </h2>
+                  <ul className="mt-4 m-0 grid list-none gap-3 p-0">
+                    {[
+                      {
+                        logo: "/boots-800x800.png",
+                        title: "Boots Pharmacy, 0.4 mi",
+                        sub: "Open now",
+                      },
+                      {
+                        logo: "/glam-boutique.webp",
+                        title: "Glama Boutique, 0.6 mi",
+                        sub: "Try-on eligible",
+                      },
+                      {
+                        logo: "/clinic.jpg",
+                        title: "6 more nearby",
+                        sub: "Pharmacies · Clinics · Beauty",
+                      },
+                    ].map(({ logo, title, sub }, i) => (
+                      <motion.li
+                        key={title}
+                        className="flex items-center gap-3"
+                        initial={reduce ? false : { opacity: 0, x: 12 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.35 + i * 0.08, duration: 0.45, ease: easeOut }}
+                      >
+                        <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-[var(--radius)] bg-white ring-1 ring-border">
+                          <img
+                            src={logo}
+                            alt=""
+                            width={36}
+                            height={36}
+                            className="size-full object-contain"
+                            decoding="async"
+                          />
+                        </span>
+                        <span className="text-[length:var(--text-caption)] font-semibold text-foreground">
+                          {title}
+                          <small className="mt-0.5 block font-medium text-muted-foreground">
+                            {sub}
+                          </small>
+                        </span>
+                      </motion.li>
+                    ))}
+                  </ul>
+                  </GlowFrame>
+                </motion.div>
+
+                <motion.div
+                  className="absolute bottom-0 left-0 z-[2] w-[88%] shadow-[var(--shadow-modal)]"
+                  initial={reduce ? false : { opacity: 0, y: 36 }}
+                  animate={
+                    reduce
+                      ? { opacity: 1, y: 0 }
+                      : { opacity: 1, y: [0, -12, 0] }
+                  }
+                  transition={
+                    reduce
+                      ? { duration: 0.15 }
+                      : {
+                          opacity: { duration: 0.7, ease: easeOut, delay: 0.25 },
+                          y: {
+                            duration: 6,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                            delay: 0.8,
+                          },
+                        }
+                  }
+                >
+                  <GlowFrame
+                    delay={0.8}
+                    innerClassName="bg-[image:var(--hero-card-fill)] p-6"
+                  >
+                  <h2 className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-sub)] text-foreground">
+                    Mirror
+                  </h2>
+                  <div className="mt-4 flex items-center gap-4">
+                    <MirrorGauge score={82} />
+                    <div className="grid min-w-0 flex-1 gap-3">
+                      <MotionScoreBar label="Hydration" value={78} />
+                      <MotionScoreBar label="Radiance" value={85} />
+                      <MotionScoreBar label="Acne" value={14} />
+                    </div>
+                  </div>
+                  <p className="mt-4 mb-0 text-[length:var(--text-caption)] text-muted-foreground">
+                    Scanned today · private, never shared · linked to your cycle
+                  </p>
+                  </GlowFrame>
+                </motion.div>
+              </motion.div>
+            </TiltStage>
+          </div>
+        </section>
+
+        <section
+          id="ecosystem"
+          className={cn("scroll-mt-24 py-16", marketingPad)}
+          aria-labelledby="ecosystem-heading"
+        >
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.4 }}
+            variants={page}
+            className="mb-8 grid gap-4"
+          >
+            <motion.h2
+              id="ecosystem-heading"
+              className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-section)] text-foreground"
+              variants={text}
+            >
+              Vault, cycle, glow
+            </motion.h2>
+            <motion.p
+              className="m-0 max-w-[40rem] text-[length:var(--text-body)] text-muted-foreground"
+              variants={text}
+            >
+              Three tools you can use today. Each one has a job. None of them
+              diagnose.
+            </motion.p>
+          </motion.div>
+          <CardGrid cols="md:grid-cols-3" reduce={reduce}>
+            {CORE.map((item, i) => (
+              <PhotoCard
+                key={item.title}
+                {...item}
+                reduce={reduce}
+                glowDelay={i * 0.9}
+              />
+            ))}
+          </CardGrid>
+        </section>
+
+        <section
+          id="how"
+          className="scroll-mt-24 bg-muted/45 py-16"
+          aria-labelledby="steps-heading"
+        >
+          <div className={marketingPad}>
+            <motion.div
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true, amount: 0.4 }}
+              variants={page}
+              className="mb-8 grid gap-4"
+            >
+              <motion.h2
+                id="steps-heading"
+                className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-section)] text-foreground"
+                variants={text}
+              >
+                How it works
+              </motion.h2>
+              <motion.p
+                className="m-0 max-w-[40rem] text-[length:var(--text-body)] text-muted-foreground"
+                variants={text}
+              >
+                Three steps. Finish one before the next. You can change modules
+                later.
+              </motion.p>
+            </motion.div>
+            <CardGrid cols="md:grid-cols-3" reduce={reduce}>
+              {STEPS.map((s, i) => (
+                <PhotoCard
+                  key={s.n}
+                  src={s.src}
+                  alt={s.alt}
+                  title={s.title}
+                  body={s.body}
+                  eyebrow={s.n}
+                  reduce={reduce}
+                  aspect="aspect-[4/5]"
+                  glowDelay={i * 0.9}
+                />
+              ))}
+            </CardGrid>
+          </div>
+        </section>
+
+        <section
+          id="mirror"
+          className={cn("scroll-mt-24 py-16", marketingPad)}
+          aria-labelledby="city-heading"
+        >
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.4 }}
+            variants={page}
+            className="mb-8 grid gap-4"
+          >
+            <motion.h2
+              id="city-heading"
+              className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-section)] text-foreground"
+              variants={text}
+            >
+              City and companion
+            </motion.h2>
+            <motion.p
+              className="m-0 max-w-[40rem] text-[length:var(--text-body)] text-muted-foreground"
+              variants={text}
+            >
+              Nearby care is the later layer. Alena is here now, on the logs
+              you allow.
+            </motion.p>
+          </motion.div>
+          <CardGrid cols="md:grid-cols-2" reduce={reduce}>
+            {CITY.map((item, i) => (
+              <PhotoCard
+                key={item.title}
+                {...item}
+                reduce={reduce}
+                glowDelay={i * 1.1}
+              />
+            ))}
+          </CardGrid>
+        </section>
+      </main>
+
+      <div className="relative z-10">
+        <MarketingFooter />
+      </div>
+      <AlenaFab />
     </div>
   );
 }

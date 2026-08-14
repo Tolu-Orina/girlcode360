@@ -8,6 +8,7 @@ type DocRow = {
   content_type: string;
   size_bytes: number;
   category: string;
+  custom_label: string | null;
   note_ciphertext: string | null;
   note_iv: string | null;
   wrapped_dek: string;
@@ -55,6 +56,7 @@ function mapDoc(row: DocRow): WalletDocMeta {
     contentType: row.content_type,
     sizeBytes: row.size_bytes,
     category: row.category as WalletCategory,
+    customLabel: row.custom_label ?? null,
     noteCiphertext: row.note_ciphertext,
     noteIv: row.note_iv,
     wrappedDek: row.wrapped_dek,
@@ -127,12 +129,12 @@ export async function insertWalletDoc(
 ): Promise<WalletDocMeta> {
   const res = await query<DocRow>(
     `INSERT INTO wallet_docs (
-       id, user_sub, filename, content_type, size_bytes, category,
+       id, user_sub, filename, content_type, size_bytes, category, custom_label,
        note_ciphertext, note_iv, wrapped_dek, wrapped_dek_iv, file_iv,
        s3_key, created_at, updated_at, deleted_at, purge_after
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-       $13::timestamptz,$14::timestamptz,$15::timestamptz,$16::timestamptz
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+       $14::timestamptz,$15::timestamptz,$16::timestamptz,$17::timestamptz
      )
      RETURNING *`,
     [
@@ -142,6 +144,7 @@ export async function insertWalletDoc(
       doc.contentType,
       doc.sizeBytes,
       doc.category,
+      doc.customLabel,
       doc.noteCiphertext,
       doc.noteIv,
       doc.wrappedDek,
@@ -162,6 +165,7 @@ export async function updateWalletDoc(
   id: string,
   patch: {
     category?: WalletCategory;
+    customLabel?: string | null;
     noteCiphertext?: string | null;
     noteIv?: string | null;
     updatedAt: string;
@@ -172,6 +176,8 @@ export async function updateWalletDoc(
   const next: WalletDocMeta = {
     ...cur,
     category: patch.category ?? cur.category,
+    customLabel:
+      patch.customLabel !== undefined ? patch.customLabel : cur.customLabel,
     noteCiphertext:
       patch.noteCiphertext !== undefined
         ? patch.noteCiphertext
@@ -182,15 +188,17 @@ export async function updateWalletDoc(
   const res = await query<DocRow>(
     `UPDATE wallet_docs SET
        category = $3,
-       note_ciphertext = $4,
-       note_iv = $5,
-       updated_at = $6::timestamptz
+       custom_label = $4,
+       note_ciphertext = $5,
+       note_iv = $6,
+       updated_at = $7::timestamptz
      WHERE user_sub = $1 AND id = $2 AND deleted_at IS NULL
      RETURNING *`,
     [
       sub,
       id,
       next.category,
+      next.customLabel,
       next.noteCiphertext,
       next.noteIv,
       next.updatedAt,

@@ -2,19 +2,31 @@ import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
+import { marketFromCountry } from "../lib/geo";
 import { buildPrediction } from "../lib/prediction";
 import { articlesForMarket, pcosInsightsForUser } from "../lib/pcos";
 import { contentArticles } from "../lib/content";
+import {
+  createContentReport,
+  isReportReason,
+  isReportStatus,
+  isReportTarget,
+  listModerationQueue,
+  listMyReports,
+  patchReportStatus,
+} from "../store/contentReports";
 import { allWeekContent, weekContent } from "../lib/weeks";
 import {
   assembleAlenaContext,
   buildPrepCard,
+  maybeMonthlyHealthLensReport,
   generateHealthLensReport,
   getHealthLensStatus,
   getAlenaQuota,
   latestHealthLensReport,
   setPopulationLearningConsent,
   alenaChat,
+  alenaGuestChat,
   ALENA_DISCLAIMER,
 } from "../store/ai";
 import {
@@ -121,11 +133,41 @@ import type {
 import { CURRENT_POLICY_VERSION, GENERIC_PUSH_BODY } from "../types";
 import { isDsqlEnabled } from "../db/client";
 import { isDataBucketEnabled } from "../db/s3";
+import { youcamApiKey } from "../lib/secrets";
+import {
+  createSkinScan,
+  createTryOn,
+  deleteSkinScan,
+  getScanMedia,
+  getSkinScan,
+  getTryOnMedia,
+  getTryOnPublic,
+  listCatalogue,
+  listSkinScans,
+  listTryOnsPublic,
+  mirrorConsented,
+  mirrorStatus,
+  pregnancyWeek,
+} from "../store/mirror";
+import {
+  getMarketplaceListing,
+  getSheMatchPrefs,
+  listMarketplace,
+  listMyListings,
+  moderateListing,
+  patchSheMatchPrefs,
+  submitBusinessListing,
+  suggestSheMatch,
+} from "../store/marketplace";
+import { runNotificationTick, vapidPublicKey } from "../store/notify";
+import type { CreateBusinessListingRequest, MarketplaceCategory } from "../types";
+import type { SheMatchTriggerId } from "../../../../../../packages/domain/src/index";
+import { sheMatchTrigger } from "../../../../../../packages/domain/src/index";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "Authorization,Content-Type,Idempotency-Key,idempotency-key",
+    "Authorization,Content-Type,Idempotency-Key,idempotency-key,x-internal-key,X-Internal-Key",
   "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
   "Content-Type": "application/json",
 };
@@ -168,6 +210,26 @@ const SYMPTOM_LIBRARY = [
 ];
 function json(statusCode: number, body: unknown): APIGatewayProxyResult {
   return { statusCode, headers: CORS, body: JSON.stringify(body) };
+}
+
+function mapYoucamErr(err: unknown): APIGatewayProxyResult | null {
+  const msg = err instanceof Error ? err.message : "";
+  if (msg === "IMAGE_TOO_LARGE") return json(413, { error: "image_too_large" });
+  if (msg === "IMAGE_TOO_SMALL") return json(400, { error: "image_too_small" });
+  if (msg === "CATALOGUE_ITEM_INVALID") {
+    return json(400, { error: "catalogue_item_invalid" });
+  }
+  if (msg === "YOUCAM_UNCONFIGURED") return json(503, { error: "youcam_unconfigured" });
+  if (msg === "YOUCAM_RATE_LIMIT") return json(429, { error: "youcam_busy" });
+  if (msg.startsWith("YOUCAM_")) return json(503, { error: "youcam_unavailable" });
+  return null;
+}
+
+async function requireMirrorConsent(sub: string) {
+  if (!(await mirrorConsented(sub))) {
+    return json(403, { error: "mirror_consent_required" });
+  }
+  return null;
 }
 
 function claims(event: APIGatewayProxyEvent): {
@@ -258,6 +320,9 @@ export const handler = async (
   const method = event.httpMethod;
 
   if (method === "GET" && path === "/v1/health") {
+    const viewerCountry =
+      header(event, "CloudFront-Viewer-Country") ??
+      header(event, "cloudfront-viewer-country");
     return json(200, {
       ok: true,
       service: "girlcode360-api",
@@ -266,6 +331,8 @@ export const handler = async (
       policyVersion: process.env.CONSENT_POLICY_VERSION ?? CURRENT_POLICY_VERSION,
       dsql: isDsqlEnabled(),
       dataBucket: isDataBucketEnabled(),
+      viewerCountry: viewerCountry ?? null,
+      suggestedMarket: marketFromCountry(viewerCountry) ?? null,
     });
   }
 
@@ -289,6 +356,28 @@ export const handler = async (
       fileIv: meta.fileIv,
       contentType: meta.contentType,
       filename: meta.filename,
+    });
+  }
+
+  if (method === "POST" && path === "/v1/guest/alena") {
+    const body = parseBody<{ message?: string; market?: Market }>(event);
+    if (!body.message?.trim()) return json(400, { error: "message_required" });
+    const msg = body.message.trim().slice(0, 500);
+    const market: Market =
+      body.market === "NG" || body.market === "GH" || body.market === "UK"
+        ? body.market
+        : marketFromCountry(
+            header(event, "CloudFront-Viewer-Country") ??
+              header(event, "cloudfront-viewer-country"),
+          ) ?? "UK";
+    const ip =
+      header(event, "X-Forwarded-For")?.split(",")[0]?.trim() ||
+      event.requestContext.identity?.sourceIp ||
+      "unknown";
+    const result = await alenaGuestChat(msg, market, ip);
+    return json(200, {
+      ...result,
+      disclaimer: ALENA_DISCLAIMER,
     });
   }
 
@@ -316,12 +405,77 @@ export const handler = async (
     return json(200, { purged: await runDeletionPurge() });
   }
 
+  if (method === "POST" && path === "/v1/notifications/tick") {
+    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
+    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+      return json(401, { error: "unauthorized" });
+    }
+    return json(200, await runNotificationTick());
+  }
+
+  if (method === "POST" && path === "/v1/marketplace/moderate") {
+    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
+    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+      return json(401, { error: "unauthorized" });
+    }
+    const body = parseBody<{ id?: string; action?: "approve" | "reject" }>(event);
+    if (!body.id || (body.action !== "approve" && body.action !== "reject")) {
+      return json(400, { error: "id_and_action_required" });
+    }
+    const listing = await moderateListing(body.id, body.action);
+    if (!listing) return json(404, { error: "listing_not_found" });
+    return json(200, { listing });
+  }
+
+  if (method === "GET" && path === "/v1/content/moderation-queue") {
+    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
+    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+      return json(401, { error: "unauthorized" });
+    }
+    const statusRaw = event.queryStringParameters?.status;
+    if (statusRaw && !isReportStatus(statusRaw)) {
+      return json(400, { error: "invalid_status" });
+    }
+    return json(200, {
+      reports: await listModerationQueue(
+        statusRaw && isReportStatus(statusRaw) ? statusRaw : undefined,
+      ),
+    });
+  }
+
+  if (method === "PATCH" && path === "/v1/content/moderation-queue") {
+    const key = event.headers?.["x-internal-key"] ?? event.headers?.["X-Internal-Key"];
+    if (key !== (process.env.INTERNAL_PURGE_KEY ?? "dev-purge")) {
+      return json(401, { error: "unauthorized" });
+    }
+    const body = parseBody<{ id?: string; status?: string }>(event);
+    if (!body.id || !body.status || !isReportStatus(body.status)) {
+      return json(400, { error: "id_and_status_required" });
+    }
+    const report = await patchReportStatus(body.id, body.status);
+    if (!report) return json(404, { error: "report_not_found" });
+    return json(200, { report });
+  }
+
   const user = claims(event);
   if (!user) return json(401, { error: "unauthorized" });
 
   if (method === "POST" && path === "/v1/users/me/bootstrap") {
     const body = parseBody<BootstrapRequest>(event);
-    if (!body.ageConfirmed18) return json(400, { error: "age_gate_required" });
+    const existing = await getUser(user.sub);
+    if (existing && !existing.ageConfirmed18) {
+      return json(403, { error: "minor_blocked" });
+    }
+    if (!body.ageConfirmed18) {
+      await upsertUser(user.sub, {
+        email: user.email,
+        ageConfirmed18: false,
+        onboardingComplete: false,
+        market: body.market,
+        locale: body.locale,
+      });
+      return json(403, { error: "minor_blocked" });
+    }
     return json(
       200,
       await upsertUser(user.sub, {
@@ -340,12 +494,27 @@ export const handler = async (
   }
 
   if (method === "PATCH" && path === "/v1/users/me") {
-    if (!(await getUser(user.sub))) return json(404, { error: "user_not_bootstrapped" });
-    return json(200, await upsertUser(user.sub, parseBody<PatchUserRequest>(event)));
+    const existing = await getUser(user.sub);
+    if (!existing) return json(404, { error: "user_not_bootstrapped" });
+    if (!existing.ageConfirmed18) return json(403, { error: "minor_blocked" });
+    const body = parseBody<PatchUserRequest>(event);
+    if (body.onboardingComplete && !existing.ageConfirmed18) {
+      return json(403, { error: "age_gate_required" });
+    }
+    return json(
+      200,
+      await upsertUser(user.sub, {
+        market: body.market,
+        locale: body.locale,
+        onboardingComplete: body.onboardingComplete,
+      }),
+    );
   }
 
   if (method === "PATCH" && path === "/v1/users/me/modules") {
-    if (!(await getUser(user.sub))) return json(404, { error: "user_not_bootstrapped" });
+    const existing = await getUser(user.sub);
+    if (!existing) return json(404, { error: "user_not_bootstrapped" });
+    if (!existing.ageConfirmed18) return json(403, { error: "minor_blocked" });
     const body = parseBody<PatchModulesRequest>(event);
     if (!Array.isArray(body.modules) || body.modules.length === 0) {
       return json(400, { error: "modules_required" });
@@ -354,7 +523,9 @@ export const handler = async (
   }
 
   if (method === "POST" && path === "/v1/consents") {
-    if (!(await getUser(user.sub))) return json(404, { error: "user_not_bootstrapped" });
+    const existing = await getUser(user.sub);
+    if (!existing) return json(404, { error: "user_not_bootstrapped" });
+    if (!existing.ageConfirmed18) return json(403, { error: "minor_blocked" });
     const body = parseBody<PostConsentsRequest>(event);
     if (!body.jurisdiction || !body.items?.length) {
       return json(400, { error: "invalid_consent_payload" });
@@ -386,6 +557,31 @@ export const handler = async (
   }
 
   /* ——— Phase 2: cycles ——— */
+
+  {
+    const adult = await getUser(user.sub);
+    const sensitive =
+      path.startsWith("/v1/cycles") ||
+      path.startsWith("/v1/symptoms") ||
+      path.startsWith("/v1/pcos") ||
+      path.startsWith("/v1/pregnancy") ||
+      path.startsWith("/v1/ttc") ||
+      path.startsWith("/v1/wallet") ||
+      path.startsWith("/v1/alena") ||
+      path.startsWith("/v1/zara") ||
+      path.startsWith("/v1/healthlens") ||
+      path.startsWith("/v1/mirror") ||
+      path.startsWith("/v1/privacy") ||
+      path.startsWith("/v1/billing") ||
+      path.startsWith("/v1/content") ||
+      path.startsWith("/v1/notifications") ||
+      path.startsWith("/v1/emergency") ||
+      path.startsWith("/v1/marketplace") ||
+      path.startsWith("/v1/shematch");
+    if (sensitive && adult && !adult.ageConfirmed18) {
+      return json(403, { error: "minor_blocked" });
+    }
+  }
 
   if (method === "GET" && path === "/v1/symptoms/library") {
     return json(200, { symptoms: SYMPTOM_LIBRARY });
@@ -611,11 +807,16 @@ export const handler = async (
   if (method === "GET" && path === "/v1/pregnancy/weeks") {
     const weekParam = event.queryStringParameters?.week;
     if (weekParam) {
-      const w = weekContent(Number(weekParam));
+      const w = weekContent(
+        Number(weekParam),
+        (profile?.market ?? "UK") as "UK" | "NG" | "GH",
+      );
       if (!w) return json(404, { error: "week_not_found" });
       return json(200, { week: w });
     }
-    return json(200, { weeks: allWeekContent() });
+    return json(200, {
+      weeks: allWeekContent((profile?.market ?? "UK") as "UK" | "NG" | "GH"),
+    });
   }
 
   if (method === "GET" && path === "/v1/pregnancy/days") {
@@ -720,6 +921,7 @@ export const handler = async (
     } catch (e) {
       const msg = e instanceof Error ? e.message : "upload_failed";
       if (msg === "SIZE_LIMIT") return json(400, { error: "file_too_large" });
+      if (msg === "TYPE_LIMIT") return json(400, { error: "unsupported_file_type" });
       return json(400, { error: "invalid_upload" });
     }
   }
@@ -764,6 +966,7 @@ export const handler = async (
     if (method === "PATCH") {
       const body = parseBody<{
         category?: WalletCategory;
+        customLabel?: string | null;
         noteCiphertext?: string | null;
         noteIv?: string | null;
       }>(event);
@@ -810,6 +1013,166 @@ export const handler = async (
     return json(200, { ok: true });
   }
 
+  /* ——— Phase 1.4 Mirror ——— */
+
+  if (path.startsWith("/v1/mirror")) {
+    if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    if (!profile.ageConfirmed18) return json(403, { error: "age_gate_required" });
+  }
+
+  if (method === "GET" && path === "/v1/mirror/status") {
+    return json(200, await mirrorStatus(user.sub));
+  }
+
+  if (method === "POST" && path === "/v1/mirror/consent") {
+    const body = parseBody<{ granted?: boolean; jurisdiction?: Market }>(event);
+    if (typeof body.granted !== "boolean") {
+      return json(400, { error: "granted_required" });
+    }
+    const policyVersion =
+      process.env.CONSENT_POLICY_VERSION || CURRENT_POLICY_VERSION;
+    await addConsents(
+      user.sub,
+      (body.jurisdiction ?? profile!.market) as Market,
+      policyVersion,
+      [{ purpose: "mirror_biometric", granted: body.granted }],
+    );
+    return json(200, await mirrorStatus(user.sub));
+  }
+
+  if (method === "GET" && path === "/v1/mirror/catalogue") {
+    if (!(await mirrorConsented(user.sub))) {
+      return json(403, { error: "mirror_consent_required" });
+    }
+    const kind = event.queryStringParameters?.kind as
+      | "skincare"
+      | "apparel"
+      | undefined;
+    const mode = (event.queryStringParameters?.mode ?? "all") as
+      | "all"
+      | "maternity"
+      | "pmos";
+    const week =
+      mode === "maternity" ? await pregnancyWeek(user.sub) : null;
+    if (mode === "maternity" && week == null) {
+      return json(200, {
+        items: [],
+        pregnancyWeek: null,
+        emptyReason: "pregnancy_week_unknown",
+      });
+    }
+    return json(200, {
+      items: listCatalogue({ kind, mode, week }),
+      pregnancyWeek: week,
+    });
+  }
+
+  if (method === "GET" && path === "/v1/mirror/scans") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { scans: await listSkinScans(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/mirror/scans") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{ imageB64?: string }>(event);
+    if (!body.imageB64) return json(400, { error: "image_required" });
+    try {
+      const scan = await createSkinScan(user.sub, body.imageB64);
+      return json(202, { scan });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("create scan", err);
+      return json(502, { error: "scan_failed" });
+    }
+  }
+
+  const scanMatch = path.match(/^\/v1\/mirror\/scans\/([^/]+)$/);
+  if (scanMatch && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const scan = await getSkinScan(user.sub, scanMatch[1]!);
+    if (!scan) return json(404, { error: "scan_not_found" });
+    return json(200, { scan });
+  }
+  if (scanMatch && method === "DELETE") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await deleteSkinScan(user.sub, scanMatch[1]!))) {
+      return json(404, { error: "scan_not_found" });
+    }
+    return json(200, { ok: true });
+  }
+
+  const scanMedia = path.match(/^\/v1\/mirror\/scans\/([^/]+)\/media$/);
+  if (scanMedia && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const kind =
+      event.queryStringParameters?.kind === "mask" ? "mask" : "result";
+    const media = await getScanMedia(user.sub, scanMedia[1]!, kind);
+    if (!media) return json(404, { error: "media_not_found" });
+    return json(200, {
+      contentType: media.contentType,
+      imageB64: media.bytes.toString("base64"),
+    });
+  }
+
+  if (method === "GET" && path === "/v1/mirror/tryons") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { tryons: await listTryOnsPublic(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/mirror/tryons") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{ imageB64?: string; catalogueItemId?: string }>(
+      event,
+    );
+    if (!body.imageB64 || !body.catalogueItemId) {
+      return json(400, { error: "image_and_item_required" });
+    }
+    try {
+      const tryon = await createTryOn(
+        user.sub,
+        body.imageB64,
+        body.catalogueItemId,
+      );
+      return json(202, { tryon });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("create tryon", err);
+      return json(502, { error: "tryon_failed" });
+    }
+  }
+
+  const tryMatch = path.match(/^\/v1\/mirror\/tryons\/([^/]+)$/);
+  if (tryMatch && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const tryon = await getTryOnPublic(user.sub, tryMatch[1]!);
+    if (!tryon) return json(404, { error: "tryon_not_found" });
+    return json(200, { tryon });
+  }
+
+  const tryMedia = path.match(/^\/v1\/mirror\/tryons\/([^/]+)\/media$/);
+  if (tryMedia && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const media = await getTryOnMedia(user.sub, tryMedia[1]!);
+    if (!media) return json(404, { error: "media_not_found" });
+    return json(200, {
+      contentType: media.contentType,
+      imageB64: media.bytes.toString("base64"),
+    });
+  }
+
   /* ——— Phase 6: Alena + HealthLens ——— */
 
   // Legacy /v1/zara/* aliases (pre-rename)
@@ -828,6 +1191,11 @@ export const handler = async (
     const body = parseBody<{
       message?: string;
       mode?: "context" | "anonymous";
+      openedFrom?: string;
+      moduleHint?: string;
+      lat?: number;
+      lng?: number;
+      history?: Array<{ role: "user" | "assistant"; content: string }>;
     }>(event);
     if (!body.message?.trim()) return json(400, { error: "message_required" });
     const mode = body.mode === "anonymous" ? "anonymous" : "context";
@@ -840,13 +1208,28 @@ export const handler = async (
         return json(403, { error: "alena_consent_required" });
       }
     }
-    const result = await alenaChat(user.sub, body.message.trim(), mode);
+    const result = await alenaChat(user.sub, body.message.trim(), mode, {
+      openedFrom: body.openedFrom,
+      moduleHint: body.moduleHint,
+      history: Array.isArray(body.history) ? body.history : undefined,
+      lat: typeof body.lat === "number" ? body.lat : undefined,
+      lng: typeof body.lng === "number" ? body.lng : undefined,
+    });
+    if (result.error === "quota_exceeded") {
+      return json(429, { error: "quota_exceeded", quota: result.quota });
+    }
+    if (result.error === "alena_busy") {
+      return json(503, { error: "alena_busy" });
+    }
     return json(200, {
-      ...result,
+      reply: result.reply,
+      crisis: result.crisis,
+      stub: result.stub,
+      quota: result.quota,
       disclaimer: ALENA_DISCLAIMER,
-      actions: [{ id: "prep_card", label: "Generate appointment Prep Card" }],
-      // Client may animate tokens from full reply until APIGW STREAM is enabled
-      streamHint: "full_reply_v1",
+      actions: result.crisis
+        ? [{ id: "emergency", label: "Use emergency numbers" }]
+        : [{ id: "prep_card", label: "Generate appointment Prep Card" }],
     });
   }
 
@@ -857,6 +1240,15 @@ export const handler = async (
 
   if (method === "GET" && path === "/v1/healthlens/status") {
     if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    const consents = await latestConsentsByPurpose(user.sub);
+    const hl = consents.find((c) => c.purpose === "ai_healthlens");
+    if (hl?.granted) {
+      try {
+        await maybeMonthlyHealthLensReport(user.sub);
+      } catch (err) {
+        console.error("monthly healthlens", err);
+      }
+    }
     return json(200, await getHealthLensStatus(user.sub));
   }
 
@@ -966,6 +1358,176 @@ export const handler = async (
       profile.market) as "UK" | "NG" | "GH";
     const topic = event.queryStringParameters?.topic;
     return json(200, { articles: contentArticles(market, topic) });
+  }
+
+  if (method === "POST" && path === "/v1/content/reports") {
+    if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    const body = parseBody<{
+      targetType?: string;
+      targetId?: string;
+      reason?: string;
+      details?: string;
+    }>(event);
+    if (
+      !body.targetType ||
+      !isReportTarget(body.targetType) ||
+      !body.targetId ||
+      !body.reason ||
+      !isReportReason(body.reason)
+    ) {
+      return json(400, { error: "target_and_reason_required" });
+    }
+    const created = await createContentReport({
+      reporterSub: user.sub,
+      targetType: body.targetType,
+      targetId: body.targetId,
+      reason: body.reason,
+      details: body.details,
+    });
+    if (!created.ok) return json(400, { error: created.error });
+    return json(201, { report: created.report });
+  }
+
+  if (method === "GET" && path === "/v1/content/reports/mine") {
+    if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    return json(200, { reports: await listMyReports(user.sub) });
+  }
+
+  /* ——— Phase 1.7 marketplace / SheMatch / notifications ——— */
+
+  if (method === "GET" && path === "/v1/notifications/vapid") {
+    if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    return json(200, { publicKey: vapidPublicKey() });
+  }
+
+  if (method === "POST" && path === "/v1/notifications/push-subscription") {
+    if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    const body = parseBody<PushSubscriptionRequest>(event);
+    if (!body.endpoint || !body.keys?.p256dh || !body.keys?.auth) {
+      return json(400, { error: "subscription_required" });
+    }
+    const saved = await savePushSubscription(user.sub, body);
+    return json(201, { subscription: saved, pushPayload: { body: GENERIC_PUSH_BODY } });
+  }
+
+  if (!profile && (path.startsWith("/v1/marketplace") || path.startsWith("/v1/shematch"))) {
+    return json(404, { error: "user_not_bootstrapped" });
+  }
+
+  if (method === "GET" && path === "/v1/marketplace/listings") {
+    const q = event.queryStringParameters ?? {};
+    const lat = q.lat != null ? Number(q.lat) : NaN;
+    const lng = q.lng != null ? Number(q.lng) : NaN;
+    const origin =
+      Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+    const radius = q.radiusKm != null ? Number(q.radiusKm) : undefined;
+    const listings = await listMarketplace({
+      origin,
+      category: (q.category as MarketplaceCategory | undefined) || undefined,
+      radiusKm: Number.isFinite(radius) ? radius : undefined,
+      minRating: q.minRating != null ? Number(q.minRating) : undefined,
+      openNow: q.openNow === "1" || q.openNow === "true",
+      q: q.q,
+      weekday: q.weekday != null ? Number(q.weekday) : new Date().getUTCDay(),
+      hhmm: q.hhmm || "12:00",
+      market: profile?.market,
+    });
+    return json(200, {
+      listings,
+      note: "Seeded public directory plus listings that passed moderation. Confirm before you travel. Not a prescription.",
+    });
+  }
+
+  const listingMatch = path.match(/^\/v1\/marketplace\/listings\/([^/]+)$/);
+  if (listingMatch && method === "GET") {
+    const q = event.queryStringParameters ?? {};
+    const lat = q.lat != null ? Number(q.lat) : NaN;
+    const lng = q.lng != null ? Number(q.lng) : NaN;
+    const origin =
+      Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+    const listing = await getMarketplaceListing(
+      listingMatch[1]!,
+      origin,
+      q.weekday != null ? Number(q.weekday) : new Date().getUTCDay(),
+      q.hhmm || "12:00",
+    );
+    if (!listing || listing.status !== "live") {
+      return json(404, { error: "listing_not_found" });
+    }
+    return json(200, { listing });
+  }
+
+  if (method === "POST" && path === "/v1/marketplace/business") {
+    const body = parseBody<CreateBusinessListingRequest>(event);
+    if (!body.name?.trim() || !body.address?.trim() || !body.phone?.trim()) {
+      return json(400, { error: "name_address_phone_required" });
+    }
+    if (!body.category || !body.market) {
+      return json(400, { error: "category_and_market_required" });
+    }
+    if (!Number.isFinite(body.lat) || !Number.isFinite(body.lng)) {
+      return json(400, { error: "coordinates_required" });
+    }
+    if (
+      (body.category === "pharmacy" || body.category === "clinic") &&
+      !body.registrationNumber?.trim()
+    ) {
+      return json(400, { error: "registration_number_required" });
+    }
+    const listing = await submitBusinessListing(user.sub, body);
+    return json(201, {
+      listing,
+      message: "Submitted for moderation. Health listings need a registration number. Aim is review within 48 hours.",
+    });
+  }
+
+  if (method === "GET" && path === "/v1/marketplace/mine") {
+    return json(200, { listings: await listMyListings(user.sub) });
+  }
+
+  if (method === "GET" && path === "/v1/shematch/prefs") {
+    return json(200, await getSheMatchPrefs(user.sub));
+  }
+
+  if (method === "PATCH" && path === "/v1/shematch/prefs") {
+    const body = parseBody<{ modules?: Partial<Record<string, boolean>> }>(event);
+    const modules = await patchSheMatchPrefs(
+      user.sub,
+      (body.modules ?? {}) as Partial<Record<import("../types").HealthModule, boolean>>,
+    );
+    return json(200, { ...(await getSheMatchPrefs(user.sub)), modules });
+  }
+
+  if (method === "GET" && path === "/v1/shematch/suggest") {
+    const q = event.queryStringParameters ?? {};
+    const triggerId = q.trigger as SheMatchTriggerId | undefined;
+    if (!triggerId || !sheMatchTrigger(triggerId)) {
+      return json(400, { error: "trigger_required" });
+    }
+    const lat = Number(q.lat);
+    const lng = Number(q.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return json(200, { suggestions: [] });
+    }
+    const extraTags = q.tags ? q.tags.split(",").filter(Boolean) : undefined;
+    const listings = await suggestSheMatch({
+      sub: user.sub,
+      triggerId,
+      origin: { lat, lng },
+      extraTags,
+      weekday: q.weekday != null ? Number(q.weekday) : new Date().getUTCDay(),
+      hhmm: q.hhmm || "12:00",
+    });
+    const trigger = sheMatchTrigger(triggerId)!;
+    return json(200, {
+      suggestions: listings.map((listing) => ({
+        listing,
+        triggerId,
+        why: trigger.why,
+        label: "Suggested based on your health activity" as const,
+        sponsoredLabel: listing.sponsored ? ("Sponsored" as const) : null,
+      })),
+    });
   }
 
   return json(404, { error: "not_found", path, method });

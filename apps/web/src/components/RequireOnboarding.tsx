@@ -1,14 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
-import { ApiError, getMe } from "../lib/api";
+import { GateScreen } from "@/components/blocks/gate-screen";
+import { ApiError, CURRENT_POLICY_VERSION, getConsents, getMe } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
-import "../pages/onboarding.css";
 
 const CACHE_KEY = "gc_onboarding_complete";
 
 /** Gate /app until onboardingComplete — allow offline when cached complete. */
 export function RequireOnboarding({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<"loading" | "ok" | "need">("loading");
+  const [state, setState] = useState<"loading" | "ok" | "need" | "reconsent">(
+    "loading",
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -20,8 +22,23 @@ export function RequireOnboarding({ children }: { children: ReactNode }) {
       try {
         const me = await getMe();
         if (cancelled) return;
+        if (!me.ageConfirmed18) {
+          localStorage.removeItem(CACHE_KEY);
+          setState("need");
+          return;
+        }
         if (me.onboardingComplete) {
           localStorage.setItem(CACHE_KEY, "1");
+          try {
+            const c = await getConsents();
+            const health = c.current.find((x) => x.purpose === "health_data");
+            if (!health?.granted || health.policyVersion !== CURRENT_POLICY_VERSION) {
+              setState("reconsent");
+              return;
+            }
+          } catch {
+            /* still enter app if consents fail */
+          }
           setState("ok");
         } else {
           localStorage.removeItem(CACHE_KEY);
@@ -29,7 +46,11 @@ export function RequireOnboarding({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         if (cancelled) return;
-        // Auth failures → onboarding; network/5xx → respect offline cache
+        if (err instanceof ApiError && err.code === "minor_blocked") {
+          localStorage.removeItem(CACHE_KEY);
+          setState("need");
+          return;
+        }
         if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
           localStorage.removeItem(CACHE_KEY);
           setState("need");
@@ -39,7 +60,6 @@ export function RequireOnboarding({ children }: { children: ReactNode }) {
           setState("ok");
           return;
         }
-        // Offline with no cache: still enter app so cycle IDB can work
         if (typeof navigator !== "undefined" && !navigator.onLine) {
           setState("ok");
           return;
@@ -53,11 +73,10 @@ export function RequireOnboarding({ children }: { children: ReactNode }) {
   }, []);
 
   if (state === "loading") {
-    return (
-      <main className="onboarding-page">
-        <p className="onboarding-lead">Preparing your space…</p>
-      </main>
-    );
+    return <GateScreen message="Preparing your space…" />;
+  }
+  if (state === "reconsent") {
+    return <Navigate to="/onboarding?reconsent=1" replace />;
   }
   if (state === "need") {
     return <Navigate to="/onboarding" replace />;
