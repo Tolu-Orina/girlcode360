@@ -1,3 +1,4 @@
+import { accessoryTryOnReady } from "../../../../../../packages/domain/src/index";
 import type { MirrorCatalogueItem } from "../types";
 
 /** Curated demo catalogue (MIR-F-04 / F-06 / F-08). Public garment URLs from Perfect Corp samples. */
@@ -127,6 +128,159 @@ export const MIRROR_CATALOGUE: MirrorCatalogueItem[] = [
   },
 ];
 
+const SHADE_BOUTIQUES = [
+  { brandCode: "seed-a", boutiqueName: "South Ken Beauty", boutiqueArea: "London · SW7" },
+  { brandCode: "seed-b", boutiqueName: "Bloom Pharmacy", boutiqueArea: "Lagos · Ikeja" },
+  { brandCode: "seed-c", boutiqueName: "Wellness Shelf", boutiqueArea: "Accra · Osu" },
+] as const;
+
+const SHADE_CODES: Record<string, { shade: string; title: string }> = {
+  fair: { shade: "10N", title: "Fair 10N" },
+  light: { shade: "20N", title: "Light 20N" },
+  light_medium: { shade: "30N", title: "Light-medium 30N" },
+  medium: { shade: "40N", title: "Medium 40N" },
+  tan: { shade: "50N", title: "Tan 50N" },
+  deep: { shade: "60N", title: "Deep 60N" },
+};
+
+for (const shop of SHADE_BOUTIQUES) {
+  for (const [family, meta] of Object.entries(SHADE_CODES)) {
+    MIRROR_CATALOGUE.push({
+      id: `mk-${shop.brandCode}-${family}`,
+      kind: "makeup",
+      title: `${shop.brandCode} ${meta.title}`,
+      subtitle: `Foundation stocked by ${shop.boutiqueName}`,
+      tags: ["foundation", family, shop.brandCode],
+      boutiqueName: shop.boutiqueName,
+      boutiqueArea: shop.boutiqueArea,
+      trimester: null,
+      pmosFit: false,
+      brandCode: shop.brandCode,
+      shadeCode: meta.shade,
+      shadeFamily: family,
+    });
+  }
+}
+
+const ACCESSORY_SEED: Array<{
+  id: string;
+  kind: "jewellery" | "eyewear" | "nail_color";
+  title: string;
+  subtitle: string;
+  tags: string[];
+  boutiqueName: string;
+  boutiqueArea: string;
+  accessoryCategory?: "ring" | "bracelet" | "watch" | "earring" | "necklace";
+  asset3dId?: string | null;
+  frameId?: string | null;
+  nailColor?: string;
+}> = [
+  {
+    id: "jw-hoop",
+    kind: "jewellery",
+    title: "Gold hoop earring",
+    subtitle: "Retailer 3D asset on file — try-on ready",
+    tags: ["jewellery", "earring"],
+    boutiqueName: "Maternal Thread",
+    boutiqueArea: "Accra · Airport City",
+    accessoryCategory: "earring",
+    asset3dId: "seed-3d-earring-01",
+  },
+  {
+    id: "jw-band",
+    kind: "jewellery",
+    title: "Slim ring",
+    subtitle: "Retailer 3D asset on file — try-on ready",
+    tags: ["jewellery", "ring"],
+    boutiqueName: "Maternal Thread",
+    boutiqueArea: "Accra · Airport City",
+    accessoryCategory: "ring",
+    asset3dId: "seed-3d-ring-01",
+  },
+  {
+    id: "jw-bangle",
+    kind: "jewellery",
+    title: "Everyday bracelet",
+    subtitle: "Retailer 3D asset on file — try-on ready",
+    tags: ["jewellery", "bracelet"],
+    boutiqueName: "Ease Atelier",
+    boutiqueArea: "Lagos · Victoria Island",
+    accessoryCategory: "bracelet",
+    asset3dId: "seed-3d-bracelet-01",
+  },
+  {
+    id: "jw-watch",
+    kind: "jewellery",
+    title: "Slim watch",
+    subtitle: "Retailer 3D asset on file — try-on ready",
+    tags: ["jewellery", "watch"],
+    boutiqueName: "South Ken Beauty",
+    boutiqueArea: "London · SW7",
+    accessoryCategory: "watch",
+    asset3dId: "seed-3d-watch-01",
+  },
+  {
+    id: "jw-pendant",
+    kind: "jewellery",
+    title: "Fine necklace",
+    subtitle: "Retailer 3D asset on file — try-on ready",
+    tags: ["jewellery", "necklace"],
+    boutiqueName: "South Ken Beauty",
+    boutiqueArea: "London · SW7",
+    accessoryCategory: "necklace",
+    asset3dId: "seed-3d-necklace-01",
+  },
+  {
+    id: "jw-photo-only",
+    kind: "jewellery",
+    title: "Statement earring (photo only)",
+    subtitle: "No 3D asset yet — try-on stays off. We do not build 3D from this photo.",
+    tags: ["jewellery", "earring"],
+    boutiqueName: "Ease Atelier",
+    boutiqueArea: "Lagos · Victoria Island",
+    accessoryCategory: "earring",
+    asset3dId: null,
+  },
+  {
+    id: "ew-round",
+    kind: "eyewear",
+    title: "Round frame",
+    subtitle: "Optician catalogue frame — try-on ready",
+    tags: ["eyewear", "optician"],
+    boutiqueName: "South Ken Beauty",
+    boutiqueArea: "London · SW7",
+    frameId: "seed-frame-01",
+  },
+  {
+    id: "nl-rose",
+    kind: "nail_color",
+    title: "Rose nail",
+    subtitle: "Hand-photo try-on. Find a salon nearby through SheMatch.",
+    tags: ["nail", "salon"],
+    boutiqueName: "Ease Atelier",
+    boutiqueArea: "Lagos · Victoria Island",
+    nailColor: "#c45c6a",
+  },
+];
+
+for (const row of ACCESSORY_SEED) {
+  MIRROR_CATALOGUE.push({
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    subtitle: row.subtitle,
+    tags: row.tags,
+    boutiqueName: row.boutiqueName,
+    boutiqueArea: row.boutiqueArea,
+    trimester: null,
+    pmosFit: false,
+    accessoryCategory: row.accessoryCategory,
+    asset3dId: row.asset3dId,
+    frameId: row.frameId,
+    nailColor: row.nailColor,
+  });
+}
+
 export function catalogueById(id: string): MirrorCatalogueItem | undefined {
   return MIRROR_CATALOGUE.find((i) => i.id === id);
 }
@@ -134,12 +288,21 @@ export function catalogueById(id: string): MirrorCatalogueItem | undefined {
 const BANNED_GARMENT = /swimwear|lingerie|bikini|underwear|intimate/i;
 
 export function filterCatalogue(opts: {
-  kind?: "skincare" | "apparel";
+  kind?: "skincare" | "apparel" | "makeup" | "jewellery" | "eyewear" | "nail_color";
   mode?: "all" | "maternity" | "pmos";
   week?: number | null;
 }): MirrorCatalogueItem[] {
   return MIRROR_CATALOGUE.filter((item) => {
     if (BANNED_GARMENT.test(item.title) || item.tags.some((t) => BANNED_GARMENT.test(t))) {
+      return false;
+    }
+    if (
+      !opts.kind &&
+      (item.kind === "makeup" ||
+        item.kind === "jewellery" ||
+        item.kind === "eyewear" ||
+        item.kind === "nail_color")
+    ) {
       return false;
     }
     if (opts.kind && item.kind !== opts.kind) return false;

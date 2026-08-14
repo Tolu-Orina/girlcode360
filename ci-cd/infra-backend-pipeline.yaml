@@ -248,6 +248,12 @@ Resources:
                 Action:
                   - lambda:*
                 Resource: '*'
+              # module.lambda scheduler.tf — PutRule applies provider default_tags
+              - Sid: EventBridge
+                Effect: Allow
+                Action:
+                  - events:*
+                Resource: '*'
               # module.lambda_agent IAM role + inline policy (+ PassRole on create)
               - Sid: IamForLambda
                 Effect: Allow

@@ -156,10 +156,61 @@ import {
   listSkinScans,
   listTryOnsPublic,
   mirrorConsented,
+  mirrorLiveCameraConsented,
   mirrorStatus,
   pregnancyWeek,
   settleYoucamWebhook,
+  wardrobeConsented,
 } from "../store/mirror";
+import {
+  createMakeupLook,
+  createShadeMatch,
+  deleteMakeupLook,
+  getMakeupLookMedia,
+  getMakeupLookPublic,
+  listMakeupLooksPublic,
+  listShadeMatchesPublic,
+  saveMakeupLook,
+} from "../store/studio";
+import {
+  createHairScan,
+  getHairScanMedia,
+  getHairScanPublic,
+  listHairScansPublic,
+} from "../store/hair";
+import {
+  createWardrobeItem,
+  createWardrobeOutfit,
+  deleteWardrobeItem,
+  getWardrobeItemMedia,
+  getWardrobeItemPublic,
+  getWardrobeOutfitMedia,
+  getWardrobeOutfitPublic,
+  listWardrobeItemsPublic,
+  listWardrobeOutfitsPublic,
+  markOutfitWorn,
+  packingListForUser,
+  patchWardrobeItem,
+  startWardrobeOutfitTryOn,
+  suggestOutfitForToday,
+} from "../store/wardrobe";
+import { getStyleAnalytics } from "../store/style";
+import {
+  createAccessoryLook,
+  getAccessoryLookMedia,
+  getAccessoryLookPublic,
+  listAccessoryLooksPublic,
+} from "../store/accessories";
+import {
+  createResaleListing,
+  getLiveResale,
+  getResaleForOwner,
+  getResaleMedia,
+  listLiveResalePublic,
+  listMyResale,
+  listPendingResale,
+  moderateResale,
+} from "../store/resale";
 import {
   addFavourite,
   createListingReview,
@@ -203,7 +254,11 @@ import type {
   PatchOwnedListingRequest,
 } from "../types";
 import type { SheMatchTriggerId } from "../../../../../../packages/domain/src/index";
-import { sheMatchTrigger } from "../../../../../../packages/domain/src/index";
+import {
+  climateFromMarket,
+  isWardrobeClimate,
+  sheMatchTrigger,
+} from "../../../../../../packages/domain/src/index";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -260,6 +315,62 @@ function mapYoucamErr(err: unknown): APIGatewayProxyResult | null {
   if (msg === "CATALOGUE_ITEM_INVALID") {
     return json(400, { error: "catalogue_item_invalid" });
   }
+  if (msg === "STUDIO_SCAN_REQUIRED") return json(400, { error: "scan_required" });
+  if (msg === "STUDIO_FACE_REQUIRED") return json(400, { error: "image_required" });
+  if (msg === "STUDIO_REFERENCE_REQUIRED") {
+    return json(400, { error: "reference_required" });
+  }
+  if (msg === "YOUCAM_HAIR_COLOR_REQUIRED") {
+    return json(400, { error: "hair_color_required" });
+  }
+  if (msg === "YOUCAM_3D_ASSET_REQUIRED" || msg === "ACCESSORY_3D_REQUIRED") {
+    return json(400, { error: "accessory_3d_required" });
+  }
+  if (msg === "YOUCAM_NAIL_COLOR_REQUIRED") {
+    return json(400, { error: "nail_color_required" });
+  }
+  if (msg === "YOUCAM_FRAME_ID_REQUIRED") {
+    return json(400, { error: "frame_id_required" });
+  }
+  if (msg === "YOUCAM_ACCESSORY_CATEGORY_INVALID") {
+    return json(400, { error: "accessory_category_invalid" });
+  }
+  if (msg === "STUDIO_HAND_REQUIRED") {
+    return json(400, { error: "hand_photo_required" });
+  }
+  if (msg === "STUDIO_FACE_REQUIRED") {
+    return json(400, { error: "image_required" });
+  }
+  if (msg === "RESALE_PRICE_INVALID") {
+    return json(400, { error: "resale_price_invalid" });
+  }
+  if (msg === "RESALE_ALREADY_LISTED") {
+    return json(409, { error: "resale_already_listed" });
+  }
+  if (msg === "WARDROBE_CATEGORY_BANNED") {
+    return json(400, { error: "wardrobe_category_banned" });
+  }
+  if (msg === "WARDROBE_ITEMS_REQUIRED") {
+    return json(400, { error: "wardrobe_items_required" });
+  }
+  if (msg === "WARDROBE_ITEM_NOT_FOUND") {
+    return json(404, { error: "wardrobe_item_not_found" });
+  }
+  if (msg === "WARDROBE_OUTFIT_NOT_FOUND") {
+    return json(404, { error: "wardrobe_outfit_not_found" });
+  }
+  if (msg === "WARDROBE_VTO_UNSUPPORTED") {
+    return json(400, { error: "wardrobe_vto_unsupported" });
+  }
+  if (msg === "WARDROBE_CLIMATE_INVALID") {
+    return json(400, { error: "wardrobe_climate_invalid" });
+  }
+  if (msg === "WARDROBE_DATE_INVALID") {
+    return json(400, { error: "wardrobe_date_invalid" });
+  }
+  if (msg === "WARDROBE_IMAGE_MISSING") {
+    return json(400, { error: "wardrobe_image_missing" });
+  }
   if (msg === "YOUCAM_UNCONFIGURED") return json(503, { error: "youcam_unconfigured" });
   if (msg === "YOUCAM_RATE_LIMIT") return json(429, { error: "youcam_busy" });
   if (msg.startsWith("YOUCAM_")) return json(503, { error: "youcam_unavailable" });
@@ -269,6 +380,20 @@ function mapYoucamErr(err: unknown): APIGatewayProxyResult | null {
 async function requireMirrorConsent(sub: string) {
   if (!(await mirrorConsented(sub))) {
     return json(403, { error: "mirror_consent_required" });
+  }
+  return null;
+}
+
+async function requireLiveCameraConsent(sub: string) {
+  if (!(await mirrorLiveCameraConsented(sub))) {
+    return json(403, { error: "live_camera_consent_required" });
+  }
+  return null;
+}
+
+async function requireWardrobeConsent(sub: string) {
+  if (!(await wardrobeConsented(sub))) {
+    return json(403, { error: "wardrobe_consent_required" });
   }
   return null;
 }
@@ -519,12 +644,16 @@ export const handler = async (
       return json(400, { error: "id_and_action_required" });
     }
     const listing = await moderateListing(body.id, body.action);
-    if (!listing) return json(404, { error: "listing_not_found" });
-    let inAppNotified = 0;
-    if (body.action === "approve") {
-      inAppNotified = await fanOutListingLive(listing);
+    if (listing) {
+      let inAppNotified = 0;
+      if (body.action === "approve") {
+        inAppNotified = await fanOutListingLive(listing);
+      }
+      return json(200, { listing, inAppNotified });
     }
-    return json(200, { listing, inAppNotified });
+    const resale = await moderateResale(body.id, body.action);
+    if (!resale) return json(404, { error: "listing_not_found" });
+    return json(200, { resale });
   }
 
   if (method === "POST" && path === "/v1/marketplace/reviews/moderate") {
@@ -588,6 +717,7 @@ export const handler = async (
         statusRaw && isReportStatus(statusRaw) ? statusRaw : undefined,
       ),
       pendingCommunityPosts: await listPendingPosts(),
+      pendingResale: await listPendingResale(),
     });
   }
 
@@ -1224,6 +1354,10 @@ export const handler = async (
     const kind = event.queryStringParameters?.kind as
       | "skincare"
       | "apparel"
+      | "makeup"
+      | "jewellery"
+      | "eyewear"
+      | "nail_color"
       | undefined;
     const mode = (event.queryStringParameters?.mode ?? "all") as
       | "all"
@@ -1350,6 +1484,565 @@ export const handler = async (
     });
   }
 
+  /* ——— P3.2 Mirror Studio (makeup + shade) ——— */
+
+  if (method === "GET" && path === "/v1/mirror-studio/makeup") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { looks: await listMakeupLooksPublic(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/makeup/photo") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{
+      imageB64?: string;
+      scanId?: string;
+      categories?: unknown;
+    }>(event);
+    try {
+      const look = await createMakeupLook(user.sub, {
+        sourceKind: "photo",
+        imageB64: body.imageB64,
+        scanId: body.scanId,
+        categories: body.categories,
+      });
+      return json(202, { look });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("makeup photo", err);
+      return json(502, { error: "makeup_failed" });
+    }
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/makeup/live") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const live = await requireLiveCameraConsent(user.sub);
+    if (live) return live;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{
+      imageB64?: string;
+      categories?: unknown;
+    }>(event);
+    if (!body.imageB64) return json(400, { error: "image_required" });
+    try {
+      const look = await createMakeupLook(user.sub, {
+        sourceKind: "live",
+        imageB64: body.imageB64,
+        categories: body.categories,
+      });
+      return json(202, { look });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("makeup live", err);
+      return json(502, { error: "makeup_failed" });
+    }
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/makeup/transfer") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{
+      imageB64?: string;
+      scanId?: string;
+      referenceB64?: string;
+      categories?: unknown;
+    }>(event);
+    try {
+      const look = await createMakeupLook(user.sub, {
+        sourceKind: "transfer",
+        imageB64: body.imageB64,
+        scanId: body.scanId,
+        referenceB64: body.referenceB64,
+        categories: body.categories,
+      });
+      return json(202, { look });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("makeup transfer", err);
+      return json(502, { error: "makeup_failed" });
+    }
+  }
+
+  const makeupOne = path.match(/^\/v1\/mirror-studio\/makeup\/([^/]+)$/);
+  if (makeupOne && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const look = await getMakeupLookPublic(user.sub, makeupOne[1]!);
+    if (!look) return json(404, { error: "look_not_found" });
+    return json(200, { look });
+  }
+  if (makeupOne && method === "PATCH") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const body = parseBody<{ saved?: boolean }>(event);
+    if (typeof body.saved !== "boolean") return json(400, { error: "saved_required" });
+    const look = await saveMakeupLook(user.sub, makeupOne[1]!, body.saved);
+    if (!look) return json(404, { error: "look_not_found" });
+    return json(200, { look });
+  }
+  if (makeupOne && method === "DELETE") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await deleteMakeupLook(user.sub, makeupOne[1]!))) {
+      return json(404, { error: "look_not_found" });
+    }
+    return json(200, { ok: true });
+  }
+
+  const makeupMedia = path.match(/^\/v1\/mirror-studio\/makeup\/([^/]+)\/media$/);
+  if (makeupMedia && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const media = await getMakeupLookMedia(user.sub, makeupMedia[1]!);
+    if (!media) return json(404, { error: "media_not_found" });
+    return json(200, {
+      contentType: media.contentType,
+      imageB64: media.bytes.toString("base64"),
+    });
+  }
+
+  if (method === "GET" && path === "/v1/mirror-studio/shade-matches") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { matches: await listShadeMatchesPublic(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/shade-match") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{ scanId?: string; imageB64?: string }>(event);
+    try {
+      const match = await createShadeMatch(user.sub, {
+        scanId: body.scanId,
+        imageB64: body.imageB64,
+      });
+      return json(202, { match });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("shade match", err);
+      return json(502, { error: "shade_match_failed" });
+    }
+  }
+
+  if (method === "GET" && path === "/v1/mirror-studio/hair") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { scans: await listHairScansPublic(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/hair/analysis") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{ imageB64?: string; scanId?: string }>(event);
+    try {
+      const scan = await createHairScan(user.sub, {
+        kind: "analysis",
+        imageB64: body.imageB64,
+        scanId: body.scanId,
+      });
+      return json(202, { scan });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("hair analysis", err);
+      return json(502, { error: "hair_failed" });
+    }
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/hair/tryon") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{
+      imageB64?: string;
+      scanId?: string;
+      hairColor?: string;
+      hairstyleId?: string;
+    }>(event);
+    try {
+      const scan = await createHairScan(user.sub, {
+        kind: "tryon",
+        imageB64: body.imageB64,
+        scanId: body.scanId,
+        hairColor: body.hairColor,
+        hairstyleId: body.hairstyleId,
+      });
+      return json(202, { scan });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("hair tryon", err);
+      return json(502, { error: "hair_failed" });
+    }
+  }
+
+  const hairOne = path.match(/^\/v1\/mirror-studio\/hair\/([^/]+)$/);
+  if (hairOne && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const scan = await getHairScanPublic(user.sub, hairOne[1]!);
+    if (!scan) return json(404, { error: "hair_not_found" });
+    return json(200, { scan });
+  }
+
+  const hairMedia = path.match(/^\/v1\/mirror-studio\/hair\/([^/]+)\/media$/);
+  if (hairMedia && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const media = await getHairScanMedia(user.sub, hairMedia[1]!);
+    if (!media) return json(404, { error: "media_not_found" });
+    return json(200, {
+      contentType: media.contentType,
+      imageB64: media.bytes.toString("base64"),
+    });
+  }
+
+  /* ——— P3.4 My Wardrobe ——— */
+
+  if (method === "GET" && path === "/v1/mirror-studio/wardrobe/items") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { items: await listWardrobeItemsPublic(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/wardrobe/items") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const body = parseBody<{
+      imageB64?: string;
+      name?: string;
+      category?: string;
+      colourTags?: string[];
+      sampleHexes?: string[];
+      purchasePriceMinor?: number | null;
+    }>(event);
+    if (!body.imageB64) return json(400, { error: "image_required" });
+    try {
+      const item = await createWardrobeItem(user.sub, {
+        imageB64: body.imageB64,
+        name: body.name,
+        category: body.category,
+        colourTags: body.colourTags,
+        sampleHexes: body.sampleHexes,
+        purchasePriceMinor: body.purchasePriceMinor,
+      });
+      return json(201, { item });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("wardrobe item", err);
+      return json(502, { error: "wardrobe_failed" });
+    }
+  }
+
+  const wardrobeItemMedia = path.match(
+    /^\/v1\/mirror-studio\/wardrobe\/items\/([^/]+)\/media$/,
+  );
+  if (wardrobeItemMedia && method === "GET") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const media = await getWardrobeItemMedia(user.sub, wardrobeItemMedia[1]!);
+    if (!media) return json(404, { error: "media_not_found" });
+    return json(200, {
+      contentType: media.contentType,
+      imageB64: media.bytes.toString("base64"),
+    });
+  }
+
+  const wardrobeItemOne = path.match(
+    /^\/v1\/mirror-studio\/wardrobe\/items\/([^/]+)$/,
+  );
+  if (wardrobeItemOne && method === "GET") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const item = await getWardrobeItemPublic(user.sub, wardrobeItemOne[1]!);
+    if (!item) return json(404, { error: "wardrobe_item_not_found" });
+    return json(200, { item });
+  }
+  if (wardrobeItemOne && method === "PATCH") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const body = parseBody<{
+      name?: string | null;
+      category?: string;
+      colourTags?: string[];
+      purchasePriceMinor?: number | null;
+      archived?: boolean;
+    }>(event);
+    try {
+      const item = await patchWardrobeItem(user.sub, wardrobeItemOne[1]!, body);
+      if (!item) return json(404, { error: "wardrobe_item_not_found" });
+      return json(200, { item });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      return json(502, { error: "wardrobe_failed" });
+    }
+  }
+  if (wardrobeItemOne && method === "DELETE") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await deleteWardrobeItem(user.sub, wardrobeItemOne[1]!))) {
+      return json(404, { error: "wardrobe_item_not_found" });
+    }
+    return json(200, { ok: true });
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/wardrobe/packing-list") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const body = parseBody<{ nights?: number; climate?: string }>(event);
+    try {
+      const list = await packingListForUser(user.sub, {
+        nights: Number(body.nights) || 3,
+        climate: body.climate ?? "temperate",
+      });
+      return json(200, { list });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      return json(502, { error: "wardrobe_failed" });
+    }
+  }
+
+  if (method === "GET" && path === "/v1/mirror-studio/wardrobe/outfits") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { outfits: await listWardrobeOutfitsPublic(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/wardrobe/outfits") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const body = parseBody<{ itemIds?: string[]; occasion?: string }>(event);
+    try {
+      const outfit = await createWardrobeOutfit(user.sub, {
+        itemIds: body.itemIds ?? [],
+        occasion: body.occasion,
+      });
+      return json(201, { outfit });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      return json(502, { error: "wardrobe_failed" });
+    }
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/wardrobe/outfits/suggest") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const body = parseBody<{ climate?: string }>(event);
+    const sessionClimate =
+      typeof body.climate === "string" && isWardrobeClimate(body.climate)
+        ? body.climate
+        : null;
+    const market = profile?.market === "NG" || profile?.market === "GH" ? profile.market : "UK";
+    try {
+      const { suggestion, outfit } = await suggestOutfitForToday(user.sub, {
+        climate: sessionClimate ?? climateFromMarket(market),
+        climateSource: sessionClimate ? "session" : "market_default",
+      });
+      return json(200, { suggestion, outfit });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      return json(502, { error: "wardrobe_failed" });
+    }
+  }
+
+  if (method === "GET" && path === "/v1/mirror-studio/style-analytics") {
+    if (!profile) return json(404, { error: "user_not_bootstrapped" });
+    return json(200, { analytics: await getStyleAnalytics(user.sub) });
+  }
+
+  if (method === "GET" && path === "/v1/mirror-studio/accessories") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { looks: await listAccessoryLooksPublic(user.sub) });
+  }
+
+  const accKind = path.match(
+    /^\/v1\/mirror-studio\/accessories\/(jewellery|eyewear|nail)$/,
+  );
+  if (accKind && method === "POST") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{
+      catalogueItemId?: string;
+      imageB64?: string;
+      scanId?: string;
+    }>(event);
+    if (!body.catalogueItemId) return json(400, { error: "catalogue_item_invalid" });
+    try {
+      const look = await createAccessoryLook(user.sub, {
+        kind: accKind[1] as "jewellery" | "eyewear" | "nail",
+        catalogueItemId: body.catalogueItemId,
+        imageB64: body.imageB64,
+        scanId: body.scanId,
+      });
+      return json(202, { look });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("accessory tryon", err);
+      return json(502, { error: "accessory_failed" });
+    }
+  }
+
+  const accMedia = path.match(/^\/v1\/mirror-studio\/accessories\/([^/]+)\/media$/);
+  if (accMedia && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const media = await getAccessoryLookMedia(user.sub, accMedia[1]!);
+    if (!media) return json(404, { error: "media_not_found" });
+    return json(200, {
+      contentType: media.contentType,
+      imageB64: media.bytes.toString("base64"),
+    });
+  }
+
+  const accOne = path.match(/^\/v1\/mirror-studio\/accessories\/([^/]+)$/);
+  if (accOne && method === "GET") {
+    const blocked = await requireMirrorConsent(user.sub);
+    if (blocked) return blocked;
+    const look = await getAccessoryLookPublic(user.sub, accOne[1]!);
+    if (!look) return json(404, { error: "accessory_not_found" });
+    return json(200, { look });
+  }
+
+  if (method === "GET" && path === "/v1/mirror-studio/resale/listings") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    return json(200, { listings: await listMyResale(user.sub) });
+  }
+
+  if (method === "POST" && path === "/v1/mirror-studio/resale/listings") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const body = parseBody<{ wardrobeItemId?: string; priceMinor?: number }>(event);
+    if (!body.wardrobeItemId) return json(400, { error: "wardrobe_item_not_found" });
+    try {
+      const listing = await createResaleListing(user.sub, {
+        wardrobeItemId: body.wardrobeItemId,
+        priceMinor: body.priceMinor ?? 0,
+      });
+      return json(201, {
+        listing,
+        message:
+          "Held for moderation before it appears on Marketplace. Labelled as from a GirlCode360 member.",
+      });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      return json(502, { error: "resale_failed" });
+    }
+  }
+
+  const resaleMedia = path.match(
+    /^\/v1\/mirror-studio\/resale\/listings\/([^/]+)\/media$/,
+  );
+  if (resaleMedia && method === "GET") {
+    const mine = await getResaleForOwner(user.sub, resaleMedia[1]!);
+    const live = mine ? null : await getLiveResale(resaleMedia[1]!);
+    if (!mine && !live) return json(404, { error: "resale_not_found" });
+    const media = await getResaleMedia(resaleMedia[1]!);
+    if (!media) return json(404, { error: "media_not_found" });
+    return json(200, {
+      contentType: media.contentType,
+      imageB64: media.bytes.toString("base64"),
+    });
+  }
+
+  const resaleOne = path.match(/^\/v1\/mirror-studio\/resale\/listings\/([^/]+)$/);
+  if (resaleOne && method === "GET") {
+    const mine = await getResaleForOwner(user.sub, resaleOne[1]!);
+    if (mine) return json(200, { listing: mine });
+    const live = await getLiveResale(resaleOne[1]!);
+    if (!live) return json(404, { error: "resale_not_found" });
+    return json(200, { listing: live });
+  }
+
+  const wardrobeTryOn = path.match(
+    /^\/v1\/mirror-studio\/wardrobe\/outfits\/([^/]+)\/tryon$/,
+  );
+  if (wardrobeTryOn && method === "POST") {
+    const blockedW = await requireWardrobeConsent(user.sub);
+    if (blockedW) return blockedW;
+    const blockedM = await requireMirrorConsent(user.sub);
+    if (blockedM) return blockedM;
+    if (!(await youcamApiKey())) return json(503, { error: "youcam_unconfigured" });
+    const body = parseBody<{ imageB64?: string }>(event);
+    if (!body.imageB64) return json(400, { error: "image_required" });
+    try {
+      const outfit = await startWardrobeOutfitTryOn(
+        user.sub,
+        wardrobeTryOn[1]!,
+        body.imageB64,
+      );
+      return json(202, { outfit });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      console.error("wardrobe tryon", err);
+      return json(502, { error: "wardrobe_failed" });
+    }
+  }
+
+  const wardrobeOutfitMedia = path.match(
+    /^\/v1\/mirror-studio\/wardrobe\/outfits\/([^/]+)\/media$/,
+  );
+  if (wardrobeOutfitMedia && method === "GET") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const media = await getWardrobeOutfitMedia(user.sub, wardrobeOutfitMedia[1]!);
+    if (!media) return json(404, { error: "media_not_found" });
+    return json(200, {
+      contentType: media.contentType,
+      imageB64: media.bytes.toString("base64"),
+    });
+  }
+
+  const wardrobeOutfitOne = path.match(
+    /^\/v1\/mirror-studio\/wardrobe\/outfits\/([^/]+)$/,
+  );
+  if (wardrobeOutfitOne && method === "GET") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const outfit = await getWardrobeOutfitPublic(user.sub, wardrobeOutfitOne[1]!);
+    if (!outfit) return json(404, { error: "wardrobe_outfit_not_found" });
+    return json(200, { outfit });
+  }
+  if (wardrobeOutfitOne && method === "PATCH") {
+    const blocked = await requireWardrobeConsent(user.sub);
+    if (blocked) return blocked;
+    const body = parseBody<{ wornOn?: string }>(event);
+    if (!body.wornOn) return json(400, { error: "wardrobe_date_invalid" });
+    try {
+      const outfit = await markOutfitWorn(
+        user.sub,
+        wardrobeOutfitOne[1]!,
+        body.wornOn,
+      );
+      if (!outfit) return json(404, { error: "wardrobe_outfit_not_found" });
+      return json(200, { outfit });
+    } catch (err) {
+      const mapped = mapYoucamErr(err);
+      if (mapped) return mapped;
+      return json(502, { error: "wardrobe_failed" });
+    }
+  }
+
   /* ——— Phase 6: Alena + HealthLens ——— */
 
   // Legacy /v1/zara/* aliases (pre-rename)
@@ -1372,6 +2065,7 @@ export const handler = async (
       moduleHint?: string;
       lat?: number;
       lng?: number;
+      climate?: string;
       history?: Array<{ role: "user" | "assistant"; content: string }>;
     }>(event);
     if (!body.message?.trim()) return json(400, { error: "message_required" });
@@ -1391,6 +2085,10 @@ export const handler = async (
       history: Array.isArray(body.history) ? body.history : undefined,
       lat: typeof body.lat === "number" ? body.lat : undefined,
       lng: typeof body.lng === "number" ? body.lng : undefined,
+      climate:
+        typeof body.climate === "string" && isWardrobeClimate(body.climate)
+          ? body.climate
+          : undefined,
     });
     if (result.error === "quota_exceeded") {
       return json(429, { error: "quota_exceeded", quota: result.quota });
@@ -1612,7 +2310,8 @@ export const handler = async (
     });
     return json(200, {
       listings,
-      note: "Seeded public directory plus listings that passed moderation. Confirm before you travel. Not a prescription. Paid placements are labelled Sponsored.",
+      resale: await listLiveResalePublic(profile?.market),
+      note: "Seeded public directory plus listings that passed moderation. Member resale is labelled from a GirlCode360 member. Confirm before you travel. Not a prescription. Paid placements are labelled Sponsored.",
     });
   }
 
@@ -1687,7 +2386,9 @@ export const handler = async (
       user.sub,
     );
     if (!listing || listing.status !== "live") {
-      return json(404, { error: "listing_not_found" });
+      const resale = await getLiveResale(listingMatch[1]!);
+      if (!resale) return json(404, { error: "listing_not_found" });
+      return json(200, { listing: null, resale });
     }
     return json(200, { listing });
   }

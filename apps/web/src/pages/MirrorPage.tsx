@@ -9,6 +9,10 @@ import {
 import { PageHeader } from "@/components/blocks/page-header";
 import { AskAlenaLink } from "@/components/blocks/ask-alena-link";
 import { SheMatchBanner } from "@/components/blocks/shematch-banner";
+import { MirrorStudioPanel } from "@/components/blocks/mirror-studio";
+import { MirrorHairPanel } from "@/components/blocks/mirror-hair";
+import { MirrorAccessoriesPanel } from "@/components/blocks/mirror-accessories";
+import { MirrorWardrobePanel } from "@/components/blocks/mirror-wardrobe";
 import { ScoreBar } from "@/components/blocks/score-bar";
 import {
   EmptyState,
@@ -27,6 +31,7 @@ import type {
   MirrorCatalogueItem,
   MirrorStatus,
   SkinScan,
+  StyleAnalytics,
   UserProfile,
 } from "../../../../packages/api-types/src/index";
 import {
@@ -41,6 +46,7 @@ import {
   getMirrorStatus,
   getMirrorTryOn,
   getMirrorTryOnMedia,
+  getStyleAnalytics,
   listMirrorScans,
   listMirrorTryOns,
   postMirrorConsent,
@@ -49,7 +55,7 @@ import { apiBaseUrl } from "../lib/config";
 import { MIRROR_PROCESSOR_LEAD } from "../lib/consent-copy";
 import { elevatedSkinConcerns } from "../../../../packages/domain/src/index";
 
-type Tab = "scan" | "tryon" | "timeline";
+type Tab = "scan" | "makeup" | "hair" | "wardrobe" | "accessories" | "tryon" | "timeline";
 type CatalogueMode = "all" | "maternity" | "pmos";
 
 const SCORE_LABELS: Record<string, string> = {
@@ -84,6 +90,44 @@ function friendlyError(err: unknown): string {
       return "Too many scans right now. Wait a moment and try again.";
     case "mirror_consent_required":
       return "Allow Mirror photos to continue. Cycle, Alena, and Wallet stay available.";
+    case "live_camera_consent_required":
+      return "Allow live camera to capture a still. Photo mode stays available.";
+    case "scan_required":
+      return "Shade match needs a skin scan from the last 30 days.";
+    case "reference_required":
+      return "Add a reference photo for Get this look.";
+    case "hair_color_required":
+      return "Pick a hair colour for try-on.";
+    case "image_required":
+      return "Add a face photo, or take a skin scan first.";
+    case "hair_failed":
+      return "Hair Studio could not finish. Try again in a few minutes.";
+    case "wardrobe_consent_required":
+      return "Allow clothing photos to use My Wardrobe. Cycle, Alena, and Wallet stay available.";
+    case "wardrobe_category_banned":
+      return "Swimwear and lingerie are not catalogued for try-on.";
+    case "wardrobe_vto_unsupported":
+      return "Try-on needs a top, bottom, one-piece, or outerwear — not shoes or accessories.";
+    case "wardrobe_items_required":
+      return "Pick at least one catalogued piece.";
+    case "wardrobe_failed":
+      return "Wardrobe could not finish. Try again in a few minutes.";
+    case "accessory_3d_required":
+      return "This piece has no retailer 3D asset yet. We do not build 3D from a photo.";
+    case "nail_color_required":
+      return "Pick a nail colour from the catalogue.";
+    case "frame_id_required":
+      return "That frame is not try-on ready yet.";
+    case "hand_photo_required":
+      return "Nail try-on needs a hand photo.";
+    case "accessory_failed":
+      return "Accessory try-on could not finish. Try again in a few minutes.";
+    case "resale_price_invalid":
+      return "Enter a price greater than zero.";
+    case "resale_already_listed":
+      return "That piece already has a listing in review or live.";
+    case "resale_failed":
+      return "Could not create the resale listing. Try again in a few minutes.";
     case "catalogue_item_invalid":
       return "That look is not available for try-on.";
     case "api_base_url_missing":
@@ -205,6 +249,8 @@ export function MirrorPage() {
     a: null,
     b: null,
   });
+  const [style, setStyle] = useState<StyleAnalytics | null>(null);
+  const [styleReady, setStyleReady] = useState(false);
 
   const pendingScan = useRef<string | null>(null);
   const pendingTryOn = useRef<string | null>(null);
@@ -269,6 +315,25 @@ export function MirrorPage() {
       cancelled = true;
     };
   }, [loadStatus, loadWorkspace]);
+
+  useEffect(() => {
+    if (tab !== "timeline" || !apiBaseUrl) return;
+    let cancelled = false;
+    setStyleReady(false);
+    (async () => {
+      try {
+        const { analytics } = await getStyleAnalytics();
+        if (!cancelled) setStyle(analytics);
+      } catch {
+        if (!cancelled) setStyle(null);
+      } finally {
+        if (!cancelled) setStyleReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
 
   useEffect(() => {
     if (!status?.consented || !apiBaseUrl) return;
@@ -600,6 +665,10 @@ export function MirrorPage() {
         onChange={(id) => setTab(id as Tab)}
         items={[
           { id: "scan", label: "Skin scan" },
+          { id: "makeup", label: "Makeup" },
+          { id: "hair", label: "Hair" },
+          { id: "wardrobe", label: "Wardrobe" },
+          { id: "accessories", label: "Accessories" },
           { id: "tryon", label: "Try-on" },
           { id: "timeline", label: "Timeline" },
         ]}
@@ -753,6 +822,61 @@ export function MirrorPage() {
         </div>
       ) : null}
 
+      {tab === "makeup" && status ? (
+        <MirrorStudioPanel
+          status={status}
+          scans={scans}
+          market={profile?.market ?? "UK"}
+          online={online}
+          busy={busy}
+          onBusy={setBusy}
+          onError={(msg) => setError(msg)}
+          onStatus={async () => {
+            await loadStatus();
+          }}
+          friendlyError={friendlyError}
+        />
+      ) : null}
+
+      {tab === "hair" && status ? (
+        <MirrorHairPanel
+          status={status}
+          scans={scans}
+          online={online}
+          busy={busy}
+          onBusy={setBusy}
+          onError={(msg) => setError(msg)}
+          friendlyError={friendlyError}
+        />
+      ) : null}
+
+      {tab === "wardrobe" && status ? (
+        <MirrorWardrobePanel
+          status={status}
+          market={profile?.market ?? "UK"}
+          online={online}
+          busy={busy}
+          onBusy={setBusy}
+          onError={(msg) => setError(msg)}
+          onStatus={async () => {
+            await loadStatus();
+          }}
+          friendlyError={friendlyError}
+        />
+      ) : null}
+
+      {tab === "accessories" && status ? (
+        <MirrorAccessoriesPanel
+          status={status}
+          scans={scans}
+          online={online}
+          busy={busy}
+          onBusy={setBusy}
+          onError={(msg) => setError(msg)}
+          friendlyError={friendlyError}
+        />
+      ) : null}
+
       {tab === "tryon" ? (
         <div className="grid gap-4 border-t border-border pt-6">
           <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
@@ -881,8 +1005,96 @@ export function MirrorPage() {
           </h2>
           <p className={leadClass}>
             Sample points fill a thin history. Live scans are marked as yours.
-            Cycle claims need two live scans in different phases.
+            Cycle claims need two live scans in different phases. Wardrobe
+            utilisation uses pieces you already catalogued — no extra consent.
           </p>
+          {style ? (
+            <div className={cn(outlinedCardClass, "grid gap-4")}>
+              <h3 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                Style over {style.windowDays} days
+              </h3>
+              {style.utilisationPct != null ? (
+                <ScoreBar
+                  label="Closet utilisation"
+                  value={style.utilisationPct}
+                />
+              ) : (
+                <p className={leadClass}>
+                  Catalogue clothing in My Wardrobe to see how much of the closet
+                  you wore in this window.
+                </p>
+              )}
+              <p className={leadClass}>
+                {style.itemsWornInWindow} of {style.itemsCatalogued} pieces worn
+                in this window. Cost per wear is price ÷ times worn. Missing
+                prices show wear count only.
+              </p>
+              {style.costPerWear.length ? (
+                <ul className="m-0 grid list-none gap-2 p-0">
+                  {style.costPerWear.slice(0, 8).map((row) => (
+                    <li
+                      key={row.itemId}
+                      className="text-[length:var(--text-label)] text-foreground"
+                    >
+                      {row.name || "Piece"} · worn {row.wornCount}
+                      {row.costPerWearMinor != null
+                        ? ` · ${(row.costPerWearMinor / 100).toFixed(2)} per wear`
+                        : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <TrendRow
+                label="Skin overall"
+                points={style.skinTrend
+                  .filter((p) => typeof p.value === "number")
+                  .map((p) => ({
+                    id: p.id,
+                    when: p.createdAt,
+                    value: p.value as number,
+                  }))}
+              />
+              <TrendRow
+                label="Hair density"
+                points={style.hairTrend
+                  .filter((p) => typeof p.value === "number")
+                  .map((p) => ({
+                    id: p.id,
+                    when: p.createdAt,
+                    value: p.value as number,
+                  }))}
+              />
+              {style.shadeHistory.length ? (
+                <div className="grid gap-2">
+                  <p className="m-0 text-[length:var(--text-label)] text-foreground">
+                    Shade matches
+                  </p>
+                  <ol className="m-0 grid list-none gap-1 p-0">
+                    {style.shadeHistory.map((p) => (
+                      <li
+                        key={p.id}
+                        className="text-[length:var(--text-caption)] text-muted-foreground"
+                      >
+                        {formatWhen(p.createdAt)} · {p.label}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ) : (
+                <p className={leadClass}>
+                  Shade history appears after a Shade Finder match. Hair density
+                  uses Hair Studio analysis, not try-on.
+                </p>
+              )}
+            </div>
+          ) : !styleReady && apiBaseUrl ? (
+            <SkeletonBlock className="h-24" />
+          ) : apiBaseUrl ? (
+            <EmptyState
+              title="Style series not loaded"
+              body="Connect and open this tab again. No extra consent is required for these numbers."
+            />
+          ) : null}
           {!scans.length ? (
             <EmptyState
               title="No timeline yet"

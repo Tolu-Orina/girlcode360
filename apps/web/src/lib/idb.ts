@@ -2,7 +2,7 @@
  * IndexedDB schema for offline-first cycle logs + sync outbox.
  */
 const DB_NAME = "girlcode360";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export type OutboxItem = {
   id: string;
@@ -30,6 +30,10 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("outbox")) {
         const outbox = db.createObjectStore("outbox", { keyPath: "id" });
         outbox.createIndex("status", "status", { unique: false });
+      }
+      if (!db.objectStoreNames.contains("wardrobe_drafts")) {
+        const drafts = db.createObjectStore("wardrobe_drafts", { keyPath: "id" });
+        drafts.createIndex("status", "status", { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -198,4 +202,40 @@ export async function idbReplaceDays(days: unknown[]): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+export type WardrobeDraft = {
+  id: string;
+  imageB64: string;
+  name: string;
+  category: string;
+  colourTags: string[];
+  sampleHexes: string[];
+  purchasePriceMinor: number | null;
+  createdAt: string;
+  status: "pending" | "syncing" | "error";
+  error?: string;
+};
+
+export async function idbPutWardrobeDraft(draft: WardrobeDraft): Promise<void> {
+  await withStore("wardrobe_drafts", "readwrite", (s) => s.put(draft));
+}
+
+export async function idbGetWardrobeDrafts(): Promise<WardrobeDraft[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("wardrobe_drafts", "readonly");
+    const req = tx.objectStore("wardrobe_drafts").getAll();
+    req.onsuccess = () =>
+      resolve(
+        (req.result as WardrobeDraft[]).sort((a, b) =>
+          a.createdAt.localeCompare(b.createdAt),
+        ),
+      );
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function idbDeleteWardrobeDraft(id: string): Promise<void> {
+  await withStore("wardrobe_drafts", "readwrite", (s) => s.delete(id));
 }

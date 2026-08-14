@@ -1,21 +1,31 @@
 import {
   buildPrepCardText,
   correlateSkinAndCycle,
+  correlateHairAndPmos,
+  parseHairTexture,
+  climateFromMarket,
   crisisMessage,
   daysBetween,
   detectCrisis,
   findDeniedPhrases,
   healthLensActivation,
+  HAIR_HL_MONTHLY_SIGNED_OFF,
+  isWardrobeClimate,
   redactPii,
   runHealthLensRules,
+  suggestDailyOutfit,
   type HealthLensFinding,
+  type WardrobeCategory,
 } from "../../../../../../packages/domain/src/index";
 import { converseNova } from "../../../../../../packages/ai-provider/src/index";
 import { alenaGuestSystemPrompt, alenaSystemPrompt, healthLensNarrativeSystem } from "../../../../../../packages/ai-provider/src/prompts";
 import { isDsqlEnabled } from "../db/client";
 import { listCycles, listDays, getUser, listMedications } from "./memory";
 import { listPregnancyDays, listTtcDays, pregnancyStatus, ttcStatus } from "./journey";
-import { peekSkinScans } from "./mirror";
+import { peekSkinScans, wardrobeConsented, mirrorConsented } from "./mirror";
+import { peekHairScans } from "./hair";
+import { listShadeMatchesForExport } from "./studio";
+import { listWardrobeItemsForExport } from "./wardrobe";
 import { listWalletDocs } from "./wallet";
 import { listMarketplace } from "./marketplace";
 import type { Market } from "../types";
@@ -138,6 +148,7 @@ export async function alenaGuestChat(
 
 export async function assembleAlenaContext(
   sub: string,
+  opts?: { climate?: string },
 ): Promise<Record<string, unknown>> {
   const profile = await getUser(sub);
   const cycles = await listCycles(sub);
@@ -180,10 +191,99 @@ export async function assembleAlenaContext(
     pregnancy_week: preg?.week ?? null,
     last_logged: days[days.length - 1]?.date ?? null,
   };
-  const json = JSON.stringify(ctx);
+
+  const market = (profile?.market ?? "UK") as Market;
+  const climate =
+    opts?.climate && isWardrobeClimate(opts.climate)
+      ? opts.climate
+      : climateFromMarket(market);
+  const climateSource =
+    opts?.climate && isWardrobeClimate(opts.climate)
+      ? "session"
+      : "market_default";
+
+  const studio: Record<string, unknown> = {
+    calendar: null,
+    climate: { value: climate, source: climateSource },
+    climate_note:
+      "We do not read device calendars. Climate is a session or market default, not live weather.",
+    pmos_body_confidence: profile?.modules?.includes("pcos_manager") ?? false,
+    pregnancy_trimester:
+      preg?.week == null
+        ? null
+        : preg.week <= 13
+          ? 1
+          : preg.week <= 27
+            ? 2
+            : 3,
+  };
+
+  if (await wardrobeConsented(sub)) {
+    const items = (await listWardrobeItemsForExport(sub)).filter((i) => !i.archived);
+    const today = suggestDailyOutfit(
+      items.map((r) => ({
+        id: r.id,
+        category: r.category as WardrobeCategory | null,
+        name: r.name,
+        colourTags: r.colourTags,
+        wornCount: r.wornCount,
+        archived: r.archived,
+      })),
+      { climate },
+    );
+    studio.wardrobe = {
+      n: items.length,
+      categories: [...new Set(items.map((i) => i.category).filter(Boolean))],
+      today: {
+        item_ids: today.itemIds,
+        enough: today.enoughItems,
+        shop_first: today.shopFirst,
+      },
+    };
+  }
+
+  if (await mirrorConsented(sub)) {
+    const scans = (await peekSkinScans(sub)).filter(
+      (s) => s.status === "success" && !s.seeded,
+    );
+    const latestSkin = scans.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (latestSkin) {
+      studio.skin = {
+        date: latestSkin.createdAt.slice(0, 10),
+        overall: latestSkin.overallScore,
+      };
+    }
+    const hairs = (await peekHairScans(sub)).filter(
+      (h) => h.status === "success" && h.kind === "analysis",
+    );
+    const latestHair = hairs.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (latestHair) {
+      studio.hair = {
+        date: latestHair.createdAt.slice(0, 10),
+        density: latestHair.scores.hair_density ?? null,
+        type: parseHairTexture(latestHair.scores.hair_type),
+      };
+    }
+    const shades = await listShadeMatchesForExport(sub);
+    const latestShade = shades.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (latestShade) {
+      studio.shade = {
+        date: latestShade.createdAt.slice(0, 10),
+        fitzpatrick: latestShade.fitzpatrickType,
+      };
+    }
+  }
+
+  const full = { ...ctx, studio };
+  const json = JSON.stringify(full);
   return json.length > 4000
-    ? { ...ctx, recent_symptoms: recent_symptoms.slice(0, 3), _truncated: true }
-    : ctx;
+    ? {
+        ...ctx,
+        studio,
+        recent_symptoms: recent_symptoms.slice(0, 3),
+        _truncated: true,
+      }
+    : full;
 }
 
 const alenaGlobalHits: number[] = [];
@@ -213,6 +313,7 @@ export async function alenaChat(
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     lat?: number;
     lng?: number;
+    climate?: string;
   },
 ): Promise<{
   reply: string;
@@ -287,7 +388,7 @@ export async function alenaChat(
           {
             role: "user" as const,
             content: `Health summary (pseudonymised JSON):\n${JSON.stringify({
-              ...(await assembleAlenaContext(sub)),
+              ...(await assembleAlenaContext(sub, { climate: opts?.climate })),
               opened_from: opts?.openedFrom ?? null,
               module_hint: opts?.moduleHint ?? null,
             })}\n\nQuestion: ${question}`,
@@ -367,6 +468,27 @@ async function lensInput(sub: string) {
       })),
   );
 
+  const hairRows = await peekHairScans(sub);
+  const hairInsight = HAIR_HL_MONTHLY_SIGNED_OFF
+    ? correlateHairAndPmos(
+        hairRows.map((s) => ({
+          id: s.id,
+          createdAt: s.createdAt,
+          cyclePhase: s.cyclePhaseAtScan,
+          scores: {
+            hair_type: parseHairTexture(s.scores.hair_type),
+            hair_length: s.scores.hair_length,
+            hair_frizziness: s.scores.hair_frizziness,
+            hair_density: s.scores.hair_density,
+          },
+          symptomIds:
+            days.find((d) => d.date === s.createdAt.slice(0, 10))?.symptomIds ??
+            [],
+          kind: s.kind,
+        })),
+      )
+    : null;
+
   return {
     cycleIntervalsDays: intervals,
     loggingSpanDays,
@@ -381,6 +503,7 @@ async function lensInput(sub: string) {
     symptomCountPrev30: countIn(31, 60),
     pcosModule: profile?.modules.includes("pcos_manager") ?? false,
     mirrorInsight,
+    hairInsight,
   };
 }
 

@@ -20,6 +20,7 @@ export function alenaSystemPrompt(market: Market, mode: "context" | "anonymous")
         ? "Nigeria: point to FMOH-aware public pathways and typical private clinic follow-up. Do not invent a hospital name."
         : "Ghana: point to GHS-aware public pathways and typical clinic follow-up. Do not invent a hospital name.",
     "If the user asks for a nearby pharmacy or clinic, do not invent names. Say they can open Marketplace in the app, or that no listing is in range if you were not given a listing.",
+    "If the health summary includes studio.wardrobe.today, answer clothing questions from those catalogued item ids first. Never open with a shopping suggestion. Do not claim you read a calendar. Climate in the summary is a session or market default, not live weather. Complementary Makeup Studio looks are optional hints only.",
     mode === "anonymous"
       ? "Anonymous Mode: do not use or invent personal health history; answer generally only."
       : "Context Mode: you may use the provided pseudonymised health summary JSON only — no names, emails, or identifiers.",

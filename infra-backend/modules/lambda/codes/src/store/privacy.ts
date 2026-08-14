@@ -38,6 +38,19 @@ import {
   purgeUserMirror,
 } from "./mirror";
 import {
+  listMakeupLooksForExport,
+  listShadeMatchesForExport,
+  purgeUserStudio,
+} from "./studio";
+import { listHairScansForExport, purgeUserHair } from "./hair";
+import { listAccessoryLooksForExport, purgeUserAccessories } from "./accessories";
+import {
+  listWardrobeItemsForExport,
+  listWardrobeOutfitsForExport,
+  purgeUserWardrobe,
+} from "./wardrobe";
+import { listResaleForExport, purgeUserResale } from "./resale";
+import {
   getSheMatchPrefs,
   listFavouriteIds,
   listMyListings,
@@ -137,6 +150,13 @@ export async function getMyData(sub: string) {
       reportsFiled,
       communityGroupsJoined: (await listGroups(sub)).filter((g) => g.joined).length,
       inAppNotifications: (await listInbox(sub)).length,
+      makeupLooks: (await listMakeupLooksForExport(sub)).length,
+      shadeMatches: (await listShadeMatchesForExport(sub)).length,
+      hairScans: (await listHairScansForExport(sub)).length,
+      accessoryLooks: (await listAccessoryLooksForExport(sub)).length,
+      wardrobeItems: (await listWardrobeItemsForExport(sub)).length,
+      wardrobeOutfits: (await listWardrobeOutfitsForExport(sub)).length,
+      resaleListings: (await listResaleForExport(sub)).length,
     },
     inventory: {
       email: profile.email ?? null,
@@ -200,6 +220,13 @@ export async function buildExportPayload(
       groups: (await listGroups(sub)).filter((g) => g.joined),
     },
     inAppNotifications: await listInbox(sub),
+    makeupLooks: await listMakeupLooksForExport(sub),
+    shadeMatches: await listShadeMatchesForExport(sub),
+    hairScans: await listHairScansForExport(sub),
+    accessoryLooks: await listAccessoryLooksForExport(sub),
+    wardrobeItems: await listWardrobeItemsForExport(sub),
+    wardrobeOutfits: await listWardrobeOutfitsForExport(sub),
+    resaleListings: await listResaleForExport(sub),
   };
 }
 
@@ -347,6 +374,11 @@ async function wipeUser(sub: string) {
   await purgeUserJourney(sub);
   await purgeUserBilling(sub);
   await purgeUserMirror(sub);
+  await purgeUserStudio(sub);
+  await purgeUserHair(sub);
+  await purgeUserAccessories(sub);
+  await purgeUserWardrobe(sub);
+  await purgeUserResale(sub);
   await purgeUserMarketplace(sub);
   await purgeUserReports(sub);
   await purgeUserCommunity(sub);

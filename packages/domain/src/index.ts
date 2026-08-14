@@ -406,6 +406,12 @@ export * from "./shematch.ts";
 export * from "./library.ts";
 export * from "./tracking.ts";
 export * from "./community.ts";
+export * from "./fitzpatrick.ts";
+export * from "./studio.ts";
+export * from "./hair.ts";
+export * from "./wardrobe.ts";
+export * from "./stylist.ts";
+export * from "./accessories.ts";
 
 export type HealthLensInput = {
   cycleIntervalsDays: number[];
@@ -418,6 +424,14 @@ export type HealthLensInput = {
   pcosModule: boolean;
   /** MIR-F-02 reused by HealthLens — already computed, never invented here. */
   mirrorInsight?: {
+    title: string;
+    body: string;
+    confidence: "Low" | "Medium" | "High";
+    enoughScans: boolean;
+    patternFound: boolean;
+  } | null;
+  /** FR-123: only attached when HAIR_HL_MONTHLY_SIGNED_OFF is true. */
+  hairInsight?: {
     title: string;
     body: string;
     confidence: "Low" | "Medium" | "High";
@@ -442,7 +456,8 @@ export type HealthLensFinding = {
     | "foetal_movement"
     | "activation"
     | "steady"
-    | "skin_cycle";
+    | "skin_cycle"
+    | "hair_pmos";
 };
 
 export type HealthLensActivation = {
@@ -583,6 +598,17 @@ export function runHealthLensRules(input: HealthLensInput): HealthLensFinding[] 
       body: input.mirrorInsight.body,
       confidence: input.mirrorInsight.confidence,
       discussWithProvider: input.mirrorInsight.patternFound,
+    });
+  }
+
+  if (input.hairInsight?.enoughScans) {
+    findings.push({
+      id: "hair-pmos",
+      kind: "hair_pmos",
+      title: input.hairInsight.title,
+      body: input.hairInsight.body,
+      confidence: input.hairInsight.confidence,
+      discussWithProvider: input.hairInsight.patternFound,
     });
   }
 

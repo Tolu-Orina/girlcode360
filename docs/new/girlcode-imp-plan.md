@@ -1,10 +1,11 @@
 # GirlCode360 — Master Technical Implementation Plan
 
-**Version 1.3 · Updated 14 August 2026 · UK · Nigeria · Ghana**  
-**Supersedes:** v1.2 (13 August 2026 UI/UX plan), v1.0 (7 August 2026 clean-build RDS + CDK + Anthropic).  
+**Version 1.4 · Updated 14 August 2026 · Global product from initial launch markets (UK · Nigeria · Ghana)**  
+**Supersedes:** v1.3 (14 August 2026 carry-forward + Tier 2 close), v1.2 (UI/UX plan), v1.0 (clean-build RDS + CDK + Anthropic).  
 **Stack (locked):** AWS Terraform · Aurora DSQL · Cognito custom auth · React PWA (mobile-shell) · Bedrock Nova 2 Lite · Perfect Corp. YouCam API  
 **Target domain:** `girlcode.conquerorfoundation.com`  
-**Primary region:** `eu-west-2` (London)
+**Primary region:** `eu-west-2` (London)  
+**Pre-Tier 3 source:** `docs/new/girlcode-pretier3-imp-plan.md` v1.0 — folded into **§12.2** (this file is the engineering SoT).
 
 > **This is not a greenfield plan.** Terraform for `infra-web` and `infra-backend` is already applied. The health PWA, Cognito custom auth, Lambda API, DSQL schema/migrations, and Alena/HealthLens code already exist. New work **extends** that stack. Do not provision RDS, CDK, VPC/NAT, or Anthropic.
 
@@ -25,6 +26,7 @@
 11. [Wave Plan (hackathon calendar)](#11-wave-plan-hackathon-calendar)
 12. [Tiered product plan](#12-tiered-product-plan)
     - [Carry-forward register](#121-carry-forward-register-read-before-starting-17)
+    - [Pre-Tier 3 — Mirror Studio](#122-pre-tier-3--mirror-studio-beauty--fashion)
 13. [Cost Model (Indicative)](#13-cost-model-indicative)
 14. [Technical Risk Register](#14-technical-risk-register)
 15. [Appendix](#15-appendix)
@@ -38,7 +40,9 @@ GirlCode360 is a women's beauty and wellness platform for the UK, Nigeria, and G
 
 **Alena is the successor to Zara.** The companion was renamed in product, UI, APIs (`/v1/alena/*`), and migration `009_rename_zara_to_alena.sql`. Legacy `/v1/zara/*` and `/app/zara` remain aliases only. New code, copy, prompts, and this plan use **Alena** exclusively.
 
-This document is the engineering translation of the expanded PRD / Mirror / AI specs **reconciled against the live repo**. The client is a **single React Progressive Web App**: on phone-width viewports it looks and behaves like a mobile app (fixed bottom tab bar, safe-area insets, standalone/installable); on desktop it is a responsive web app with top navigation. There is no native iOS/Android build in Tiers 1–2.
+This document is the engineering translation of the expanded PRD / Mirror / AI specs **reconciled against the live repo**. The client is a **single React Progressive Web App**: on phone-width viewports it looks and behaves like a mobile app (fixed bottom tab bar, safe-area insets, standalone/installable); on desktop it is a responsive web app with top navigation. There is no native iOS/Android build in Tiers 1–2 or Pre-Tier 3. Native wrap remains a **Tier 3 Phase 3.1** decision.
+
+**Pre-Tier 3 (Mirror Studio)** sits after Tier 2 and before Tier 3. It adds eight beauty-and-fashion capabilities (STU-F-01–F-08, FR-112–FR-143) on the **existing** Mirror / YouCam gateway / Alena / HealthLens / Marketplace stack — not a second app, not a sixth tab, not a second assistant. Full engineering detail is **§12.2**. UK / Nigeria / Ghana remain the **initial launch markets** and the concrete compliance examples; they are not an architectural market cap. New-market expansion is still **Phase 3.2**.
 
 **Immediate forcing function:** YouCam API Skin AI & Apparel VTO Hackathon — submit by **17 August 2026, 11:45am EDT**. YouCam API access is redeemed and live. Wave 0 is Mirror on the existing stack, with a **curated demo catalogue** standing in for SheMatch / Business Portal.
 
@@ -50,14 +54,17 @@ This document is the engineering translation of the expanded PRD / Mirror / AI s
 |---|---|
 | **Extend, don't rebuild** | Terraform, Cognito custom pages, DSQL, Lambda router, PWA shell, Alena/HealthLens, wallet, privacy, billing stubs are locked. New features add routes, tables, and UI into that shape. |
 | **PWA-first, native-app-feeling on mobile** | One React codebase (`apps/web`). Below the `lg` breakpoint: bottom tabs, no desktop chrome, no hover-only UI. At `lg+`: top nav. Native wrap is a Tier 3 decision point, not a default. |
-| **Offline-first for health logging only** | Period/symptom/PMOS/pregnancy/TTC writes use IndexedDB + idempotent `POST /v1/cycles/sync` (already built). Mirror scans and YouCam calls are **online-only**. |
-| **Consent is infrastructure** | Versioned, append-only `consents` rows already exist. Mirror adds a new purpose (`mirror_biometric`); it does not get a second consent system. |
-| **YouCam never runs in the browser** | The PWA never holds a YouCam API key and never calls `yce-api-01.perfectcorp.com`. All calls go through GirlCode360 Lambda. Results are copied into our S3 before YouCam's 2-hour download URL expires. |
+| **Offline-first for health logging only** | Period/symptom/PMOS/pregnancy/TTC writes use IndexedDB + idempotent `POST /v1/cycles/sync` (already built). Mirror scans and YouCam S2S calls are **online-only**. Pre-Tier 3 exception: **My Wardrobe photo capture** may queue in IndexedDB; tagging, VTO, and YouCam stay network-required. |
+| **Consent is infrastructure** | Versioned, append-only `consents` rows. Mirror added `mirror_biometric`. Pre-Tier 3 adds `mirror_live_camera` and `wardrobe` to the **same** ledger — never a second consent engine. |
+| **YouCam S2S never runs in the browser** | The PWA never holds `youcam_api_key` and never calls `yce-api-01.perfectcorp.com`. All task/poll/upload goes through Lambda; results copy to our S3 within 2 hours. **AgileFace** live-camera tracking (Makeup Studio) may run on-device; only a still frame is uploaded at capture. |
 | **Alena, not Zara** | Product name, routes, prompts, quotas, and docs say Alena. Zara strings are compatibility shims only. |
 | **Reuse over duplication** | MIR-F-04 / MIR-F-06 are extra *trigger types* (or, until SheMatch exists, curated catalogue rows) — not a second marketplace engine. Phase 1.7 builds the real SheMatch engine once. |
 | **Special-category data, not a US HIPAA rebuild** | GirlCode360 is not a US HIPAA entity. UK GDPR Art. 9, Nigeria NDPA/GAID, and Ghana DPA apply. Controls: KMS, TLS, least-privilege IAM, consent ledger, no PHI in logs/env/keys. We do **not** force RDS/VPC solely to match the AWS HIPAA-eligible service list. Revisit DSQL if a hospital BAA or US PHI appears. |
 | **Cost at idle** | Aurora DSQL (scale-to-zero, no NAT). No RDS Multi-AZ, no VPC NAT Gateway, no RDS Proxy. DynamoDB only if a hot counter later proves it; Alena quota already lives in DSQL. |
 | **Single account, env-segmented** | `dev` / `test` / `prod` via Terraform workspaces/backends already in `ci-cd/`. Separate AWS accounts are a later compliance decision. |
+| **One `youcam-gateway`, more capabilities** | Pre-Tier 3 adds Makeup / Shade Finder / Hair / Nail / Jewellery / Eyewear **handlers** to the existing gateway. No sibling gateway. Auth, rate-limit, 2-hour copy-to-S3 (§5.1–5.4) stay shared. |
+| **No sixth tab** | Phone bar stays Home, Cycle, Mirror, Alena, Account. Mirror Studio is **in-page** sub-nav on `/app/mirror`. AI Stylist answers live in **Alena**, not a second chat. |
+| **Equity validation is a phase gate** | Fitzpatrick I–VI (P3.1) and hair-texture range (P3.3) must be green before those user-facing features ship. Not a launch-day checklist. |
 
 ### 2.1 Decisions superseded from v1.0
 
@@ -341,6 +348,24 @@ Keep a **module boundary** even inside one Lambda: YouCam I/O vs cycle correlati
 | S3 copy fail | Wave 0: surface failure; Wave 1: alarm |
 | YouCam outage | Circuit open after consecutive failures; **rest of app (Cycle, Alena, Wallet) stays up** (MIR-LLR-010) |
 
+### 5.10 Pre-Tier 3 — additional YouCam capabilities (same five-step pattern)
+
+Do not add a second gateway. Extend the existing `submitTask` / `pollTask` / `copyResultToS3` helpers. Full request shapes and phase mapping: **§12.2**. Webhook migration for these families waits until Skin/Apparel `POST /v1/webhooks/youcam` is proven (not in parallel).
+
+| Capability | YouCam task | GirlCode360 feature |
+|---|---|---|
+| Makeup transfer / photo try-on | `POST /s2s/v2.0/task/makeup-transfer` | STU-F-01 |
+| Live AR makeup | AgileFace **client-side**; stills via makeup-transfer | STU-F-01 live mode |
+| Shade finder + Fitzpatrick | `POST /s2s/v2.0/task/shade-finder` | STU-F-02; reuse `skin_scans` source file if &lt;30 days |
+| Hair analysis | `POST /s2s/v2.0/task/hair-analysis` | STU-F-03 diagnostic |
+| Hair colour/style try-on | `POST /s2s/v2.0/task/hair-tryon` | STU-F-03 try-on |
+| Nail try-on | `POST /s2s/v2.0/task/nail-tryon` | STU-F-05 |
+| Jewellery / watch / earring AR | `POST /s2s/v2.0/task/accessory-tryon` | STU-F-05; **retailer 3D asset required** |
+| Eyewear try-on | `POST /s2s/v2.0/task/eyewear-tryon` | STU-F-05 |
+| Wardrobe outfit VTO | Existing `apparel-tryon`; `garment_file_id` from `wardrobe_items` | STU-F-04 — new **caller**, not a new integration |
+
+Swimwear/lingerie exclusion on Apparel VTO **carries into My Wardrobe**. Do not auto-generate 3D jewellery from 2D photos (FR-133).
+
 ---
 
 ## 6. Data Architecture
@@ -409,6 +434,24 @@ CREATE TABLE IF NOT EXISTS mirror_catalogue (
 
 v1.0's five separate CMKs remain a **Wave 1 hardening option**, not a Wave 0 blocker — one existing CMK already encrypts DSQL and the data bucket.
 
+### 6.4 Pre-Tier 3 tables (DSQL-safe — no FKs)
+
+Same conventions as §6.1–6.2. SQL and migration map: **§12.2**. Applied on the next **backend** deploy per phase (`017`–`020`).
+
+| Table | Phase | Notes |
+|---|---|---|
+| `makeup_looks` | P3.1 / P3.2 | YouCam task, categories JSON, `source_kind` live/photo/transfer, S3 result, `saved`, soft delete |
+| `shade_matches` | P3.1 / P3.2 | `source_scan_id` → `skin_scans.id` (API-enforced); Fitzpatrick; matches JSON |
+| `hair_scans` | P3.3 | Cycle day/phase at scan; type/length/frizz/density JSON; S3; soft delete |
+| `wardrobe_items` | P3.4 | Clothing photos (not body); colour tags; optional `purchase_price_minor`; `worn_count` |
+| `wardrobe_outfits` | P3.4 | `item_ids` JSON; occasion; `worn_on`; optional VTO S3 key |
+| `accessory_looks` | P3.6 | Jewellery / eyewear / nail try-on persist (YouCam task, catalogue id, optional 3D/frame/nail fields, S3) |
+| `resale_listings` | P3.6 | Seller sub; wardrobe item; `price_minor`; `pending_moderation`; existing queue ref |
+
+`mirror_catalogue.kind` **extends in place** (no new table): add `jewellery` \| `eyewear` \| `nail_color` (and later `makeup_look` / `wardrobe_item` as catalogue kinds if needed). Existing: `skincare` \| `apparel`.
+
+New image classes use the **same** data-bucket prefix + CMK as `skin_scans` / `apparel_tryons`. Purge on account deletion (FR-074) must include these tables.
+
 ---
 
 ## 7. Security & Compliance Architecture
@@ -428,6 +471,15 @@ Wave 2+ optional: PrivateLink to DSQL (`vpc_endpoint_service_name` already outpu
 ### 7.3 Consent (reuse)
 
 Existing `POST /v1/consents` ledger. Wave 0: new purpose `mirror_biometric`; Mirror routes 403 until granted. Declining Mirror must not disable Cycle, Alena, or Wallet.
+
+Pre-Tier 3 (same ledger, no pre-ticked toggles, independently withdrawable):
+
+| Purpose | Gates | Phase |
+|---|---|---|
+| `mirror_live_camera` | Live-camera Makeup Studio only. Copy must say AgileFace runs on-device; YouCam gets a still at capture, not a video stream. | P3.2 |
+| `wardrobe` | My Wardrobe cataloguing and outfit generation — **clothing** photos, not face/body. Distinct from `mirror_biometric`. | P3.4 |
+
+Photo-mode makeup and shade-match stay under `mirror_biometric`. Style Analytics adds **no** new purpose (aggregation of already-consented data). Calendar for “what to wear” is a **separate** explicit consent if/when FR-126 ships.
 
 ### 7.4 Audit
 
@@ -471,6 +523,14 @@ Health writes: existing outbox. Mirror: **network required**; disable scan/try-o
 - Wellness copy only — no diagnosis language (existing `lint:copy` discipline).
 - Alena tab stays Alena; Mirror must not rename or bury the companion.
 
+### 8.4 Pre-Tier 3 — Mirror Studio IA
+
+- **No sixth tab.** Segmented control on `/app/mirror` (same `SegmentedTabs` pattern as `/app/health`): Skin · Makeup · Hair · Wardrobe · Accessories.
+- Shared task UI (submitted → poll our API → S3 result) is **parameterised**, not rebuilt per capability.
+- Live Makeup: `getUserMedia` + AgileFace + existing pre-flight overlay; photo-mode for users who decline live camera (FR-113).
+- AI Stylist is **Alena context + quota**, not a chat panel inside Mirror.
+- `lint:copy` extends to Makeup/Hair strings — no absolute styling claims, no diagnostic hair/skin language.
+
 ---
 
 ## 9. CI/CD & DevOps
@@ -500,6 +560,9 @@ Source of truth for *what*: `GirlCode360_Requirements_and_TestCases.xlsx` (and M
 | E2E | Playwright against deployed HTTPS | Happy-path: consent → scan → scores → cycle overlay → VTO on a phone-width viewport |
 | Manual | Real device | Bottom tabs, camera, install/standalone if time |
 | Load | k6 later | Wave 1 against YouCam rate limit |
+| Equity (Pre-Tier 3) | Reference image harness | Fitzpatrick I–VI shade/makeup **gates P3.1**; hair texture (straight/wavy/curly/coily) **gates P3.3**. CI must fail if the suite is skipped on those merges. |
+| Integration (Pre-Tier 3) | Same mocked task/poll/S3 as Skin/Apparel | Each new gateway handler: 429 and error paths |
+| E2E (Pre-Tier 3) | Playwright | Makeup consent → capture → result; wardrobe photo → tag → outfit VTO; Alena “what should I wear today” returns a **wardrobe** outfit, not a shop-first suggestion |
 
 Hackathon judges need a **working public URL + 1–3 min phone video**, not full spreadsheet coverage.
 
@@ -548,9 +611,9 @@ Product delivery from here is **§12**: finish Tier 1 (especially Phase 1.4 rema
 
 ## 12. Tiered product plan
 
-**How to read this section.** Product delivery is **Tier 1 (Phase 1.1–1.8)** then **Tier 2 (Phase 2.1–2.3)**. Phase 1.0 (AWS foundation) is omitted: Terraform, Cognito, DSQL, API Gateway, Lambda, and the PWA shell are already applied. Where a feature already exists in code, finish gaps and harden — do not rebuild. **Visual production quality** (tokens, shell, states, a11y, page polish) is **§16**, not a missing Phase 1.x. **Deferred seams** (Should items, infra not yet available, honest stubs) are listed in **§12.1** — read that before starting Phase 1.7 or later.
+**How to read this section.** Product delivery is **Tier 1 (Phase 1.1–1.8)** then **Tier 2 (Phase 2.1–2.3)** then **Pre-Tier 3 (P3.1–P3.6, Mirror Studio, §12.2)** then **Tier 3** (native / multi-region / population ML). Phase 1.0 (AWS foundation) is omitted: Terraform, Cognito, DSQL, API Gateway, Lambda, and the PWA shell are already applied. Where a feature already exists in code, finish gaps and harden — do not rebuild. **Visual production quality** (tokens, shell, states, a11y, page polish) is **§16**, not a missing Phase 1.x. **Deferred seams** are listed in **§12.1** — read that before starting Phase 1.7 or later, and before starting P3.1.
 
-**Out of scope (auth):** SMS / phone OTP — including Africa's Talking, Twilio, and Cognito SMS. UOB-F-01 is **email only**. Phone registration is not in Tier 1 or Tier 2.
+**Out of scope (auth):** SMS / phone OTP — including Africa's Talking, Twilio, and Cognito SMS. UOB-F-01 is **email only**. Phone registration is not in Tier 1, Tier 2, or Pre-Tier 3.
 
 Hackathon calendar (Wave 0) is §11 only. It does not replace this tier list. Mirror in Phase 1.4 is the full product epic; Wave 0 is the 17 August slice of that epic (live YouCam + curated catalogue).
 
@@ -657,15 +720,23 @@ These land in the same phase because HealthLens' pattern-flagging logic (HL-F-05
 | 1.6 | PG-F-07 nearest hospital from marketplace | **Closed in 1.7** — silent if none within 5 km | — | `SheMatchBanner` `pregnancy_emergency`; optional `gc360.pregHospitalPhone` still valid |
 | 1.7 | VAPID keys for push send | Schedule is in Terraform; live web-push needs keys in the packed secret | Ops | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` |
 | 1.8 | Apply `013_phase18_content_reports.sql` on DSQL | Migration is in repo; queue works in memory without it | Ops with other DSQL migrations | Internal `GET/PATCH /v1/content/moderation-queue` — no `apps/admin` |
-| 2.1 | Apply `014_phase21_tracking.sql` on DSQL | In repo; CodeBuild `migrate-dsql.mjs` | Next **backend** deploy | `period_lead_days`, pregnancy baseline, `kick_session_minutes`, intimacy ciphertext columns |
+| 2.1 | Apply `014_phase21_tracking.sql` on DSQL | **Fix:** DSQL rejects `ADD COLUMN … NOT NULL DEFAULT`. Column is nullable + `SET DEFAULT` + backfill. Re-run next **backend** deploy | Next **backend** deploy | `period_lead_days`, pregnancy baseline, `kick_session_minutes`, intimacy ciphertext |
 | 2.2 | Apply `015_phase22_marketplace.sql` on DSQL | In repo | Next **backend** deploy | reviews, favourites, wallet_medications |
 | 2.3 | Apply `016_phase23_community.sql` on DSQL | In repo | Next **backend** deploy | memberships, posts, in_app_notifications |
+| P3.1 | Apply `017_pretier3_makeup_shade.sql` on DSQL | In repo | Next **backend** deploy | makeup_looks, shade_matches |
+| P3.3 | Apply `018_pretier3_hair.sql` on DSQL | In repo | Next **backend** deploy | hair_scans |
+| P3.4 | Apply `019_pretier3_wardrobe.sql` on DSQL | In repo | Next **backend** deploy | wardrobe_items, wardrobe_outfits |
+| Pre-T3 | Apply `020` pretier3 migration | In repo (`accessory_looks`, `resale_listings`) | Next **backend** deploy | accessory_looks, resale_listings |
 | 2.3 | GPS “in your area” for marketing inbox | Location is session-only; we do not persist GPS | Honest: fan-out by **profile market** | Copy says so. Do not store coordinates for NTF-F-04 |
 | 2.2 | Live Paystack/Stripe sponsored checkout | Stub checkout URL + webhook `listingId` | When live keys exist | Do not fake a paid placement |
 | 2.2 | `youcam_webhook_secret` in packed secret | HMAC rejects unsigned posts | Ops | Poller remains if Perfect Corp is not pointed at `/v1/webhooks/youcam` |
-| 1.6 | HL-F-06 train a population model | Tier 1 = store opt-in only | 3.4 | `healthlens_prefs.population_learning_consent`; no training pipeline |
+| 2.2 | YouCam webhooks for Makeup/Hair/Shade/Accessories | Skin/Apparel HMAC first | After poller proven for new families | Same `/v1/webhooks/youcam`; do not parallel-migrate in P3.1 |
+| Pre-T3 | Live Paystack/Stripe for Verified Shade Match / Try-On Ready | Same stub as MKT-F-07 | Ops keys | Do not fake paid placement |
+| Pre-T3 | Retailer 3D jewellery/watch assets | Curated catalogue seeds with `asset3dId` (demo). Live Business Portal 3D intake is Phase 3.3 | Honest: try-on blocked without `asset3dId` (FR-133) | Do not auto-generate 3D from 2D photos |
+| Pre-T3 | Calendar consent for daily outfit (FR-126) | Separate explicit consent | Not shipped | Do not silently read device calendars. P3.5 uses session/market climate only. |
+| 1.6 | HL-F-06 train a population model | Tier 1 = store opt-in only | 3.4 | `healthlens_prefs.population_learning_consent`; no training pipeline. **Do not train on Mirror Studio data in Pre-Tier 3.** |
 
-**Honest empty / not-live (keep until the owning phase ships):** Alena STREAM, HD YouCam, live Paystack/Stripe checkout, YouCam webhook secret until ops fills it.
+**Honest empty / not-live (keep until the owning phase ships):** Alena STREAM, HD YouCam, live Paystack/Stripe checkout, YouCam webhook secret until ops fills it. Makeup / Shade / Hair / Wardrobe / AI Stylist / Style Analytics / Accessories / Resale are in repo. Live retailer 3D onboarding stays Phase 3.3; P3.6 uses curated `asset3dId` seeds.
 
 #### Phase 1.7 — Marketplace, SheMatch & Notifications
 
@@ -732,13 +803,228 @@ Brings in the 18 "Should"-priority features — the ones that make the product f
 - **COM-F-01** (Peer Support Groups) — TTC Circle, PCOS Warriors, Pregnancy Journey, Period Health; join/leave; anonymised display name
 - **COM-F-02** (Community Post Creation & Interaction) — 500 chars, no links, profanity filter, pending moderation; **FR-072** Report on every post → existing `content_reports` (`targetType: post`)
 
+**Honest empty / not-live (keep until the owning phase ships):** Alena STREAM, HD YouCam, live Paystack/Stripe checkout, YouCam webhook secret until ops fills it. P3.1–P3.6 are in repo. Live Business Portal 3D-authoring intake remains Phase 3.3.
+
 **Tier 2 exit criteria:** all 94 HLR features (Tier 1 + Tier 2) live in production; full regression pass including "Edge Case" test cases; HealthLens monthly report cadence proven stable across at least one full monthly cycle in production.
+
+---
+
+### 12.2 Pre-Tier 3 — Mirror Studio (Beauty & Fashion)
+
+**Status (14 Aug 2026):** **P3.1–P3.6 in repo.** Do not rebuild MIR-F-01–F-08, Alena, HealthLens, Marketplace, or the YouCam poller. No second Lambda. Monthly HealthLens hair category stays off until `HAIR_HL_MONTHLY_SIGNED_OFF`. FR-126 calendar daily outfit is **not** shipped — climate is session or market default only. Accessories try-on is gated on catalogue `asset3dId` / frame / nail hex — no 2D→3D.
+
+**Sits between:** Tier 2 (closed) and Tier 3 (native app / multi-region / population ML).
+
+**Scope sources:** PRD §3.11, Mirror spec §6, AI spec §8, roadmap §4C, extract `docs/new/girlcode-pretier3-imp-plan.md`.
+
+> This is not a greenfield plan and not a rewrite of Mirror. The single Lambda router, Aurora DSQL, Cognito, the existing YouCam gateway pattern, the PWA shell, Alena, and HealthLens are locked. Every phase **extends** that stack. If a change appears to need a new Lambda, a new database, a new AI provider, or a sixth tab, re-read §2 — do not build the extra system.
+
+#### 12.2.1 Why this tier exists
+
+Mirror through Tier 2 uses **two** YouCam product families: AI Skin Analysis and generative Apparel VTO. Pre-Tier 3 adds eight features that close documented gaps versus Sephora Virtual Artist, Ulta GLAMlab, YouCam Makeup, Whering, Acloset, Cladwell, and Indyx, while keeping GirlCode360’s differentiator: **longitudinal cycle / PMOS data**.
+
+| ID | Name | PRD | Reuses |
+|---|---|---|---|
+| **STU-F-01** | Makeup Studio | FR-112–116 | `mirror_biometric` + new `mirror_live_camera`; SheMatch for “Shop this shade” |
+| **STU-F-02** | Shade Match Engine | FR-117–119 | Existing `skin_scans` source file; SheMatch retailers; Low/Medium/High confidence like HealthLens |
+| **STU-F-03** | Hair Studio | FR-120–123 | MIR-F-02 rules engine parameterised for hair; HealthLens monthly report category |
+| **STU-F-04** | My Wardrobe | FR-124–129 | Existing Apparel VTO; IndexedDB outbox pattern; new `wardrobe` consent |
+| **STU-F-05** | Accessories Studio | FR-130–133 | Business Portal 3D assets; SheMatch nail-salon bridge |
+| **STU-F-06** | AI Stylist | FR-134–137 | **Alena** context + quota + crisis + market routing — **not** Perfect Corp. Ask AI / a second assistant |
+| **STU-F-07** | Style Analytics & Confidence Score | FR-138–140 | Existing Skin Progress Timeline + monthly report series; **no new consent** |
+| **STU-F-08** | Wardrobe Resale Bridge | FR-141–143 | Marketplace + `content_reports` queue; P2P label like Sponsored |
+
+**Out of Pre-Tier 3 (remain Tier 3 or ops):** native wrap (3.1); multi-region API (3.2); population ML on Studio data (3.4); live Paystack/Stripe for Verified Shade Match (stub like MKT-F-07); YouCam webhook cutover for **new** families until Skin/Apparel HMAC is proven; HD skin default (still Phase 3.5).
+
+#### 12.2.2 YouCam request shapes (capability payloads only)
+
+Auth, upload, poll, 2-hour URL, S3 copy: **§5.1 unchanged**.
+
+**Makeup transfer (photo / Get this look):**
+
+```http
+POST https://yce-api-01.perfectcorp.com/s2s/v2.0/task/makeup-transfer
+Authorization: Bearer {YOUCAM_API_KEY}
+Content-Type: application/json
+
+{
+  "src_file_id": "{selfie or Mirror scan file_id}",
+  "makeup_categories": ["lip", "eyeshadow", "blush", "foundation", "eyebrow", "eyeliner", "eyelash"],
+  "reference_file_id": "{optional — Get this look}",
+  "format": "json"
+}
+```
+
+Live-camera: AgileFace on-device; foundation shade defaults to Shade Match result if &lt;30 days old.
+
+**Shade finder:**
+
+```http
+POST .../s2s/v2.0/task/shade-finder
+{
+  "src_file_id": "{reuse skin_scans source if <30 days}",
+  "dst_actions": ["shade_match", "fitzpatrick_type"],
+  "brand_filter": ["optional brand codes from SheMatch-linked retailers"]
+}
+```
+
+**Hair (two independent tasks):**
+
+```http
+POST .../s2s/v2.0/task/hair-analysis
+{ "src_file_id": "{file_id}", "dst_actions": ["hair_type", "hair_length", "hair_frizziness", "hair_density"] }
+
+POST .../s2s/v2.0/task/hair-tryon
+{ "src_file_id": "{file_id}", "hair_color": "{hex or named}", "hairstyle_id": "{optional catalogue id}" }
+```
+
+**Accessories:**
+
+```http
+POST .../s2s/v2.0/task/nail-tryon
+{ "src_file_id": "{hand photo}", "nail_color": "{hex}" }
+
+POST .../s2s/v2.0/task/accessory-tryon
+{ "src_file_id": "{file_id}", "accessory_category": "ring|bracelet|watch|earring|necklace", "asset_3d_id": "{retailer 3D id}" }
+
+POST .../s2s/v2.0/task/eyewear-tryon
+{ "src_file_id": "{file_id}", "frame_id": "{catalogue frame id}" }
+```
+
+Wardrobe outfits call **existing** `apparel-tryon` with `garment_file_id` from the user’s item photo.
+
+#### 12.2.3 DSQL DDL (illustrative)
+
+```sql
+-- 017_pretier3_makeup_shade.sql (P3.1)
+CREATE TABLE IF NOT EXISTS makeup_looks (
+  id TEXT PRIMARY KEY, user_sub TEXT NOT NULL, youcam_task_id TEXT NOT NULL,
+  categories TEXT NOT NULL, source_kind TEXT NOT NULL, result_s3_key TEXT NOT NULL,
+  saved BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), deleted_at TIMESTAMPTZ
+);
+CREATE INDEX ASYNC IF NOT EXISTS makeup_looks_user_sub_idx ON makeup_looks (user_sub);
+
+CREATE TABLE IF NOT EXISTS shade_matches (
+  id TEXT PRIMARY KEY, user_sub TEXT NOT NULL, source_scan_id TEXT NOT NULL,
+  fitzpatrick_type TEXT, matches TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ASYNC IF NOT EXISTS shade_matches_user_sub_idx ON shade_matches (user_sub);
+
+-- 018_pretier3_hair.sql (P3.3)
+CREATE TABLE IF NOT EXISTS hair_scans (
+  id TEXT PRIMARY KEY, user_sub TEXT NOT NULL, youcam_task_id TEXT NOT NULL,
+  cycle_day_at_scan INT, cycle_phase_at_scan TEXT, type_score TEXT,
+  result_s3_key TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), deleted_at TIMESTAMPTZ
+);
+CREATE INDEX ASYNC IF NOT EXISTS hair_scans_user_sub_idx ON hair_scans (user_sub);
+
+-- 019_pretier3_wardrobe.sql (P3.4)
+CREATE TABLE IF NOT EXISTS wardrobe_items (
+  id TEXT PRIMARY KEY, user_sub TEXT NOT NULL, category TEXT, colour_tags TEXT,
+  purchase_price_minor INT, image_s3_key TEXT NOT NULL,
+  worn_count INT NOT NULL DEFAULT 0, archived BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), deleted_at TIMESTAMPTZ
+);
+CREATE INDEX ASYNC IF NOT EXISTS wardrobe_items_user_sub_idx ON wardrobe_items (user_sub);
+
+CREATE TABLE IF NOT EXISTS wardrobe_outfits (
+  id TEXT PRIMARY KEY, user_sub TEXT NOT NULL, item_ids TEXT NOT NULL,
+  occasion TEXT, worn_on DATE, tryon_result_s3_key TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ASYNC IF NOT EXISTS wardrobe_outfits_user_sub_idx ON wardrobe_outfits (user_sub);
+
+-- 020_pretier3_accessories_resale.sql (P3.6)
+CREATE TABLE IF NOT EXISTS resale_listings (
+  id TEXT PRIMARY KEY, user_sub TEXT NOT NULL, wardrobe_item_id TEXT NOT NULL,
+  price_minor INT NOT NULL, status TEXT NOT NULL DEFAULT 'pending_moderation',
+  moderation_ref TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ASYNC IF NOT EXISTS resale_listings_user_sub_idx ON resale_listings (user_sub);
+```
+
+One DDL statement per statement in the file (DSQL). No `FOREIGN KEY`.
+
+#### 12.2.4 Routes (existing `handlers/api.ts` only)
+
+| Route family | Phase | Gate |
+|---|---|---|
+| `POST /v1/mirror-studio/makeup/*` | P3.2 | `mirror_biometric`; live mode also `mirror_live_camera` |
+| `POST /v1/mirror-studio/shade-match` | P3.2 | `mirror_biometric` |
+| `POST /v1/mirror-studio/hair/analysis` and `/hair/tryon` | P3.3 | `mirror_biometric` |
+| `GET/POST /v1/mirror-studio/wardrobe/*` | P3.4 | `wardrobe` |
+| `POST /v1/mirror-studio/wardrobe/outfits/suggest` | P3.5 | Alena context extension — **not** a second recommender |
+| `GET /v1/mirror-studio/style-analytics` | P3.5 | Read-only over consented data |
+| `POST /v1/mirror-studio/accessories/*` | P3.6 | `mirror_biometric`; 3D asset availability |
+| `POST /v1/mirror-studio/resale/listings` | P3.6 | Existing marketplace + moderation flow |
+
+**P3.5 code-review gate:** reject any PR that adds a second Bedrock `converse` path for styling. Extend `ALN-F-02` context construction: wardrobe summary (not raw photos), latest skin/hair scores, latest shade match, session weather, pregnancy trimester or PMOS body-confidence flag. Same Nova call, same ALN-F-05 quota, same ALN-F-04 crisis, same ALN-F-06 routing.
+
+**Style Analytics:** new series on the **existing** timeline / monthly report — utilisation %, cost-per-wear (`purchase_price_minor ÷ worn_count`, null-safe), shade-match history, hair-score trend. Hair-vs-PMOS correlation: same min-2-scans guardrail and “no clear pattern yet” as MIR-F-02. Clinical advisor review of copy before P3.3 ships.
+
+#### 12.2.5 Phased build (P3.1–P3.6) — implement in this order
+
+**P3.1 — Foundations & equity validation**  
+**Status (14 Aug 2026):** In repo. Gateway handlers for Makeup, Hair, Shade Finder, Nail, Jewellery, Eyewear share `submitTask` / `pollTask` (S3 persist via existing `copyResultToS3` on the Mirror store). `mirror_live_camera` on the existing ledger (not pre-ticked). Fitzpatrick I–VI harness in `packages/domain` (synthetic fixtures; P3.2 confirms on real scans). Migration `017_pretier3_makeup_shade.sql` applies on the next **backend** deploy.  
+**Done when:** six new handlers pass mocked integration tests; Fitzpatrick suite green; `017` on next backend deploy. **Met in code** except DSQL apply (ops/deploy).
+
+**P3.2 — Makeup Studio + Shade Match Engine**  
+**Status (14 Aug 2026):** In repo. `POST /v1/mirror-studio/makeup/{live,photo,transfer}`, shade-match, Makeup tab on `/app/mirror`. Live camera uses `getUserMedia` + on-device guide; a still is uploaded (AgileFace vendor WASM is not bundled — YouCam still never runs in the browser). Shade twins from `mirror_catalogue` makeup stock.  
+**Done when:** live and photo try-on work E2E; shade list is cross-brand from `mirror_catalogue`-linked retailers; P3.1 validation confirmed on real scans.
+
+**P3.3 — Hair Studio**  
+**Status (14 Aug 2026):** In repo. `POST /v1/mirror-studio/hair/{analysis,tryon}`, Hair tab on `/app/mirror`. Texture harness (straight/wavy/curly/coily) in `packages/domain`. Correlation copy on Hair Studio; `HAIR_HL_MONTHLY_SIGNED_OFF = false` so monthly HealthLens does not attach a hair category yet. Migration `018_pretier3_hair.sql` applies on the next **backend** deploy.  
+**Done when:** both hair tasks work; correlation appears in the next HealthLens monthly report only after sign-off; texture suite green. **Met in code** except DSQL apply (ops/deploy) and clinical sign-off of monthly HL copy.
+
+**P3.4 — My Wardrobe**  
+**Status (14 Aug 2026):** In repo. `wardrobe` consent on the existing ledger (not pre-ticked). `GET/POST /v1/mirror-studio/wardrobe/items`, outfits, packing-list. Offline IndexedDB draft queue (cap 50). Tagging is local colour/category suggestion the user can correct — not a second Bedrock path. Outfit VTO reuses `cloth-v3` with `ref_file_id` from the garment photo. Swimwear/lingerie banned. Migration `019_pretier3_wardrobe.sql` applies on the next **backend** deploy. FR-126 calendar and `outfits/suggest` are **not** in this phase.  
+**Done when:** 20+ items can be catalogued offline, sync/tag on reconnect, and generate an outfit try-on on the user’s body photo within the existing 15s VTO budget. **Met in code** except DSQL apply (ops/deploy).
+
+**P3.5 — AI Stylist + Style Analytics**  
+**Status (14 Aug 2026):** In repo. AI Stylist is **Alena** — same `converseNova` / ALN-F-05 quota / ALN-F-04 crisis / ALN-F-06 routing. `assembleAlenaContext` gained optional `climate` (session or market default). `POST /v1/mirror-studio/wardrobe/outfits/suggest` is a **deterministic** wardrobe-first outfit (no Bedrock). `GET /v1/mirror-studio/style-analytics` is read-only over consented wardrobe/mirror data; **no new consent**. Timeline on `/app/mirror` adds utilisation, cost-per-wear, shade history, hair-density. Complementary makeup (FR-136) is Should and not shipped. No live weather API. No calendar read (FR-126 still honest-empty).  
+**Done when:** stylist queries count on the existing Alena quota; Style Analytics renders on the existing timeline with **zero** new consent prompts. **Met in code.**
+
+**P3.6 — Accessories Studio + Resale**  
+**Status (14 Aug 2026):** In repo. `POST /v1/mirror-studio/accessories/{jewellery,eyewear,nail}` on the existing YouCam gateway. Catalogue kinds `jewellery` / `eyewear` / `nail_color` with at least one try-on-ready seed per jewellery category, plus eyewear and nail. Pieces without `asset3dId` stay honest-empty (FR-133). Resale: one tap from a wardrobe item → `pending_moderation` → existing `POST /v1/marketplace/moderate` and content queue `pendingResale`. Live rows labelled **from a GirlCode360 member**. Buyer thread reuses listing reviews. Nail SheMatch trigger `mirror_nail` on existing boutiques tagged `nail` — no invented salons. Migration `020_pretier3_accessories_resale.sql` applies on the next **backend** deploy.  
+**Done when:** at least one retailer per accessory category has validated 3D assets; resale rows go through the existing queue. **Met in code** with curated catalogue seeds (live portal 3D intake remains Phase 3.3) except DSQL apply (ops/deploy).
+
+**Pre-Tier 3 exit criteria:** all eight STU features in production; equity/accuracy suites from §10 green; Fitzpatrick and hair-texture results published internally before any retailer partnership is marketed as “verified”; **zero** new Lambda functions, **zero** new AI providers, **zero** new consent *systems* (two new *purposes* on the existing ledger only).
+
+#### 12.2.6 Monetisation
+
+- Consumer: Studio bundles into **existing Premium** (extend ALN-F-05). Not a new billing product.
+- Retailer: “Verified Shade Match” and “Try-On Ready” extend **MKT-F-07** (stub checkout + webhook flag) contingent on accurate shade inventory or validated 3D assets via `/business`.
+- KPI: Premium attach among Mirror users tracked from P3.2; do not lock a target until Makeup Studio has real usage.
+
+#### 12.2.7 Incremental cost (on top of §13)
+
+| Line | Note |
+|---|---|
+| YouCam units | Makeup / Hair / Shade / Accessory volume — same console + billing alerts as Skin/Apparel |
+| S3 | New image classes in the **existing** bucket/key/CMK |
+| DSQL | New tables, same cluster |
+| Bedrock | AI Stylist on existing Alena quota — worst-case free-tier spend unchanged |
+
+No new secrets. New capabilities use `youcam_api_key` in `girlcode360/{env}/app`.
+
+#### 12.2.8 Pre-Tier 3 risks
+
+| Risk | Mitigation |
+|---|---|
+| Shade/hair accuracy fails on darker skin or coily hair post-launch | P3.1 / P3.3 gates are non-negotiable |
+| Second conversational AI for styling | P3.5 review gate |
+| 3D assets late | Do not pull P3.6 forward |
+| Wardrobe IndexedDB unbounded | Reuse health-outbox storage cap |
+| `mirror_catalogue` kind sprawl | Revisit only if a 7th+ kind is proposed after this tier |
 
 ---
 
 ### TIER 3 — Depth, Scale & Ecosystem
 
-This tier is explicitly **beyond the current requirements matrix** — it is where the product goes once the full 94-feature scope is live and the team is validating growth and scale rather than closing a fixed backlog. Phased as strategic initiatives rather than a fixed feature list; sequencing depends on real Tier 1/2 usage data.
+This tier is **after Pre-Tier 3**. It is where the product goes once the 94 HLR features **and** Mirror Studio (STU-F-01–F-08) are live, and the team is validating growth and scale rather than closing that backlog. Phased as strategic initiatives; sequencing depends on real usage data. Do not pull jewellery/makeup/wardrobe work back into 3.5 — that is §12.2.
 
 #### Phase 3.1 — Native app decision point
 
@@ -752,17 +1038,17 @@ Full AWS account isolation (separate accounts per environment) if compliance/aud
 
 #### Phase 3.3 — Business Portal & marketplace self-service maturity
 
-Full self-service Business Portal onboarding flow (beyond Tier 1/2's founder-assisted seeding), automated moderation-queue tooling, boutique inventory catalog sync APIs for larger retail partners.
+Full self-service Business Portal onboarding (beyond founder-assisted seeding), automated moderation-queue tooling, boutique inventory catalog sync, and **3D-authoring intake** for Accessories Studio (P3.6 already requires at least one retailer per category; 3.3 is scale/self-serve of that intake).
 
 #### Phase 3.4 — AI/ML maturity
 
-HL-F-06's population learning (opt-in aggregate pattern detection) moves from "collect consented data" (Tier 1 scope — checkbox + `healthlens_prefs` row only) to "train and deploy an actual GirlCode360-owned model" — this is the point where population-level PMOS/cycle-irregularity pattern detection could graduate beyond rules-engine + Nova narrative into a genuinely proprietary model, if the consented dataset is large enough to justify it. Do not train on users who never granted this purpose.
+HL-F-06's population learning (opt-in aggregate pattern detection) moves from "collect consented data" (Tier 1 scope — checkbox + `healthlens_prefs` row only) to "train and deploy an actual GirlCode360-owned model" — this is the point where population-level PMOS/cycle-irregularity pattern detection could graduate beyond rules-engine + Nova narrative into a genuinely proprietary model, if the consented dataset is large enough to justify it. Do not train on users who never granted this purpose. Do not start a population pipeline on Mirror Studio data in Pre-Tier 3 — consented collection only, same as HL-F-06.
 
 Multi-language support (Pidgin, Twi) across Alena, HealthLens narratives, and educational content — flagged as future in `COM-LLR-001`'s market notes and now formally scoped here.
 
-#### Phase 3.5 — Advanced Mirror
+#### Phase 3.5 — Advanced Mirror (HD)
 
-HD-tier skin analysis as a Premium-tier default (currently SD-default per §5.5), skin-age trend tracking, and — pending Perfect Corp.'s API roadmap — expansion into their broader Fashion API suite (jewellery, watches, bags, shoes) as additional Mirror try-on categories beyond apparel.
+HD-tier skin analysis as a Premium default (Wave 0/Tier 1 is **SD** per §5.5) and skin-age trend tracking. Jewellery, watches, eyewear, nails, makeup, shade, hair, and wardrobe **are Pre-Tier 3 (§12.2)**, not this phase. Bags/shoes remain pending Perfect Corp. API roadmap if still unused after P3.6.
 
 ---
 
@@ -780,10 +1066,12 @@ Early MAU, order-of-magnitude. Confirm on the AWS bill.
 | Secrets Manager | ~$0.40–2 | Packed JSON preferred |
 | CloudWatch | $20–60 | Log volume |
 | Bedrock Nova 2 Lite | Variable | Bounded by Alena 3/day free quota |
-| YouCam units | Variable | 1,000 hackathon units then PAYG |
+| YouCam units | Variable | 1,000 hackathon units then PAYG; Pre-Tier 3 Makeup/Hair/Shade/Accessory volume on the same bill |
 | **AWS subtotal (no RDS/NAT)** | **typically well under v1.0's $300–650** | v1.0 RDS $150–250 + DynamoDB $20–50 + NAT removed |
-| SMS OTP | **Out of scope** | No phone auth in Tiers 1–2 |
-| Stripe/Paystack | Phase 1.7 / 2.2 | Fees on success |
+| SMS OTP | **Out of scope** | No phone auth in Tiers 1–2 or Pre-Tier 3 |
+| Stripe/Paystack | Phase 1.7 / 2.2 / P3.6 stub | Fees on success; Verified Shade Match uses the same stub until live keys |
+
+Pre-Tier 3 incremental: S3 for makeup/hair/wardrobe images in the existing bucket; Bedrock spend still bounded by Alena quota (AI Stylist is not a second meter). See §12.2.7.
 
 ---
 
@@ -800,6 +1088,9 @@ Early MAU, order-of-magnitude. Confirm on the AWS bill.
 | iOS PWA camera / push | Medium | Medium | Wave 0: HTTPS + getUserMedia; Wave 3 native if needed |
 | Parent-domain DNS blast radius | Low | High | Only `girlcode` records; already isolated in infra-web |
 | Cross-continent “global DB” expectation | — | — | Out of scope; CloudFront for static; single-region API |
+| Shade/hair equity failure if validation skipped | Medium under schedule pressure | High | §12.2 P3.1 / P3.3 gates |
+| Second Alena for styling | Low with P3.5 review gate | Medium | Reject a second Bedrock converse path |
+| Accessories blocked on 3D assets | Medium | Absorbed by P3.6 last | Do not reorder phases |
 
 **Revisit DSQL if:** BAA/US PHI; DPU bill &gt; small RDS for 2 months; PostGIS/pgvector/triggers required.
 
@@ -828,7 +1119,15 @@ YOUCAM_API_SERVER              https://yce-api-01.perfectcorp.com
 | Poll skin | `GET /s2s/v2.0/task/skin-analysis/{task_id}` |
 | Apparel task | `POST /s2s/v2.0/task/apparel-tryon` |
 | Poll apparel | `GET /s2s/v2.0/task/apparel-tryon/{task_id}` |
-| Our webhook (Phase 2.2) | `POST /webhooks/youcam` |
+| Makeup transfer | `POST /s2s/v2.0/task/makeup-transfer` |
+| Shade finder | `POST /s2s/v2.0/task/shade-finder` |
+| Hair analysis | `POST /s2s/v2.0/task/hair-analysis` |
+| Hair try-on | `POST /s2s/v2.0/task/hair-tryon` |
+| Nail try-on | `POST /s2s/v2.0/task/nail-tryon` |
+| Accessory try-on | `POST /s2s/v2.0/task/accessory-tryon` |
+| Eyewear try-on | `POST /s2s/v2.0/task/eyewear-tryon` |
+| Our webhook (Phase 2.2; new families after proven) | `POST /v1/webhooks/youcam` |
+| Mirror Studio API (P3.2+) | `/v1/mirror-studio/**` — §12.2.4 |
 
 ### 15.3 Naming: Alena vs Zara
 
@@ -842,9 +1141,10 @@ YOUCAM_API_SERVER              https://yce-api-01.perfectcorp.com
 
 ### 15.4 Source documents
 
-- This file — engineering source of truth for sequencing and stack
+- This file — engineering source of truth for sequencing and stack (**v1.4** includes Pre-Tier 3 §12.2)
+- `docs/new/girlcode-pretier3-imp-plan.md` — research extract; canonical engineering copy is §12.2
 - `docs/old/girlcode-implementation-plan.md` — original 14-day build; Phase 0–7 code status
-- `docs/new/girlcode-prd.md`, `girlcode-ai-feature-spec.md`, `girlcode-mirror-spec.md`, `girlcode-roadmap.md`
+- `docs/new/girlcode-prd.md` §3.11, `girlcode-ai-feature-spec.md` §8, `girlcode-mirror-spec.md` §6, `girlcode-roadmap.md` §4C
 - Perfect Corp. YouCam API docs (August 2026)
 - AWS Aurora DSQL user guide (PostgreSQL compatibility, CREATE TABLE, pricing FAQ)
 
@@ -876,6 +1176,7 @@ YOUCAM_API_SERVER              https://yce-api-01.perfectcorp.com
 | 1.7 Marketplace | Absent | Landing may mention SheMatch as coming; no fake marketplace UI |
 | 1.8 Library / My Data / deletion | Present | Library + Account Privacy Centre |
 | 2.1 extras already in UI | Weight, kicks, BBT, mucus, intimacy, month summary | Keep; style consistently |
+| Pre-T3 Mirror Studio | Not in code until P3.x | Skin · Makeup · Hair · Wardrobe · Accessories **inside** `/app/mirror`; AI Stylist in Alena; no sixth tab |
 
 **Exit for this track:** every shipped route in `apps/web` uses the token file, one button/card/input system, full state coverage, WCAG 2.2 AA, and a rendered critique pass. Marketing and app chrome feel like one product.
 
@@ -1204,11 +1505,11 @@ Execute in the order of §16.11. Each screen: one job, one primary CTA (Home exc
 
 #### Mirror `/app/mirror`
 
-- **Job:** Consent → scan or try-on → read scores with cycle context.
-- **Primary CTA:** Allow Mirror photos, or Take a face photo / full-body (by tab).
-- **Add:** pre-flight preview sheet; offline disabled; YouCam paused banner; seeded vs live labelling.
+- **Job:** Consent → scan or try-on → read scores with cycle context. Pre-Tier 3: in-page segments Skin · Makeup · Hair · Wardrobe · Accessories (no sixth tab).
+- **Primary CTA:** Allow Mirror photos, or Take a face photo / full-body (by tab). Makeup live: allow camera (`mirror_live_camera`).
+- **Add:** pre-flight preview sheet; offline disabled for YouCam; wardrobe capture may queue offline; YouCam paused banner; seeded vs live labelling.
 - **Scores:** numeric + bar. Insight disclaimer always visible.
-- **Catalogue:** outlined selectable rows; maternity empty copy stays honest.
+- **Catalogue:** outlined selectable rows; maternity empty copy stays honest. Accessories empty until a 3D asset exists.
 
 #### Alena `/app/alena`
 
@@ -1303,5 +1604,5 @@ These are **frontend waves**, not §11 hackathon waves and not §12 phases. Do t
 
 ---
 
-*GirlCode360 — Master Technical Implementation Plan v1.3 · Confidential · 14 August 2026*  
-*v1.0 superseded for stack. v1.1 added DSQL/Lambda/Alena/Mirror engineering. v1.2 adds §16 UI/UX production plan. v1.3 adds §12.1 carry-forward register after Phase 1.6. Phase 1.8 Must closed 13 Aug 2026. Phase 2.1 tracking depth closed 14 Aug 2026. Phase 2.2 marketplace richness closed 14 Aug 2026. Phase 2.3 communication & community closed 14 Aug 2026. Phone/SMS auth remains out of scope.*
+*GirlCode360 — Master Technical Implementation Plan v1.4 · Confidential · 14 August 2026*  
+*v1.0 superseded for stack. v1.1 added DSQL/Lambda/Alena/Mirror engineering. v1.2 adds §16 UI/UX production plan. v1.3 adds §12.1 carry-forward register after Phase 1.6. Phase 1.8 Must closed 13 Aug 2026. Phase 2.1–2.3 closed 14 Aug 2026. **v1.4 folds Pre-Tier 3 Mirror Studio (P3.1–P3.6, STU-F-01–F-08) into §12.2**. **P3.1–P3.6 closed in code 14 Aug 2026.** Phone/SMS auth remains out of scope. HD YouCam remains Phase 3.5.*

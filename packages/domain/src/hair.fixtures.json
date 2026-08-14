@@ -1,0 +1,13 @@
+{
+  "note": "Synthetic YouCam-shaped hair_type payloads for CI. No personal photos.",
+  "cases": [
+    { "id": "tx-straight-a", "payload": { "data": { "hair_type": "straight" } } },
+    { "id": "tx-straight-b", "payload": { "data": { "hair_type": "1a" } } },
+    { "id": "tx-wavy-a", "payload": { "data": { "hair_type": "wavy" } } },
+    { "id": "tx-wavy-b", "payload": { "data": { "hair_type": "2b" } } },
+    { "id": "tx-curly-a", "payload": { "data": { "hair_type": "curly" } } },
+    { "id": "tx-curly-b", "payload": { "data": { "hair_type": "3c" } } },
+    { "id": "tx-coily-a", "payload": { "data": { "hair_type": "coily" } } },
+    { "id": "tx-coily-b", "payload": { "data": { "hair_type": "kinky" } } }
+  ]
+}

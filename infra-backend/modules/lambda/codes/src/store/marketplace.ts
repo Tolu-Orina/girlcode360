@@ -320,7 +320,10 @@ export async function createListingReview(
   const listing = isDsqlEnabled()
     ? await dsql.getListing(listingId)
     : (seedMemory(), memListings.get(listingId));
-  if (!listing || listing.status !== "live") return { error: "listing_not_found" };
+  if (!listing || listing.status !== "live") {
+    const { isLiveResaleId } = await import("./resale");
+    if (!(await isLiveResaleId(listingId))) return { error: "listing_not_found" };
+  }
   const checked = validateListingReview({
     stars: body.stars,
     body: body.body ?? "",

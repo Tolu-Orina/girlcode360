@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { youcamApiKey, youcamWebhookSecret } from "./secrets";
+import { youcamApiKey, youcamWebhookSecret } from "./secrets.ts";
 
 const BASE =
   process.env.YOUCAM_API_SERVER?.trim() || "https://yce-api-01.makeupar.com";
@@ -21,6 +21,38 @@ const SKIN_ACTIONS = [
   "moisture",
   "skin_type",
 ] as const;
+
+export const MAKEUP_CATEGORIES = [
+  "lip",
+  "eyeshadow",
+  "blush",
+  "foundation",
+  "eyebrow",
+  "eyeliner",
+  "eyelash",
+] as const;
+
+export const ACCESSORY_CATEGORIES = [
+  "ring",
+  "bracelet",
+  "watch",
+  "earring",
+  "necklace",
+] as const;
+
+export type YoucamCapability =
+  | "skin-analysis"
+  | "cloth-v3"
+  | "makeup-transfer"
+  | "shade-finder"
+  | "hair-analysis"
+  | "hair-tryon"
+  | "nail-tryon"
+  | "accessory-tryon"
+  | "eyewear-tryon";
+
+export type MakeupCategory = (typeof MAKEUP_CATEGORIES)[number];
+export type AccessoryCategory = (typeof ACCESSORY_CATEGORIES)[number];
 
 let consecutiveFailures = 0;
 const recentCalls: number[] = [];
@@ -96,7 +128,7 @@ function firstFile(json: unknown): Record<string, unknown> | null {
 }
 
 export async function uploadYoucamFile(
-  kind: "skin-analysis" | "cloth-v3",
+  kind: YoucamCapability,
   bytes: Buffer,
   contentType: string,
   fileName: string,
@@ -145,20 +177,31 @@ export async function uploadYoucamFile(
   return fileId;
 }
 
-export async function startSkinAnalysis(srcFileId: string): Promise<string> {
-  const { json } = await youcamFetch("/s2s/v2.0/task/skin-analysis", {
-    method: "POST",
-    body: JSON.stringify({
-      src_file_id: srcFileId,
-      dst_actions: [...SKIN_ACTIONS],
-      miniserver_args: { enable_mask_overlay: true },
-      format: "json",
-    }),
-  });
+function taskIdFromJson(json: unknown): string {
   const data = asRecord(asRecord(json)?.data) ?? asRecord(json);
   const taskId = String(data?.task_id ?? "");
   if (!taskId) throw new Error("YOUCAM_NO_TASK");
   return taskId;
+}
+
+export async function submitTask(
+  capability: YoucamCapability,
+  body: Record<string, unknown>,
+): Promise<string> {
+  const { json } = await youcamFetch(`/s2s/v2.0/task/${capability}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return taskIdFromJson(json);
+}
+
+export async function startSkinAnalysis(srcFileId: string): Promise<string> {
+  return submitTask("skin-analysis", {
+    src_file_id: srcFileId,
+    dst_actions: [...SKIN_ACTIONS],
+    miniserver_args: { enable_mask_overlay: true },
+    format: "json",
+  });
 }
 
 const VENDOR_SEP = "::yc::";
@@ -198,21 +241,105 @@ export async function startClothTryOn(opts: {
   garmentCategory: string;
   prompt?: string;
 }): Promise<string> {
-  const body: Record<string, string> = {
+  const body: Record<string, unknown> = {
     src_file_id: opts.srcFileId,
     garment_category: opts.garmentCategory,
   };
   if (opts.refFileId) body.ref_file_id = opts.refFileId;
   if (opts.refFileUrl) body.ref_file_url = opts.refFileUrl;
   if (opts.prompt) body.prompt = opts.prompt;
-  const { json } = await youcamFetch("/s2s/v2.0/task/cloth-v3", {
-    method: "POST",
-    body: JSON.stringify(body),
+  return submitTask("cloth-v3", body);
+}
+
+export async function startMakeupTransfer(opts: {
+  srcFileId: string;
+  makeupCategories?: MakeupCategory[];
+  referenceFileId?: string;
+}): Promise<string> {
+  const body: Record<string, unknown> = {
+    src_file_id: opts.srcFileId,
+    makeup_categories: opts.makeupCategories?.length
+      ? opts.makeupCategories
+      : [...MAKEUP_CATEGORIES],
+    format: "json",
+  };
+  if (opts.referenceFileId) body.reference_file_id = opts.referenceFileId;
+  return submitTask("makeup-transfer", body);
+}
+
+export async function startShadeFinder(opts: {
+  srcFileId: string;
+  brandFilter?: string[];
+}): Promise<string> {
+  const body: Record<string, unknown> = {
+    src_file_id: opts.srcFileId,
+    dst_actions: ["shade_match", "fitzpatrick_type"],
+  };
+  if (opts.brandFilter?.length) body.brand_filter = opts.brandFilter;
+  return submitTask("shade-finder", body);
+}
+
+export async function startHairAnalysis(srcFileId: string): Promise<string> {
+  return submitTask("hair-analysis", {
+    src_file_id: srcFileId,
+    dst_actions: ["hair_type", "hair_length", "hair_frizziness", "hair_density"],
   });
-  const data = asRecord(asRecord(json)?.data) ?? asRecord(json);
-  const taskId = String(data?.task_id ?? "");
-  if (!taskId) throw new Error("YOUCAM_NO_TASK");
-  return taskId;
+}
+
+export async function startHairTryOn(opts: {
+  srcFileId: string;
+  hairColor: string;
+  hairstyleId?: string;
+}): Promise<string> {
+  const color = opts.hairColor.trim();
+  if (!color) throw new Error("YOUCAM_HAIR_COLOR_REQUIRED");
+  const body: Record<string, unknown> = {
+    src_file_id: opts.srcFileId,
+    hair_color: color,
+  };
+  if (opts.hairstyleId) body.hairstyle_id = opts.hairstyleId;
+  return submitTask("hair-tryon", body);
+}
+
+export async function startNailTryOn(opts: {
+  srcFileId: string;
+  nailColor: string;
+}): Promise<string> {
+  const nailColor = opts.nailColor.trim();
+  if (!nailColor) throw new Error("YOUCAM_NAIL_COLOR_REQUIRED");
+  return submitTask("nail-tryon", {
+    src_file_id: opts.srcFileId,
+    nail_color: nailColor,
+  });
+}
+
+export async function startAccessoryTryOn(opts: {
+  srcFileId: string;
+  accessoryCategory: AccessoryCategory;
+  asset3dId: string;
+}): Promise<string> {
+  const asset3dId = opts.asset3dId.trim();
+  if (!asset3dId) throw new Error("YOUCAM_3D_ASSET_REQUIRED");
+  if (!ACCESSORY_CATEGORIES.includes(opts.accessoryCategory)) {
+    throw new Error("YOUCAM_ACCESSORY_CATEGORY_INVALID");
+  }
+  return submitTask("accessory-tryon", {
+    src_file_id: opts.srcFileId,
+    accessory_category: opts.accessoryCategory,
+    asset_3d_id: asset3dId,
+  });
+}
+
+export async function startEyewearTryOn(opts: {
+  srcFileId: string;
+  frameId: string;
+}): Promise<string> {
+  const frameId = opts.frameId.trim();
+  if (!frameId) throw new Error("YOUCAM_FRAME_ID_REQUIRED");
+  return submitTask("eyewear-tryon", {
+    src_file_id: opts.srcFileId,
+    frame_id: frameId,
+  });
 }
 
 export type YoucamTaskState = {
@@ -223,6 +350,7 @@ export type YoucamTaskState = {
   resultUrl?: string;
   maskUrls: Record<string, string>;
   error?: string;
+  data: Record<string, unknown>;
 };
 
 function collectUrls(node: unknown, into: Record<string, string>, prefix = ""): void {
@@ -263,7 +391,7 @@ function collectScores(node: unknown, into: Record<string, number>): void {
 }
 
 export async function pollTask(
-  capability: "skin-analysis" | "cloth-v3",
+  capability: YoucamCapability,
   packedTaskId: string,
 ): Promise<YoucamTaskState> {
   const taskId = unpackYoucamIds(packedTaskId).taskId;
@@ -311,6 +439,7 @@ export async function pollTask(
     resultUrl,
     maskUrls,
     error: status === "error" ? String(data.error ?? data.message ?? "task_error") : undefined,
+    data,
   };
 }
 
@@ -321,6 +450,12 @@ export async function downloadUrl(url: string): Promise<Buffer> {
 }
 
 export { SKIN_ACTIONS };
+
+/** Test-only: pace + circuit are module-scoped. */
+export function resetYoucamForTests(): void {
+  consecutiveFailures = 0;
+  recentCalls.length = 0;
+}
 
 export async function verifyYoucamWebhookSignature(
   rawBody: string,

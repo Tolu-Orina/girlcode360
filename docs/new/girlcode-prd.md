@@ -508,6 +508,202 @@ OWASP password policy: minimum 8 characters, 1 uppercase, 1 lowercase, 1 number.
 
 
 
+3.11  Module: Mirror Studio — Beauty & Fashion (Pre-Tier 3)
+Mirror Studio extends the Mirror epic (§3.x does not separately list Mirror’s original 8 features, which are specified in full in GirlCode360_Mirror_Feature_Spec.docx §3; this section covers only the Pre-Tier 3 beauty-and-fashion expansion) with eight further modules, each grounded in a specific competitor gap identified in market research and mapped to a specific Perfect Corp. YouCam API category GirlCode360 does not yet use. Full competitive grounding, non-functional requirements, and phased build sequencing are in GirlCode360_Mirror_Feature_Spec.docx §6 and GirlCode360_PreTier3_Implementation_Plan.md; this section states the functional requirements at the same level of explicit detail as every other module in this PRD.
+
+3.11.1  Makeup Studio
+Real-time AR and photo-mode makeup try-on across the 7 categories every mainstream beauty app leads with, plus a look-transfer mode from a reference image. GirlCode360 currently ships zero makeup try-on — this closes the single largest feature gap identified against Sephora Virtual Artist, Ulta GLAMlab, and YouCam Makeup.
+FR-ID
+Requirement Description
+Priority
+Market Notes / Localisation
+FR-112
+System must provide live-camera AR makeup try-on across 7 categories — lip colour, eyeshadow, blush, foundation, eyebrow, eyeliner, eyelash — using YouCam’s AgileFace real-time tracking for jitter-free application in motion. Camera access requires its own explicit consent event, separate from Mirror’s existing photo-capture consent.
+Must
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-113
+System must provide photo-mode makeup try-on applied to a saved Mirror skin scan, giving full functionality to users who decline live-camera consent or lack camera access.
+Must
+Accessibility parity requirement, applies in all markets
+FR-114
+System must support a ‘Get this look’ mode: user uploads a reference image and the system approximates the look on the user’s own face via AI Makeup Transfer.
+Should
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-115
+System must let the user save a completed look to Style Analytics history, private by default, shared only on explicit user action.
+Must
+Same explicit-share default as Health Wallet
+FR-116
+Every completed foundation/concealer look must surface a ‘Shop this shade’ action routed through the Shade Match Engine and SheMatch, not a generic outbound retailer link.
+Should
+Requires SheMatch-linked retailer inventory in the user’s market or shippable region
+
+
+3.11.2  Shade Match Engine
+Cross-brand foundation and concealer shade matching from an existing Mirror scan, validated across the full Fitzpatrick skin-tone range — addressing the single largest driver of online beauty-purchase returns and hesitation.
+FR-ID
+Requirement Description
+Priority
+Market Notes / Localisation
+FR-117
+System must generate a shade match (foundation and concealer) from the user’s existing Mirror skin scan where one exists from the last 30 days, without requiring a duplicate capture.
+Must
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-118
+System must return a cross-brand ‘shade twin’ list: the closest matching shade code at each brand stocked by a SheMatch-linked retailer within the user’s search radius or shippable to their region.
+Must
+Extends the existing SheMatch trigger table (no new marketplace engine)
+FR-119
+System must flag shade-match confidence as Lower for any lighting/skin-tone combination where YouCam’s documented accuracy is reduced, using the same Low/Medium/High confidence pattern already established for HealthLens.
+Must
+Equity requirement — tested across Fitzpatrick I–VI before any market launch, not assumed
+
+
+3.11.3  Hair Studio
+Hair colour and style try-on plus a quantified diagnostic (type, length, frizziness, density), correlated against hair-thinning and hirsutism symptoms already logged in the PCOS/PMOS Manager — the clearest cross-module differentiator in this tier.
+FR-ID
+Requirement Description
+Priority
+Market Notes / Localisation
+FR-120
+System must provide a hair diagnostic scan returning quantified type, length, frizziness, and density scores via YouCam’s AI Hair Analysis suite.
+Must
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-121
+System must cross-reference hair density/frizziness trend against logged PCOS/PMOS hair-thinning and hirsutism symptom entries, applying the same correlation guardrails as MIR-F-02 (minimum 2 scans across different time points; explicit ‘no clear pattern yet’ when data does not support one).
+Must
+Reuses the existing HealthLens correlation engine — no second correlation system
+FR-122
+System must provide virtual hair colour try-on and hairstyle try-on from a single face photo.
+Must
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-123
+Hair-density trend must feed into the next HealthLens Monthly Health Intelligence Report as an additional pattern category, with the same non-diagnostic disclaimer treatment as every other HealthLens pattern.
+Should
+Extends the existing report structure — no new report type
+
+
+3.11.4  My Wardrobe
+A real digital closet: catalogue owned clothing, generate outfit combinations from what the user actually owns, and plan by weather, calendar, or trip — closing the largest functional gap identified against the digital-wardrobe app category (Whering, Acloset, Cladwell, Indyx).
+FR-ID
+Requirement Description
+Priority
+Market Notes / Localisation
+FR-124
+System must let the user catalogue owned clothing items by photographing each piece, with AI-suggested category and colour tags the user can correct.
+Must
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-125
+System must generate outfit combinations from the user’s own catalogued wardrobe using the same generative Apparel VTO engine already integrated for Mirror’s boutique try-on, applied to the user’s own body photo.
+Must
+Direct reuse of the existing YouCam Apparel VTO integration
+FR-126
+System must provide a daily outfit suggestion factoring local weather and, where the user opts in, calendar event type.
+Should
+Calendar integration is a separate, explicit consent event
+FR-127
+System must provide a packing-list generator: given a trip length and destination climate, suggest a capsule pulled from the user’s own wardrobe.
+Should
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-128
+Wardrobe cataloguing must work fully offline (photo capture and local storage); AI tagging and outfit generation sync when connectivity returns.
+Must
+Consistent with the existing offline-first health-logging principle
+FR-129
+Wardrobe data must be private by default and never surfaced to Community or any other user without explicit, separate sharing action.
+Must
+Same explicit-share default as Health Wallet and Makeup Studio saved looks
+
+
+3.11.5  Accessories Studio
+AR try-on for jewellery, watches, eyewear, and nails — a category neither the beauty-app nor the wardrobe-app competitor set covers, bridged to Marketplace jewellers, opticians, and nail salons.
+FR-ID
+Requirement Description
+Priority
+Market Notes / Localisation
+FR-130
+System should provide AR try-on for rings, bracelets, watches, earrings, and necklaces via YouCam’s 3D Viewer/Authoring and per-category AR try-on APIs.
+Should
+Requires retailer-supplied 3D-authored assets via the Business Portal — a genuine onboarding dependency
+FR-131
+System should provide AI-powered virtual try-on for eyeglasses and sunglasses, sourced from optician listings on the Marketplace.
+Should
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-132
+System could provide virtual nail-colour try-on from a hand photo, with a ‘find a nail salon near you’ SheMatch bridge for in-person application.
+Could
+Sequenced after jewellery/eyewear due to lower relative build complexity, not lower value
+FR-133
+Jewellery and watch try-on quality must be gated on retailer-supplied assets meeting Perfect Corp.’s documented 3D-authoring standard; the system must not attempt to auto-generate 3D assets from 2D product photos.
+Must
+Explicit scope boundary to avoid a degraded try-on experience
+
+
+3.11.6  AI Stylist
+An extension of Alena’s existing conversational architecture — not a second assistant — that reasons over the user’s wardrobe, Mirror scores, shade history, weather, and life stage to answer styling questions.
+FR-ID
+Requirement Description
+Priority
+Market Notes / Localisation
+FR-134
+System must extend Alena’s existing context-construction step to optionally include: the user’s My Wardrobe catalogue, most recent Mirror skin/hair scores, Shade Match history, current weather, and — where active — pregnancy trimester or PCOS/PMOS body-confidence mode.
+Must
+Same pseudonymised-summary pattern as existing Alena health context; no new AI provider
+FR-135
+‘What should I wear today’ queries must return an outfit assembled from the user’s own wardrobe, never a shopping suggestion first, factoring weather and available calendar context.
+Must
+Directly reuses My Wardrobe’s outfit-generation output
+FR-136
+Styling responses should be able to propose a complementary makeup look via Makeup Studio when the query implies an occasion.
+Should
+Cross-feature reasoning; not required for initial release
+FR-137
+AI Stylist queries must count against the same Alena daily quota and Premium gating already defined for Alena — no separate quota system.
+Must
+Reuse of existing monetisation infrastructure, not duplication
+
+
+3.11.7  Style Analytics & Confidence Score
+Cost-per-wear, wardrobe utilisation, and a combined skin/hair/shade trend view — a presentation layer over data already collected elsewhere in Mirror Studio, not a new data-collection category.
+FR-ID
+Requirement Description
+Priority
+Market Notes / Localisation
+FR-138
+System should calculate cost-per-wear per wardrobe item (purchase price ÷ times worn), where the user optionally logs a purchase price at cataloguing time; the feature must degrade gracefully to wear-count only when price is not provided.
+Should
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-139
+System should calculate wardrobe utilisation percentage: proportion of catalogued items worn, per logged outfit selections, in the last 90 days.
+Should
+Global — no market restriction; feature availability follows YouCam API regional coverage, not GirlCode360’s own market list
+FR-140
+System must provide a combined skin, hair, and shade-match trend view extending the existing Skin Progress Timeline’s before/after comparison pattern — no new UI pattern, additional data series only.
+Must
+Reuses the existing Mirror Progress Timeline component
+
+
+3.11.8  Wardrobe Resale Bridge
+Peer-to-peer resale of catalogued wardrobe items through the existing Marketplace and Business Portal, addressing the sustainability expectation increasingly standard in the digital-wardrobe category (Acloset, Whering).
+FR-ID
+Requirement Description
+Priority
+Market Notes / Localisation
+FR-141
+System should let a user list a My Wardrobe item for resale with one tap from its catalogue entry, pre-filled with the existing photo and tags.
+Should
+Reuses existing My Wardrobe photo/tag data — no separate resale photography flow
+FR-142
+System should provide peer-to-peer buyer-seller messaging through the existing Marketplace messaging surface; resale listing photos and descriptions must pass through the existing content-moderation queue before going live.
+Should
+Reuses the existing Community content-moderation infrastructure
+FR-143
+Resale listings must be clearly labelled as peer-to-peer (‘from a GirlCode360 member’), visually distinct from business/boutique listings.
+Must
+Trust and transparency parity with SheMatch’s existing ‘Sponsored’ labelling discipline
+
+
+Non-functional requirements for all eight modules above (NFR-STU-01 to NFR-STU-11 — performance, accuracy/equity validation across Fitzpatrick I–VI and hair-texture ranges, consent architecture, and clinical review of correlation language) are specified in full in GirlCode360_Mirror_Feature_Spec.docx §6 and are incorporated into this PRD by reference, consistent with how Mirror’s original NFR-AI series is referenced from §6A.
 4. Non-Functional Requirements
 Non-functional requirements define the quality attributes, constraints, and standards the system must meet, independent of specific features.
 4.1  Performance Requirements
@@ -892,6 +1088,14 @@ MIR-F-01 to F-08 (all 8 features: Skin AI Diagnostic Scan, Cycle-Correlated Skin
 Mirror introduces GirlCode360’s highest-sensitivity data category to date: a photograph of the user’s face or body sent to a third-party AI vendor. This requires a dedicated consent tier (MIR-F-07), distinct from all existing health-data consents, treating the biometric image as UK GDPR Article 9 special category data. See GirlCode360_Mirror_Feature_Spec.docx Section 4 for the full privacy and compliance treatment.
 
 
+6C. Pre-Tier 3 — Mirror Studio: Beauty & Fashion (Addendum)
+GirlCode360 incorporates a deliberate expansion of the Mirror epic, Mirror Studio, adding eight beauty-and-fashion features (STU-F-01 to STU-F-08, FR-112 to FR-143, NFR-STU-01 to NFR-STU-11) grounded in a competitive audit of the beauty-app category (Sephora Virtual Artist, Ulta GLAMlab, YouCam Makeup) and the digital-wardrobe category (Whering, Acloset, Cladwell, Indyx). Mirror Studio is defined in full in GirlCode360_Mirror_Feature_Spec.docx §6, which should be read alongside this PRD. This addendum is considered part of PRD v1.3 by reference.
+Why this tier exists: Mirror as shipped in Tier 1/2 uses only two of Perfect Corp.’s roughly nine YouCam API product categories (Skin Analysis and Apparel Virtual Try-On), and GirlCode360 currently ships none of the single most-used feature across the entire beauty-app category: makeup try-on. Mirror Studio closes that gap while remaining anchored to GirlCode360’s one defensible advantage — a real hormonal and cycle-health data layer that no beauty or wardrobe competitor has.
+Makeup Studio, Shade Match Engine, Hair Studio, My Wardrobe, Accessories Studio, AI Stylist (an Alena extension, not a second assistant), Style Analytics & Confidence Score, and Wardrobe Resale Bridge — each grounded in a specific competitor gap and mapped to a specific unused YouCam API category, and each reusing an existing GirlCode360 system (SheMatch, Alena, HealthLens, Business Portal, Marketplace, content moderation) rather than duplicating one.
+Monetisation: Mirror Studio bundles into the existing Premium subscription tier (reusing ALN-F-05’s gating, not new billing infrastructure) at a price competitive with any single dedicated wardrobe or beauty competitor app alone, since it replaces several $5–10/month single-purpose subscriptions with one. A second monetisation vector extends the existing Featured & Sponsored Listings mechanism (MKT-F-07): retailers pay for ‘Verified Shade Match’ or ‘Try-On Ready’ placement contingent on supplying accurate inventory or 3D assets via the Business Portal.
+Global market positioning (supersedes prior three-market framing): Earlier GirlCode360 documentation referenced the UK, Nigeria, and Ghana as the product’s market scope. These remain accurate as GirlCode360’s initial launch markets and continue to ground concrete compliance examples (UK GDPR, Nigeria NDPA/GAID, Ghana DPA) throughout this PRD, but they are not, and were never architecturally, a restriction on the product’s ambition. UOB-F-04’s jurisdiction detection and consent routing already operate per-user on a detected-jurisdiction basis rather than a hardcoded enum of three countries; onboarding a new market is a configuration and legal-review exercise, not a re-architecture. All product, engineering, and go-to-market documentation should describe GirlCode360 as building for a global market from initial launch markets, not as a UK/Nigeria/Ghana-only product. New-market expansion is evaluated as a Tier 3 scale decision (Master Technical Implementation Plan §Phase 3.2) on demand and compliance readiness.
+
+
 7. Appendix
 7.1  Key Regulatory References
 UK GDPR: https://www.legislation.gov.uk/ukpga/2018/12 | ICO guidance: ico.org.uk
@@ -913,4 +1117,4 @@ Multi-language support beyond English (Pidgin, Twi planned for v1.1)
 White-label B2B version for HMOs / corporate wellness
 
 
-GirlCode360 — Product Requirements Document v1.0  |  Confidential  |  June 2026
+GirlCode360 — Product Requirements Document v1.0  |  Confidential  |  August 2026

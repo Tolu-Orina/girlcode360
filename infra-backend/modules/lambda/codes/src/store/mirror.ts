@@ -1,4 +1,5 @@
 import {
+  accessoryTryOnReady,
   correlateSkinAndCycle,
   cyclePhaseFromDay,
   dayInCycle,
@@ -70,12 +71,59 @@ export async function mirrorConsented(sub: string): Promise<boolean> {
   return rows.find((c) => c.purpose === "mirror_biometric")?.granted === true;
 }
 
+export async function mirrorLiveCameraConsented(sub: string): Promise<boolean> {
+  const rows = await latestConsentsByPurpose(sub);
+  return rows.find((c) => c.purpose === "mirror_live_camera")?.granted === true;
+}
+
+export async function wardrobeConsented(sub: string): Promise<boolean> {
+  const rows = await latestConsentsByPurpose(sub);
+  return rows.find((c) => c.purpose === "wardrobe")?.granted === true;
+}
+
 export async function mirrorStatus(sub: string) {
   return {
     consented: await mirrorConsented(sub),
+    liveCameraConsented: await mirrorLiveCameraConsented(sub),
+    wardrobeConsented: await wardrobeConsented(sub),
     youcamConfigured: Boolean(await youcamApiKey()),
     youcamAvailable: !youcamCircuitOpen(),
   };
+}
+
+export type StudioScanRef = {
+  id: string;
+  createdAt: string;
+  seeded: boolean;
+  status: MirrorTaskStatus;
+  youcamTaskId: string;
+  sourceS3Key: string | null;
+};
+
+export async function getStudioScanRef(
+  sub: string,
+  scanId?: string,
+): Promise<StudioScanRef | undefined> {
+  const rows = isDsqlEnabled()
+    ? await dsql.listScans(sub)
+    : (scans.get(sub) ?? []);
+  const live = rows.filter((r) => r.status === "success" && !r.seeded);
+  const picked = scanId
+    ? live.find((r) => r.id === scanId)
+    : [...live].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (!picked) return undefined;
+  return {
+    id: picked.id,
+    createdAt: picked.createdAt,
+    seeded: picked.seeded,
+    status: picked.status,
+    youcamTaskId: picked.youcamTaskId,
+    sourceS3Key: picked.sourceS3Key,
+  };
+}
+
+export async function cycleContextForScan(sub: string, whenIso: string) {
+  return cycleContext(sub, whenIso);
 }
 
 async function cycleContext(sub: string, whenIso: string) {
@@ -234,6 +282,16 @@ export async function getSkinScan(sub: string, id: string): Promise<SkinScan | u
   return publicScan(row);
 }
 
+/** Shared Skin / Apparel / Studio result persist (P3.1). */
+export async function copyResultToS3(
+  url: string,
+  s3Key: string,
+  contentType = "image/jpeg",
+): Promise<void> {
+  const buf = await downloadUrl(url);
+  await putObject(s3Key, buf, contentType);
+}
+
 function decodeImage(b64: string): { bytes: Buffer; contentType: string } {
   const trimmed = b64.replace(/^data:[^;]+;base64,/, "");
   const bytes = Buffer.from(trimmed, "base64");
@@ -260,11 +318,11 @@ async function settleScan(sub: string, row: MemScan): Promise<MemScan | undefine
     let maskKey: string | null = null;
     if (task.resultUrl) {
       try {
-        const buf = await downloadUrl(task.resultUrl);
         resultKey = `mirror/${row.id}/result.jpg`;
-        await putObject(resultKey, buf, "image/jpeg");
+        await copyResultToS3(task.resultUrl, resultKey);
       } catch (err) {
         console.error("mirror result copy failed", err);
+        resultKey = null;
       }
     }
     const maskUrl = Object.entries(task.maskUrls).find(([k]) =>
@@ -272,11 +330,11 @@ async function settleScan(sub: string, row: MemScan): Promise<MemScan | undefine
     )?.[1];
     if (maskUrl && maskUrl !== task.resultUrl) {
       try {
-        const buf = await downloadUrl(maskUrl);
         maskKey = `mirror/${row.id}/mask.jpg`;
-        await putObject(maskKey, buf, "image/jpeg");
+        await copyResultToS3(maskUrl, maskKey);
       } catch {
         /* optional */
+        maskKey = null;
       }
     }
     const next: MemScan = {
@@ -463,11 +521,21 @@ export async function getScanMedia(
 }
 
 export function listCatalogue(opts: {
-  kind?: "skincare" | "apparel";
+  kind?: "skincare" | "apparel" | "makeup" | "jewellery" | "eyewear" | "nail_color";
   mode?: "all" | "maternity" | "pmos";
   week?: number | null;
 }) {
-  return filterCatalogue(opts).map(({ tryOnPrompt: _hidden, ...item }) => item);
+  return filterCatalogue(opts).map(
+    ({ tryOnPrompt: _hidden, asset3dId, frameId, ...item }) => ({
+      ...item,
+      tryOnReady: accessoryTryOnReady({
+        kind: item.kind,
+        asset3dId,
+        frameId,
+        nailColor: item.nailColor,
+      }),
+    }),
+  );
 }
 
 export async function createTryOn(
@@ -540,9 +608,8 @@ async function settleTryOn(sub: string, row: MemTry): Promise<MemTry | undefined
     }
     let resultKey: string | null = null;
     if (task.resultUrl) {
-      const buf = await downloadUrl(task.resultUrl);
       resultKey = `mirror/${row.id}/tryon.jpg`;
-      await putObject(resultKey, buf, "image/jpeg");
+      await copyResultToS3(task.resultUrl, resultKey);
     }
     const next: MemTry = {
       ...row,

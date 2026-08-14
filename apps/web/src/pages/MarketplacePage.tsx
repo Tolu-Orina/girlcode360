@@ -25,6 +25,7 @@ import { marketplaceQuery } from "@/lib/session-geo";
 import type {
   MarketplaceCategory,
   MarketplaceListing,
+  ResaleListing,
 } from "../../../../packages/api-types/src/index";
 import { MARKETPLACE_CATEGORY_LABEL } from "../../../../packages/domain/src/index";
 
@@ -71,6 +72,7 @@ function defaultFilters(): Filters {
 export function MarketplacePage() {
   const [filters, setFilters] = useState<Filters>(loadFilters);
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
+  const [resale, setResale] = useState<ResaleListing[]>([]);
   const [note, setNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +107,7 @@ export function MarketplacePage() {
           ? res.listings.filter((l) => l.favourite)
           : res.listings,
       );
+      setResale(res.resale ?? []);
       setNote(res.note);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load listings");
@@ -196,7 +199,7 @@ export function MarketplacePage() {
 
       {loading ? (
         <SkeletonBlock className="h-40" />
-      ) : listings.length === 0 ? (
+      ) : listings.length === 0 && resale.length === 0 ? (
         <EmptyState
           title="No listings in range"
           body="Widen the radius, change the area, or clear filters. SheMatch stays silent when nothing is within 5 km."
@@ -227,6 +230,34 @@ export function MarketplacePage() {
           ))}
         </ul>
       )}
+
+      {resale.length ? (
+        <div className="grid gap-3">
+          <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+            From members
+          </h2>
+          <p className={leadClass}>
+            Peer-to-peer wardrobe resale. Distinct from boutique listings.
+          </p>
+          <ul className={listClass}>
+            {resale.map((row) => (
+              <li key={row.id} className={listItemClass}>
+                <Link
+                  to={`/app/marketplace/${row.id}`}
+                  className="grid gap-1 text-foreground no-underline"
+                >
+                  <strong className="text-[length:var(--text-body)]">{row.title}</strong>
+                  <span className={leadClass}>
+                    {row.peerLabel}
+                    {row.details ? ` · ${row.details}` : ""}
+                    {` · ${(row.priceMinor / 100).toFixed(2)}`}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </AppPage>
   );
 }

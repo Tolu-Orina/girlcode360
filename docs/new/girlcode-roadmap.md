@@ -668,6 +668,20 @@ Month 5: All 8 Mirror features hardened for production and enter UK Closed Beta 
 Month 6: Full Mirror epic live for Nigeria and UK/Ghana public launch, Skin Progress Timeline populated by real accumulated scan history rather than seed data
 
 
+4C. Pre-Tier 3 — Mirror Studio: Beauty & Fashion
+Positioned between Tier 2 (closed) and Tier 3 in the Master Technical Implementation Plan. Eight new features (STU-F-01 to F-08) extend Mirror into a genuinely competitive beauty-and-fashion product, grounded in a competitive audit against Sephora Virtual Artist, Ulta GLAMlab, YouCam Makeup, Whering, Acloset, Cladwell, and Indyx. Full detail in GirlCode360_Mirror_Feature_Spec.docx §6.
+4C.1  Phased Build (P3.1–P3.6)
+P3.1 Foundations: youcam-gateway extended for Makeup, Hair, and Shade Finder API families; new live-camera consent event; Fitzpatrick-range validation harness
+P3.2 Makeup Studio + Shade Match Engine — closes the single largest competitive gap first (no makeup try-on today)
+P3.3 Hair Studio, including PMOS hair-symptom correlation reusing the HealthLens/Mirror correlation guardrails
+P3.4 My Wardrobe — the largest single build in this tier; closes the biggest functional gap versus the digital-wardrobe app category
+P3.5 AI Stylist (Alena extension, not a new assistant) + Style Analytics — both depend on My Wardrobe existing first
+P3.6 Accessories Studio + Wardrobe Resale Bridge — sequenced last as both carry external retailer/community-volume dependencies rather than pure internal build risk
+4C.2  Monetisation Target
+Mirror Studio bundles into the existing Premium tier (reusing ALN-F-05 gating) rather than adding a third pricing tier, priced competitively against the $5–10/month dedicated wardrobe-app category it displaces. Retailer-side monetisation extends MKT-F-07 Featured & Sponsored Listings with ‘Verified Shade Match’ and ‘Try-On Ready’ paid placement. KPI: Mirror Studio Premium attach rate among existing Mirror users — target set once P3.2 (Makeup Studio) usage data exists, per the same evidence-before-KPI-lock discipline used elsewhere in this roadmap.
+Global market note: UK, Nigeria, and Ghana remain GirlCode360’s initial launch markets and this roadmap’s concrete planning basis, but they are not a ceiling on the product’s ambition. Mirror Studio’s retailer-facing features work identically in any market with Business Portal-onboarded retailers. See PRD §6C for the full global-positioning statement.
+
+
 5. Roadmap Risks & Contingencies
 
 Risk 1: MHRA classifies app as Software as a Medical Device (SaMD)

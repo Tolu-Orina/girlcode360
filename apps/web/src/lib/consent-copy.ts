@@ -33,6 +33,14 @@ export const PURPOSE_COPY: Record<
     title: "Mirror skin and try-on photos",
     body: "Face and body photos for skin scores and apparel try-on. Photos are sent to Perfect Corp. (YouCam) as a processor for your analysis only, kept there up to 30 days, and are not used to train their models unless you later agree separately. Declining does not affect Cycle, Alena, or Wallet.",
   },
+  mirror_live_camera: {
+    title: "Live camera for Makeup Studio",
+    body: "Face tracking runs on this device (AgileFace). GirlCode360 does not send a video stream to Perfect Corp. A still is sent to YouCam only when you capture a look. Photo-mode makeup stays under Mirror photos. Off unless you turn it on.",
+  },
+  wardrobe: {
+    title: "My Wardrobe clothing photos",
+    body: "Photos of garments you own — not face or body photos. Used to catalogue pieces, suggest tags you can correct, and generate outfit try-on from your closet. Distinct from Mirror skin photos. Off unless you turn it on.",
+  },
   shematch: {
     title: "SheMatch local suggestions",
     body: "Allow GirlCode360 to use your health activity to suggest relevant local services. Separate from approximate location. You choose modules in Account. If nothing is within 5 km, we stay silent.",

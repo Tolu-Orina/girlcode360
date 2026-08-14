@@ -1,0 +1,137 @@
+{
+  "note": "Synthetic YouCam-shaped payloads for CI. No personal photos. P3.2 confirms on real scans.",
+  "cases": [
+    {
+      "id": "ref-I-a",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "I",
+          "matches": [
+            { "brand": "seed-a", "shade": "10N", "family": "fair", "confidence": "high" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-I-b",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": 1,
+          "matches": [
+            { "brand": "seed-b", "shade": "12C", "family": "fair", "confidence": "medium" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-II-a",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "II",
+          "matches": [
+            { "brand": "seed-a", "shade": "20N", "family": "light", "confidence": "high" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-II-b",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "Type II",
+          "matches": [
+            { "brand": "seed-b", "shade": "22W", "family": "light", "confidence": "medium" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-III-a",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "III",
+          "matches": [
+            { "brand": "seed-a", "shade": "30N", "family": "light_medium", "confidence": "high" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-III-b",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": 3,
+          "matches": [
+            { "brand": "seed-b", "shade": "32N", "family": "light_medium", "confidence": "low" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-IV-a",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "IV",
+          "matches": [
+            { "brand": "seed-a", "shade": "40N", "family": "medium", "confidence": "high" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-IV-b",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "IV",
+          "matches": [
+            { "brand": "seed-b", "shade": "42W", "family": "medium", "confidence": "medium" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-V-a",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "V",
+          "matches": [
+            { "brand": "seed-a", "shade": "50N", "family": "tan", "confidence": "high" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-V-b",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": 5,
+          "matches": [
+            { "brand": "seed-b", "shade": "52C", "family": "tan", "confidence": "medium" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-VI-a",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "VI",
+          "matches": [
+            { "brand": "seed-a", "shade": "60N", "family": "deep", "confidence": "high" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ref-VI-b",
+      "payload": {
+        "data": {
+          "fitzpatrick_type": "Type VI",
+          "matches": [
+            { "brand": "seed-b", "shade": "62W", "family": "deep", "confidence": "high" }
+          ]
+        }
+      }
+    }
+  ]
+}

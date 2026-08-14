@@ -46,6 +46,24 @@ describe("runHealthLensRules (HL-F-05)", () => {
       false,
     );
   });
+
+  it("includes a hair finding only when hairInsight is supplied", () => {
+    assert.equal(
+      runHealthLensRules(base).some((f) => f.id === "hair-pmos"),
+      false,
+    );
+    const findings = runHealthLensRules({
+      ...base,
+      hairInsight: {
+        title: "Possible hair-score pattern in your logs",
+        body: "Looking at your hair diagnostics together. Not a diagnosis.",
+        confidence: "Medium",
+        enoughScans: true,
+        patternFound: true,
+      },
+    });
+    assert.ok(findings.some((f) => f.id === "hair-pmos"));
+  });
 });
 
 describe("encodePregnancyDaily (PG-F-03)", () => {

@@ -64,6 +64,8 @@ export function OnboardingPage() {
     ai_alena: false,
     ai_healthlens: false,
     mirror_biometric: false,
+    mirror_live_camera: false,
+    wardrobe: false,
     shematch: false,
   });
   const [modules, setModules] = useState<HealthModule[]>(["period_tracker"]);

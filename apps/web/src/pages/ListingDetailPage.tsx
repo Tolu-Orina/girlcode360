@@ -15,6 +15,7 @@ import {
   createListingReview,
   deleteListingFavourite,
   getMarketplaceListing,
+  getResaleListingMedia,
   listListingReviews,
   putListingFavourite,
   submitContentReport,
@@ -24,12 +25,15 @@ import { marketplaceQuery } from "@/lib/session-geo";
 import type {
   ListingReview,
   MarketplaceListing,
+  ResaleListing,
 } from "../../../../packages/api-types/src/index";
 import { MARKETPLACE_CATEGORY_LABEL } from "../../../../packages/domain/src/index";
 
 export function ListingDetailPage() {
   const { id } = useParams();
   const [listing, setListing] = useState<MarketplaceListing | null>(null);
+  const [resale, setResale] = useState<ResaleListing | null>(null);
+  const [resaleSrc, setResaleSrc] = useState<string | null>(null);
   const [reviews, setReviews] = useState<ListingReview[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -48,7 +52,18 @@ export function ListingDetailPage() {
         listListingReviews(id),
       ]);
       setListing(res.listing);
+      setResale(res.resale ?? null);
       setReviews(rev.reviews);
+      if (res.resale?.hasImage) {
+        try {
+          const media = await getResaleListingMedia(res.resale.id);
+          setResaleSrc(`data:${media.contentType};base64,${media.imageB64}`);
+        } catch {
+          setResaleSrc(null);
+        }
+      } else {
+        setResaleSrc(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Listing not found");
     } finally {
@@ -87,8 +102,12 @@ export function ListingDetailPage() {
     <AppPage>
       <PageHeader
         eyebrow="Listing"
-        title={listing?.name ?? "Listing"}
-        lead="Directory listing. Confirm hours and phone before you go. Not a medical recommendation."
+        title={listing?.name ?? resale?.title ?? "Listing"}
+        lead={
+          resale
+            ? `${resale.peerLabel}. Ask via the review thread below — same Marketplace messaging as boutique listings.`
+            : "Directory listing. Confirm hours and phone before you go. Not a medical recommendation."
+        }
       />
       <p className={leadClass}>
         <Link to="/app/marketplace">Back to marketplace</Link>
@@ -97,6 +116,22 @@ export function ListingDetailPage() {
       {error ? <ErrorBanner message={error} /> : null}
       {ok ? <SuccessBanner message={ok} /> : null}
       {loading ? <SkeletonBlock className="h-48" /> : null}
+      {resale ? (
+        <div className="grid gap-3">
+          <p className={leadClass}>
+            {resale.peerLabel}
+            {resale.details ? ` · ${resale.details}` : ""}
+            {` · ${(resale.priceMinor / 100).toFixed(2)}`}
+          </p>
+          {resaleSrc ? (
+            <img
+              src={resaleSrc}
+              alt=""
+              className="w-full max-w-md rounded-[var(--radius)] border border-border bg-muted"
+            />
+          ) : null}
+        </div>
+      ) : null}
       {listing ? (
         <div className="grid gap-3">
           <p className={leadClass}>

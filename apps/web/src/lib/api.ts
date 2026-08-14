@@ -465,6 +465,7 @@ export function postAlenaChat(body: {
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   lat?: number;
   lng?: number;
+  climate?: "hot" | "temperate" | "cold" | "mixed";
 }) {
   return request<
     import("../../../../packages/api-types/src/index").AlenaChatResponse
@@ -650,7 +651,7 @@ export function postMirrorConsent(granted: boolean) {
 }
 
 export function getMirrorCatalogue(opts?: {
-  kind?: "skincare" | "apparel";
+  kind?: "skincare" | "apparel" | "makeup" | "jewellery" | "eyewear" | "nail_color";
   mode?: "all" | "maternity" | "pmos";
 }) {
   const q = new URLSearchParams();
@@ -721,16 +722,268 @@ export function getMirrorTryOnMedia(id: string) {
   );
 }
 
+export function listMakeupLooks() {
+  return request<{
+    looks: import("../../../../packages/api-types/src/index").MakeupLook[];
+  }>("GET", "/v1/mirror-studio/makeup");
+}
+
+export function createMakeupLook(
+  mode: "live" | "photo" | "transfer",
+  body: {
+    imageB64?: string;
+    scanId?: string;
+    referenceB64?: string;
+    categories?: string[];
+  },
+) {
+  return request<{
+    look: import("../../../../packages/api-types/src/index").MakeupLook;
+  }>("POST", `/v1/mirror-studio/makeup/${mode}`, body);
+}
+
+export function getMakeupLook(id: string) {
+  return request<{
+    look: import("../../../../packages/api-types/src/index").MakeupLook;
+  }>("GET", `/v1/mirror-studio/makeup/${encodeURIComponent(id)}`);
+}
+
+export function getMakeupLookMedia(id: string) {
+  return request<{ contentType: string; imageB64: string }>(
+    "GET",
+    `/v1/mirror-studio/makeup/${encodeURIComponent(id)}/media`,
+  );
+}
+
+export function saveMakeupLook(id: string, saved: boolean) {
+  return request<{
+    look: import("../../../../packages/api-types/src/index").MakeupLook;
+  }>("PATCH", `/v1/mirror-studio/makeup/${encodeURIComponent(id)}`, { saved });
+}
+
+export function listShadeMatches() {
+  return request<{
+    matches: import("../../../../packages/api-types/src/index").ShadeMatch[];
+  }>("GET", "/v1/mirror-studio/shade-matches");
+}
+
+export function createShadeMatch(body: { scanId?: string; imageB64?: string }) {
+  return request<{
+    match: import("../../../../packages/api-types/src/index").ShadeMatch;
+  }>("POST", "/v1/mirror-studio/shade-match", body);
+}
+
+export function listHairScans() {
+  return request<{
+    scans: import("../../../../packages/api-types/src/index").HairScan[];
+  }>("GET", "/v1/mirror-studio/hair");
+}
+
+export function createHairAnalysis(body: { imageB64?: string; scanId?: string }) {
+  return request<{
+    scan: import("../../../../packages/api-types/src/index").HairScan;
+  }>("POST", "/v1/mirror-studio/hair/analysis", body);
+}
+
+export function createHairTryOn(body: {
+  imageB64?: string;
+  scanId?: string;
+  hairColor: string;
+  hairstyleId?: string;
+}) {
+  return request<{
+    scan: import("../../../../packages/api-types/src/index").HairScan;
+  }>("POST", "/v1/mirror-studio/hair/tryon", body);
+}
+
+export function getHairScan(id: string) {
+  return request<{
+    scan: import("../../../../packages/api-types/src/index").HairScan;
+  }>("GET", `/v1/mirror-studio/hair/${encodeURIComponent(id)}`);
+}
+
+export function getHairScanMedia(id: string) {
+  return request<{ contentType: string; imageB64: string }>(
+    "GET",
+    `/v1/mirror-studio/hair/${encodeURIComponent(id)}/media`,
+  );
+}
+
+export function listWardrobeItems() {
+  return request<{
+    items: import("../../../../packages/api-types/src/index").WardrobeItem[];
+  }>("GET", "/v1/mirror-studio/wardrobe/items");
+}
+
+export function createWardrobeItem(body: {
+  imageB64: string;
+  name?: string;
+  category?: string;
+  colourTags?: string[];
+  sampleHexes?: string[];
+  purchasePriceMinor?: number | null;
+}) {
+  return request<{
+    item: import("../../../../packages/api-types/src/index").WardrobeItem;
+  }>("POST", "/v1/mirror-studio/wardrobe/items", body);
+}
+
+export function patchWardrobeItem(
+  id: string,
+  body: {
+    name?: string | null;
+    category?: string;
+    colourTags?: string[];
+    purchasePriceMinor?: number | null;
+    archived?: boolean;
+  },
+) {
+  return request<{
+    item: import("../../../../packages/api-types/src/index").WardrobeItem;
+  }>("PATCH", `/v1/mirror-studio/wardrobe/items/${encodeURIComponent(id)}`, body);
+}
+
+export function getWardrobeItemMedia(id: string) {
+  return request<{ contentType: string; imageB64: string }>(
+    "GET",
+    `/v1/mirror-studio/wardrobe/items/${encodeURIComponent(id)}/media`,
+  );
+}
+
+export function listWardrobeOutfits() {
+  return request<{
+    outfits: import("../../../../packages/api-types/src/index").WardrobeOutfit[];
+  }>("GET", "/v1/mirror-studio/wardrobe/outfits");
+}
+
+export function createWardrobeOutfit(body: { itemIds: string[]; occasion?: string }) {
+  return request<{
+    outfit: import("../../../../packages/api-types/src/index").WardrobeOutfit;
+  }>("POST", "/v1/mirror-studio/wardrobe/outfits", body);
+}
+
+export function getWardrobeOutfit(id: string) {
+  return request<{
+    outfit: import("../../../../packages/api-types/src/index").WardrobeOutfit;
+  }>("GET", `/v1/mirror-studio/wardrobe/outfits/${encodeURIComponent(id)}`);
+}
+
+export function markWardrobeOutfitWorn(id: string, wornOn: string) {
+  return request<{
+    outfit: import("../../../../packages/api-types/src/index").WardrobeOutfit;
+  }>("PATCH", `/v1/mirror-studio/wardrobe/outfits/${encodeURIComponent(id)}`, {
+    wornOn,
+  });
+}
+
+export function createWardrobeOutfitTryOn(id: string, body: { imageB64: string }) {
+  return request<{
+    outfit: import("../../../../packages/api-types/src/index").WardrobeOutfit;
+  }>(
+    "POST",
+    `/v1/mirror-studio/wardrobe/outfits/${encodeURIComponent(id)}/tryon`,
+    body,
+  );
+}
+
+export function getWardrobeOutfitMedia(id: string) {
+  return request<{ contentType: string; imageB64: string }>(
+    "GET",
+    `/v1/mirror-studio/wardrobe/outfits/${encodeURIComponent(id)}/media`,
+  );
+}
+
+export function createWardrobePackingList(body: {
+  nights: number;
+  climate: string;
+}) {
+  return request<{
+    list: import("../../../../packages/api-types/src/index").WardrobePackingList;
+  }>("POST", "/v1/mirror-studio/wardrobe/packing-list", body);
+}
+
+export function suggestWardrobeOutfit(body?: { climate?: string }) {
+  return request<{
+    suggestion: import("../../../../packages/api-types/src/index").DailyOutfitSuggestion;
+    outfit: import("../../../../packages/api-types/src/index").WardrobeOutfit | null;
+  }>("POST", "/v1/mirror-studio/wardrobe/outfits/suggest", body ?? {});
+}
+
+export function getStyleAnalytics() {
+  return request<{
+    analytics: import("../../../../packages/api-types/src/index").StyleAnalytics;
+  }>("GET", "/v1/mirror-studio/style-analytics");
+}
+
+export function listAccessoryLooks() {
+  return request<{
+    looks: import("../../../../packages/api-types/src/index").AccessoryLook[];
+  }>("GET", "/v1/mirror-studio/accessories");
+}
+
+export function createAccessoryLook(
+  kind: "jewellery" | "eyewear" | "nail",
+  body: { catalogueItemId: string; imageB64?: string; scanId?: string },
+) {
+  return request<{
+    look: import("../../../../packages/api-types/src/index").AccessoryLook;
+  }>("POST", `/v1/mirror-studio/accessories/${kind}`, body);
+}
+
+export function getAccessoryLook(id: string) {
+  return request<{
+    look: import("../../../../packages/api-types/src/index").AccessoryLook;
+  }>("GET", `/v1/mirror-studio/accessories/${encodeURIComponent(id)}`);
+}
+
+export function getAccessoryLookMedia(id: string) {
+  return request<{ contentType: string; imageB64: string }>(
+    "GET",
+    `/v1/mirror-studio/accessories/${encodeURIComponent(id)}/media`,
+  );
+}
+
+export function listMyResale() {
+  return request<{
+    listings: import("../../../../packages/api-types/src/index").ResaleListing[];
+  }>("GET", "/v1/mirror-studio/resale/listings");
+}
+
+export function createResaleListing(body: {
+  wardrobeItemId: string;
+  priceMinor: number;
+}) {
+  return request<{
+    listing: import("../../../../packages/api-types/src/index").ResaleListing;
+    message: string;
+  }>("POST", "/v1/mirror-studio/resale/listings", body);
+}
+
+export function getResaleListing(id: string) {
+  return request<{
+    listing: import("../../../../packages/api-types/src/index").ResaleListing;
+  }>("GET", `/v1/mirror-studio/resale/listings/${encodeURIComponent(id)}`);
+}
+
+export function getResaleListingMedia(id: string) {
+  return request<{ contentType: string; imageB64: string }>(
+    "GET",
+    `/v1/mirror-studio/resale/listings/${encodeURIComponent(id)}/media`,
+  );
+}
+
 export function listMarketplace(query: string) {
   return request<{
     listings: import("../../../../packages/api-types/src/index").MarketplaceListing[];
+    resale?: import("../../../../packages/api-types/src/index").ResaleListing[];
     note: string;
   }>("GET", `/v1/marketplace/listings${query}`);
 }
 
 export function getMarketplaceListing(id: string, query: string) {
   return request<{
-    listing: import("../../../../packages/api-types/src/index").MarketplaceListing;
+    listing: import("../../../../packages/api-types/src/index").MarketplaceListing | null;
+    resale?: import("../../../../packages/api-types/src/index").ResaleListing;
   }>("GET", `/v1/marketplace/listings/${encodeURIComponent(id)}${query}`);
 }
 

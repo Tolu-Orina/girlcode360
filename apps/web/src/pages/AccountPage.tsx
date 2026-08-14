@@ -94,6 +94,8 @@ const CONSENT_LABELS: Record<ConsentPurpose, string> = {
   ai_alena: "Alena AI",
   ai_healthlens: "HealthLens",
   mirror_biometric: "Mirror photos (skin and try-on)",
+  mirror_live_camera: "Live camera (Makeup Studio)",
+  wardrobe: "My Wardrobe (clothing photos)",
   shematch: "SheMatch local suggestions",
 };
 

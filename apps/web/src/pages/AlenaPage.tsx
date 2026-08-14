@@ -32,7 +32,7 @@ import type {
   HealthModule,
   Market,
 } from "../../../../packages/api-types/src/index";
-import { EMERGENCY_BY_MARKET } from "../../../../packages/domain/src/index";
+import { EMERGENCY_BY_MARKET, WARDROBE_CLIMATES, climateFromMarket } from "../../../../packages/domain/src/index";
 import {
   ApiError,
   createPrepCard,
@@ -134,6 +134,9 @@ export function AlenaPage() {
   const [kbInset, setKbInset] = useState(0);
   const [alenaConsent, setAlenaConsent] = useState<boolean | null>(null);
   const [market, setMarket] = useState<Market>("UK");
+  const [climate, setClimate] = useState<(typeof WARDROBE_CLIMATES)[number]>(
+    "temperate",
+  );
   const online = useOnline();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -145,6 +148,10 @@ export function AlenaPage() {
       setInput(
         "Can you help me understand my latest HealthLens report and suggest questions for my clinician?",
       );
+    }
+    if (ask === "wear") {
+      setPanel("chat");
+      setInput("What should I wear today?");
     }
   }, [params]);
 
@@ -185,6 +192,7 @@ export function AlenaPage() {
         setQuota(q.quota);
         setHlStatus(status);
         setMarket(me.market);
+        setClimate(climateFromMarket(me.market));
         const granted = consents.current.find(
           (c) => c.purpose === "ai_alena" || (c.purpose as string) === "ai_zara",
         )?.granted;
@@ -239,6 +247,7 @@ export function AlenaPage() {
         })),
         lat: origin?.lat,
         lng: origin?.lng,
+        climate,
       });
       setQuota(res.quota);
       setDisclaimer(res.disclaimer);
@@ -460,6 +469,35 @@ export function AlenaPage() {
             </p>
           ) : null}
 
+          <div className="grid gap-3">
+            <FieldSelect
+              aria-label="Session climate"
+              value={climate}
+              onChange={(e) =>
+                setClimate(
+                  e.target.value as (typeof WARDROBE_CLIMATES)[number],
+                )
+              }
+              className="max-w-xs"
+            >
+              {WARDROBE_CLIMATES.map((c) => (
+                <option key={c} value={c}>
+                  Climate: {c} (not live weather)
+                </option>
+              ))}
+            </FieldSelect>
+            <ActionRow>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || showPaywall || !online}
+                onClick={() => setInput("What should I wear today?")}
+              >
+                What should I wear today?
+              </Button>
+            </ActionRow>
+          </div>
+
           <div
             className="grid max-h-[min(58dvh,560px)] min-h-[min(36dvh,280px)] gap-3 overflow-y-auto rounded-[var(--radius)] border border-border bg-card p-4"
             aria-live="polite"
@@ -467,7 +505,7 @@ export function AlenaPage() {
             {msgs.length === 0 ? (
               <EmptyState
                 title="Ask Alena"
-                body="Ask about symptoms, cycles, or how to talk to your clinician."
+                body="Ask about symptoms, cycles, what to wear from your closet, or how to talk to your clinician."
               />
             ) : null}
             {msgs.map((m, i) => (

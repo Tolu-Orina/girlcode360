@@ -29,7 +29,9 @@ export type SheMatchTriggerId =
   | "pregnancy_emergency"
   | "pcos_acne"
   | "medication_due"
-  | "mirror_skin";
+  | "mirror_skin"
+  | "mirror_shade"
+  | "mirror_nail";
 
 export type SheMatchTrigger = {
   id: SheMatchTriggerId;
@@ -98,6 +100,22 @@ export const SHEMATCH_TRIGGERS: SheMatchTrigger[] = [
     tags: ["acne", "oiliness", "texture", "redness", "age_spot", "skincare"],
     why: "A Mirror skin score was clearly elevated on this scan.",
     bannerHint: "Skincare nearby",
+  },
+  {
+    id: "mirror_shade",
+    module: "period_tracker",
+    categories: ["beauty"],
+    tags: ["foundation", "concealer", "beauty"],
+    why: "A shade match is ready to shop through SheMatch, not an outbound retailer link.",
+    bannerHint: "Beauty stores nearby",
+  },
+  {
+    id: "mirror_nail",
+    module: "period_tracker",
+    categories: ["boutique", "beauty"],
+    tags: ["nail", "salon"],
+    why: "You tried a nail colour in Accessories Studio. This is nearby salons, not a diagnosis.",
+    bannerHint: "Nail salons nearby",
   },
 ];
 
@@ -311,6 +329,9 @@ export const BUSINESS_HEALTH_TAGS = [
     "maternity",
     "pmos",
     "boutique",
+    "jewellery",
+    "eyewear",
+    "optician",
   ]),
 ].sort();
 

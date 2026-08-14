@@ -15,6 +15,8 @@ export type ConsentPurpose =
   | "ai_alena"
   | "ai_healthlens"
   | "mirror_biometric"
+  | "mirror_live_camera"
+  | "wardrobe"
   | "shematch";
 
 export type UserProfile = {
@@ -372,9 +374,17 @@ export type ApparelTryOn = {
   hasResultImage: boolean;
 };
 
+export type MirrorCatalogueKind =
+  | "skincare"
+  | "apparel"
+  | "makeup"
+  | "jewellery"
+  | "eyewear"
+  | "nail_color";
+
 export type MirrorCatalogueItem = {
   id: string;
-  kind: "skincare" | "apparel";
+  kind: MirrorCatalogueKind;
   title: string;
   subtitle: string;
   tags: string[];
@@ -385,6 +395,168 @@ export type MirrorCatalogueItem = {
   boutiqueArea: string;
   trimester?: 1 | 2 | 3 | null;
   pmosFit: boolean;
+  brandCode?: string;
+  shadeCode?: string;
+  shadeFamily?: string;
+  accessoryCategory?: "ring" | "bracelet" | "watch" | "earring" | "necklace";
+  nailColor?: string;
+  tryOnReady?: boolean;
+  /** Server-only retailer 3D / frame ids — stripped in listCatalogue. */
+  asset3dId?: string | null;
+  frameId?: string | null;
+};
+
+export type MirrorStatus = {
+  consented: boolean;
+  liveCameraConsented: boolean;
+  wardrobeConsented: boolean;
+  youcamConfigured: boolean;
+  youcamAvailable: boolean;
+};
+
+export type MakeupLook = {
+  id: string;
+  status: MirrorTaskStatus;
+  sourceKind: "live" | "photo" | "transfer";
+  categories: string[];
+  saved: boolean;
+  hasResultImage: boolean;
+  createdAt: string;
+};
+
+export type ShadeTwin = {
+  catalogueId: string;
+  brandCode: string;
+  shadeCode: string;
+  family: string;
+  boutiqueName: string;
+  boutiqueArea: string;
+  confidence: "low" | "medium" | "high";
+};
+
+export type ShadeMatch = {
+  id: string;
+  sourceScanId: string;
+  fitzpatrickType: string | null;
+  wellnessNote: string;
+  overallConfidence: "Low" | "Medium" | "High";
+  twins: ShadeTwin[];
+  createdAt: string;
+};
+
+export type HairScanKind = "analysis" | "tryon";
+
+export type HairScan = {
+  id: string;
+  kind: HairScanKind;
+  status: MirrorTaskStatus;
+  createdAt: string;
+  cycleDayAtScan: number | null;
+  cyclePhaseAtScan: CyclePhase | null;
+  scores: {
+    hair_type?: string | null;
+    hair_length?: number | null;
+    hair_frizziness?: number | null;
+    hair_density?: number | null;
+  };
+  hairColor: string | null;
+  hairstyleId: string | null;
+  hasResultImage: boolean;
+  insight: MirrorInsight | null;
+};
+
+export type WardrobeItem = {
+  id: string;
+  name: string | null;
+  category: string | null;
+  colourTags: string[];
+  suggestedColourTags: string[];
+  suggestedCategory: string | null;
+  purchasePriceMinor: number | null;
+  wornCount: number;
+  archived: boolean;
+  hasImage: boolean;
+  createdAt: string;
+};
+
+export type WardrobeOutfit = {
+  id: string;
+  itemIds: string[];
+  occasion: string | null;
+  wornOn: string | null;
+  status: MirrorTaskStatus | "ready";
+  hasResultImage: boolean;
+  createdAt: string;
+};
+
+export type WardrobePackingList = {
+  itemIds: string[];
+  notes: string[];
+  enoughItems: boolean;
+};
+
+export type StyleCostPerWear = {
+  itemId: string;
+  name: string | null;
+  wornCount: number;
+  purchasePriceMinor: number | null;
+  costPerWearMinor: number | null;
+};
+
+export type StylePoint = {
+  id: string;
+  createdAt: string;
+  label: string;
+  value: number | null;
+};
+
+export type StyleAnalytics = {
+  windowDays: number;
+  utilisationPct: number | null;
+  itemsCatalogued: number;
+  itemsWornInWindow: number;
+  costPerWear: StyleCostPerWear[];
+  skinTrend: StylePoint[];
+  hairTrend: StylePoint[];
+  shadeHistory: StylePoint[];
+  newConsentRequired: false;
+};
+
+export type DailyOutfitSuggestion = {
+  itemIds: string[];
+  notes: string[];
+  enoughItems: boolean;
+  shopFirst: false;
+  climate: string;
+  climateSource: "session" | "market_default";
+};
+
+export type AccessoryLookKind = "jewellery" | "eyewear" | "nail";
+
+export type AccessoryLook = {
+  id: string;
+  kind: AccessoryLookKind;
+  status: MirrorTaskStatus;
+  catalogueItemId: string;
+  accessoryCategory: string | null;
+  hasResultImage: boolean;
+  createdAt: string;
+};
+
+export type ResaleListingStatus = "pending_moderation" | "live" | "rejected";
+
+export type ResaleListing = {
+  id: string;
+  wardrobeItemId: string;
+  title: string;
+  details: string;
+  priceMinor: number;
+  status: ResaleListingStatus;
+  peerLabel: "from a GirlCode360 member";
+  market: Market;
+  hasImage: boolean;
+  createdAt: string;
+  mine?: boolean;
 };
 
 export type CreateSkinScanRequest = {
@@ -502,7 +674,9 @@ export type SheMatchTriggerId =
   | "pregnancy_emergency"
   | "pcos_acne"
   | "medication_due"
-  | "mirror_skin";
+  | "mirror_skin"
+  | "mirror_shade"
+  | "mirror_nail";
 
 export type CommunityGroupId =
   | "ttc_circle"
