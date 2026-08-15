@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ActionRow,
+  elevatedCardClass,
   leadClass,
-  outlinedCardClass,
 } from "@/components/blocks/app-page";
 import { SheMatchBanner } from "@/components/blocks/shematch-banner";
 import { EmptyState } from "@/components/blocks/states";
-import { FieldSelect } from "@/components/primitives/field";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
-import { useMakeupLook } from "@/components/blocks/makeup-look-context";
+import { MakeupFeatureRail, useMakeupLook } from "@/components/blocks/makeup-look-context";
 import { Button } from "@/components/ui/button";
 import {
   CURRENT_POLICY_VERSION,
@@ -22,10 +21,10 @@ import {
   saveMakeupLook,
 } from "@/lib/api";
 import { CameraStillCapture } from "@/components/blocks/camera-still";
-import { MirrorStill } from "@/components/blocks/mirror-still";
+import { MirrorStage, MirrorStageEmpty, mirrorStudioRowClass } from "@/components/blocks/mirror-stage";
 import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
 import { PURPOSE_COPY } from "@/lib/consent-copy";
-import { cameraVideoConstraints, fileToJpegDataUrl, listVideoCameras, videoFrameToJpegDataUrl } from "@/lib/jpeg-upload";
+import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
   MakeupLook,
@@ -67,6 +66,7 @@ export function MirrorStudioPanel({
   onError,
   onStatus,
   friendlyError,
+  tray,
 }: {
   status: MirrorStatus;
   scans: SkinScan[];
@@ -77,17 +77,14 @@ export function MirrorStudioPanel({
   onError: (msg: string | null) => void;
   onStatus: () => Promise<void>;
   friendlyError: (err: unknown) => string;
+  tray: ReactNode;
 }) {
   const { mode, setMode, features, lookSelection } = useMakeupLook();
   const [looks, setLooks] = useState<MakeupLook[]>([]);
   const [selected, setSelected] = useState<MakeupLook | null>(null);
   const [lookSrc, setLookSrc] = useState<string | null>(null);
   const [shade, setShade] = useState<ShadeMatch | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
-  const [deviceId, setDeviceId] = useState<string | undefined>();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const [rescan, setRescan] = useState(false);
   const refInput = useRef<HTMLInputElement>(null);
   const pendingLook = useRef<string | null>(null);
   const lastQueued = useRef("");
@@ -158,61 +155,6 @@ export function MirrorStudioPanel({
     return () => window.clearInterval(tick);
   }, [selected?.id, load, onBusy, onError, friendlyError]);
 
-  useEffect(() => {
-    if (mode !== "live" || !status.liveCameraConsented) {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: cameraVideoConstraints("user", deviceId),
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-        const used = stream.getVideoTracks()[0]?.getSettings().deviceId;
-        if (used && used !== deviceId) setDeviceId(used);
-        const list = await listVideoCameras();
-        if (!cancelled) setCameras(list);
-        setCameraError(null);
-      } catch {
-        setCameraError(
-          "Camera is not available. Use photo mode — same look, one still.",
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- deviceId via switchLiveCamera
-  }, [mode, status.liveCameraConsented]);
-
-  async function switchLiveCamera(id: string) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: cameraVideoConstraints("user", id),
-        audio: false,
-      });
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setDeviceId(id);
-      setCameraError(null);
-    } catch {
-      setCameraError("Could not switch camera. The other camera may be in use.");
-    }
-  }
-
   async function runLook(
     kind: "live" | "photo" | "transfer",
     body: Parameters<typeof createMakeupLook>[1],
@@ -235,33 +177,12 @@ export function MirrorStudioPanel({
     }
   }
 
-  async function captureLive() {
-    const video = videoRef.current;
-    if (!video || video.videoWidth < 480 || video.videoHeight < 480) {
-      onError("Hold still in even light until your face fills the guide.");
-      return;
-    }
-    try {
-      const imageB64 = videoFrameToJpegDataUrl(video, { maxLong: 1024 });
-      if (features.length === 0) {
-        onError("Turn on at least one makeup feature.");
-        return;
-      }
-      await runLook("live", { imageB64, ...lookSelection() });
-    } catch (err) {
-      onError(
-        err instanceof Error && err.message === "image_too_small"
-          ? "Move closer so your face fills the guide."
-          : friendlyError(err),
-      );
-    }
-  }
-
   async function onFaceFile(file: File | undefined, kind: "photo" | "transfer") {
     if (!file) return;
     try {
       setSelected(null);
       setLookSrc(URL.createObjectURL(file));
+      setRescan(false);
       const imageB64 = await fileToJpegDataUrl(file, { maxLong: 1024 });
       if (kind === "photo") {
         if (features.length === 0) {
@@ -335,18 +256,49 @@ export function MirrorStudioPanel({
     }
   }
 
+  useEffect(() => {
+    setRescan(false);
+  }, [mode]);
+
+  async function onStageFile(file: File) {
+    setRescan(false);
+    if (mode === "live") {
+      try {
+        setSelected(null);
+        setLookSrc(URL.createObjectURL(file));
+        if (features.length === 0) {
+          onError("Turn on at least one makeup feature.");
+          return;
+        }
+        const imageB64 = await fileToJpegDataUrl(file, { maxLong: 1024 });
+        await runLook("live", { imageB64, ...lookSelection() });
+      } catch (err) {
+        onError(
+          err instanceof Error && err.message === "image_too_small"
+            ? "Move closer so your face fills the oval."
+            : friendlyError(err),
+        );
+      }
+      return;
+    }
+    void onFaceFile(file, mode === "transfer" ? "transfer" : "photo");
+  }
+
   const captureOff = busy || !status.youcamConfigured || !online;
   const liveCopy = PURPOSE_COPY.mirror_live_camera;
+  const pending = selected?.status === "pending";
+  const showCamera =
+    mode !== "shade" && (rescan || !lookSrc);
+  const needLiveConsent = mode === "live" && !status.liveCameraConsented;
+
+  function lookKindLabel(look: MakeupLook): string {
+    if (look.sourceKind === "live") return "Live";
+    if (look.sourceKind === "transfer") return "Transferred";
+    return "Photo";
+  }
 
   return (
-    <div className="grid gap-4">
-      <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-        Makeup Studio
-      </h2>
-      <p className={leadClass}>
-        Try on foundation, brows, blush, eyeshadow, and lashes in shades
-        stocked at SheMatch boutiques. Live preview stays on this device.
-      </p>
+    <div className="grid min-w-0 gap-6">
       <SegmentedTabs
         ariaLabel="Makeup Studio modes"
         value={mode}
@@ -359,248 +311,260 @@ export function MirrorStudioPanel({
         ]}
       />
 
-      <p className={leadClass}>
-        Choose a saved face photo on the right, then press Use for this makeup
-        look.
-      </p>
-
-      {mode === "live" ? (
-        <div className={cn(outlinedCardClass, "grid gap-4")}>
-          {!status.liveCameraConsented ? (
-            <>
-              <h3 className="m-0 text-[length:var(--text-sub)]">{liveCopy.title}</h3>
-              <p className={leadClass}>{liveCopy.body}</p>
-              <ActionRow>
-                <Button type="button" disabled={busy} onClick={() => void grantLiveCamera()}>
-                  Allow live camera
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setMode("photo")}>
-                  Use photo mode
-                </Button>
-              </ActionRow>
-            </>
-          ) : (
-            <>
-              <p className={leadClass}>
-                Centre your face in the oval. Tracking is on-device. Capture
-                sends one still — not a video stream.
-              </p>
-              {cameraError ? <p className={leadClass}>{cameraError}</p> : null}
-              <div className="relative w-full overflow-hidden rounded-[var(--radius)] border border-border bg-muted max-lg:aspect-[4/5] lg:mx-auto lg:max-w-[280px]">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="block aspect-[4/5] h-auto w-full object-cover object-[center_18%] lg:aspect-[3/4]"
+      <div className={mirrorStudioRowClass}>
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          {mode === "shade" ? (
+            <MirrorStage>
+              {lookSrc ? (
+                <img
+                  src={lookSrc}
+                  alt="Makeup try-on"
+                  className="size-full object-cover object-center"
                 />
-                <div
-                  className="pointer-events-none absolute inset-4 rounded-[50%] border-2 border-primary/70"
-                  aria-hidden
-                />
-              </div>
-              {cameras.length > 1 ? (
-                <label className="grid gap-2">
-                  <span className="text-[length:var(--text-label)] text-foreground">
-                    Camera
-                  </span>
-                  <FieldSelect
-                    aria-label="Choose camera"
-                    value={deviceId ?? ""}
-                    onChange={(e) => void switchLiveCamera(e.target.value)}
-                  >
-                    {cameras.map((cam, i) => (
-                      <option key={cam.deviceId} value={cam.deviceId}>
-                        {cam.label || `Camera ${i + 1}`}
-                      </option>
-                    ))}
-                  </FieldSelect>
-                </label>
+              ) : (
+                <MirrorStageEmpty label="Shade match uses your latest skin scan, not a new still." />
+              )}
+            </MirrorStage>
+          ) : needLiveConsent ? (
+            <MirrorStage
+              dock={
+                <div className="grid gap-4">
+                  <p className={leadClass}>{liveCopy.body}</p>
+                  <ActionRow>
+                    <Button type="button" disabled={busy} onClick={() => void grantLiveCamera()}>
+                      Allow live camera
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setMode("photo")}>
+                      Use photo mode
+                    </Button>
+                  </ActionRow>
+                </div>
+              }
+            >
+              <MirrorStageEmpty />
+            </MirrorStage>
+          ) : showCamera ? (
+            <div className="grid min-w-0 gap-4">
+              {mode === "transfer" ? (
+                <>
+                  <input
+                    ref={refInput}
+                    className="sr-only"
+                    type="file"
+                    accept="image/*"
+                    disabled={captureOff}
+                  />
+                  <ActionRow>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={captureOff}
+                      onClick={() => refInput.current?.click()}
+                    >
+                      Choose reference
+                    </Button>
+                  </ActionRow>
+                </>
               ) : null}
+              <CameraStillCapture
+                chrome="stage"
+                disabled={captureOff}
+                facingMode="user"
+                guide="face"
+                captureLabel="Take a face photo"
+                videoLabel={
+                  mode === "transfer"
+                    ? "Live camera for a look-transfer still"
+                    : "Live camera for a makeup still"
+                }
+                photoKind="face"
+                onFile={(file) => void onStageFile(file)}
+                onError={onError}
+              />
+            </div>
+          ) : (
+            <MirrorStage
+              pending={pending}
+              pendingLabel="Building this look. Keep this screen open."
+              dock={
+                <div className="grid gap-4">
+                  {selected?.status === "error" ? (
+                    <p className={leadClass}>{makeupFailCopy(selected.failReason)}</p>
+                  ) : null}
+                  <ActionRow>
+                    <Button type="button" disabled={captureOff} onClick={() => setRescan(true)}>
+                      Try another photo
+                    </Button>
+                  </ActionRow>
+                </div>
+              }
+            >
+              {lookSrc ? (
+                <img
+                  src={lookSrc}
+                  alt="Makeup try-on"
+                  className="size-full object-cover object-center"
+                />
+              ) : (
+                <MirrorStageEmpty label="Result image is not ready yet." />
+              )}
+            </MirrorStage>
+          )}
+        </div>
+
+        <div className="min-w-0 max-lg:col-start-2 max-lg:row-start-1 lg:col-start-3 lg:row-start-1">
+          {tray}
+        </div>
+
+        <aside className="grid min-w-0 gap-6 max-lg:col-span-2 lg:col-start-2 lg:row-start-1">
+          {mode === "shade" ? (
+            <article className={cn(elevatedCardClass, "border-0")}>
+              <header className="grid gap-1">
+                <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                  Shade match
+                </h2>
+                <p className={leadClass}>
+                  Foundation codes from a skin scan in the last 30 days. Confidence
+                  is Low, Medium, or High.
+                </p>
+              </header>
               <ActionRow>
                 <Button
                   type="button"
-                  disabled={captureOff || Boolean(cameraError)}
-                  onClick={() => void captureLive()}
+                  disabled={captureOff || !reusable}
+                  onClick={() => void onShade()}
                 >
-                  Capture look
+                  Match my shade
                 </Button>
-                {cameras.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const i = cameras.findIndex((c) => c.deviceId === deviceId);
-                      const next = cameras[(i + 1 + cameras.length) % cameras.length];
-                      if (next) void switchLiveCamera(next.deviceId);
-                    }}
-                  >
-                    Switch camera
-                  </Button>
-                ) : null}
               </ActionRow>
-            </>
-          )}
-        </div>
-      ) : null}
-
-      {mode === "photo" ? (
-        <div className="grid gap-4">
-          <p className={leadClass}>
-            Pick a saved face photo on the right, then press Use for this makeup
-            look. That file is the one that runs — not an older skin scan.
-          </p>
-          <CameraStillCapture
-            disabled={captureOff}
-            facingMode="user"
-            guide="face"
-            captureLabel="Take a face photo"
-            videoLabel="Live camera for a makeup still"
-            photoKind="face"
-            onFile={(file) => void onFaceFile(file, "photo")}
-            onError={onError}
-          />
-        </div>
-      ) : null}
-
-      {mode === "transfer" ? (
-        <div className="grid gap-4">
-          <p className={leadClass}>
-            Add a reference look from your library, then take a face photo.
-            Approximation only — not a product match until you run shade match.
-          </p>
-          <input
-            ref={refInput}
-            className="sr-only"
-            type="file"
-            accept="image/*"
-            disabled={captureOff}
-          />
-          <ActionRow>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={captureOff}
-              onClick={() => refInput.current?.click()}
-            >
-              Choose reference
-            </Button>
-          </ActionRow>
-          <CameraStillCapture
-            disabled={captureOff}
-            facingMode="user"
-            guide="face"
-            captureLabel="Take a face photo"
-            videoLabel="Live camera for a look-transfer still"
-            photoKind="face"
-            onFile={(file) => void onFaceFile(file, "transfer")}
-            onError={onError}
-          />
-        </div>
-      ) : null}
-
-      {mode === "shade" ? (
-        <div className="grid gap-4">
-          <p className={leadClass}>
-            Matches foundation codes from your latest skin scan (last 30 days)
-            to stocked retailer shades. Confidence is Low, Medium, or High —
-            same honesty as HealthLens.
-          </p>
-          <ActionRow>
-            <Button type="button" disabled={captureOff || !reusable} onClick={() => void onShade()}>
-              Match my shade
-            </Button>
-          </ActionRow>
-          {!reusable ? (
-            <EmptyState
-              title="Need a recent skin scan"
-              body="Take a face scan on the Skin scan tab. Shade match will not invent a tone from a blank history."
-            />
-          ) : null}
-          {shade ? (
-            <article className={cn(outlinedCardClass, "grid gap-4")}>
-              <h3 className="m-0 text-[length:var(--text-sub)]">
-                Shade twins · {shade.overallConfidence} confidence
-              </h3>
-              <p className={leadClass}>{shade.wellnessNote}</p>
-              {shade.fitzpatrickType ? (
-                <p className={leadClass}>
-                  Matching aid type {shade.fitzpatrickType}. Not a health label.
-                </p>
+              {!reusable ? (
+                <EmptyState
+                  title="Need a recent skin scan"
+                  body="Take a face scan in Skin first. Shade match will not invent a tone from a blank history."
+                />
               ) : null}
-              <ul className="m-0 grid list-none gap-3 p-0">
-                {shade.twins.map((t) => (
-                  <li
-                    key={t.catalogueId}
-                    className="grid gap-1 border-t border-border pt-3 first:border-t-0 first:pt-0"
-                  >
-                    <p className="m-0 text-[length:var(--text-body)] text-foreground">
-                      {t.brandCode} {t.shadeCode}
-                    </p>
+              {shade ? (
+                <div className="grid gap-4">
+                  <p className="m-0 text-[length:var(--text-label)] font-semibold text-foreground">
+                    Shade twins · {shade.overallConfidence} confidence
+                  </p>
+                  <p className={leadClass}>{shade.wellnessNote}</p>
+                  {shade.fitzpatrickType ? (
                     <p className={leadClass}>
-                      {t.boutiqueName} · {t.boutiqueArea} · {t.confidence} match
+                      Matching aid type {shade.fitzpatrickType}. Not a health label.
                     </p>
-                  </li>
-                ))}
-              </ul>
-              <SheMatchBanner trigger="mirror_shade" extraTags={["foundation"]} />
+                  ) : null}
+                  <ul className="m-0 grid list-none gap-3 p-0">
+                    {shade.twins.map((t) => (
+                      <li key={t.catalogueId} className="grid gap-1">
+                        <p className="m-0 text-[length:var(--text-body)] text-foreground">
+                          {t.brandCode} {t.shadeCode}
+                        </p>
+                        <p className={leadClass}>
+                          {t.boutiqueName} · {t.boutiqueArea} · {t.confidence} match
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                  <SheMatchBanner trigger="mirror_shade" extraTags={["foundation"]} />
+                </div>
+              ) : null}
+            </article>
+          ) : mode === "transfer" ? (
+            <article className={cn(elevatedCardClass, "border-0")}>
+              <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                Get this look
+              </h2>
+              <p className={leadClass}>
+                Add a reference, then capture your face. Approximation only — not
+                a product match until you run shade match.
+              </p>
+            </article>
+          ) : (
+            <MakeupFeatureRail />
+          )}
+
+          {selected && mode !== "shade" ? (
+            <article className={cn(elevatedCardClass, "border-0")}>
+              <header className="grid gap-1">
+                <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                  {lookKindLabel(selected)} look
+                  {selected.status === "pending" ? " · Working" : ""}
+                  {selected.status === "error" ? " · Could not finish" : ""}
+                </h2>
+                {selected.status === "error" ? (
+                  <p className={leadClass}>{makeupFailCopy(selected.failReason)}</p>
+                ) : (
+                  <p className={leadClass}>
+                    Looks stay private until you save.
+                  </p>
+                )}
+              </header>
+              <ActionRow>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || selected.saved}
+                  onClick={() =>
+                    void saveMakeupLook(selected.id, true).then((res) => {
+                      setSelected(res.look);
+                      setLooks((cur) =>
+                        cur.map((l) => (l.id === res.look.id ? res.look : l)),
+                      );
+                    })
+                  }
+                >
+                  {selected.saved ? "Saved privately" : "Save look"}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setMode("shade")}>
+                  Shop this shade
+                </Button>
+              </ActionRow>
             </article>
           ) : null}
-        </div>
-      ) : null}
 
-      {selected && mode !== "shade" ? (
-        <article className={cn(outlinedCardClass, "grid gap-4")}>
-          <h3 className="m-0 text-[length:var(--text-sub)]">
-            {selected.sourceKind === "live"
-              ? "Live capture"
-              : selected.sourceKind === "transfer"
-                ? "Transferred look"
-                : "Photo look"}
-            {selected.status === "pending" ? " · Working" : ""}
-            {selected.status === "error" ? " · Could not finish" : ""}
-          </h3>
-          {selected.status === "error" ? (
-            <p className={leadClass}>
-              {makeupFailCopy(selected.failReason)}
-            </p>
-          ) : null}
-          {lookSrc ? (
-            <MirrorStill src={lookSrc} alt="Makeup try-on result" crop="face" />
-          ) : selected.hasResultImage ? (
-            <p className={leadClass}>Loading result…</p>
-          ) : (
-            <p className={leadClass}>Result image is not ready yet.</p>
-          )}
-          <ActionRow>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || selected.saved}
-              onClick={() =>
-                void saveMakeupLook(selected.id, true).then((res) => {
-                  setSelected(res.look);
-                  setLooks((cur) =>
-                    cur.map((l) => (l.id === res.look.id ? res.look : l)),
-                  );
-                })
-              }
+          {mode !== "shade" && looks.length ? (
+            <ul
+              className="m-0 flex list-none flex-wrap gap-2 p-0"
+              aria-label="Saved makeup looks"
             >
-              {selected.saved ? "Saved privately" : "Save look"}
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => setMode("shade")}>
-              Shop this shade
-            </Button>
-          </ActionRow>
-        </article>
-      ) : null}
+              {looks.map((look) => {
+                const on = selected?.id === look.id;
+                return (
+                  <li key={look.id}>
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      className={cn(
+                        "min-h-12 rounded-[var(--radius)] px-4 text-[length:var(--text-caption)] font-semibold",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        on
+                          ? "bg-muted text-foreground shadow-[var(--shadow-2)]"
+                          : "bg-card text-muted-foreground",
+                      )}
+                      onClick={() => {
+                        setRescan(false);
+                        setSelected(look);
+                      }}
+                    >
+                      {lookKindLabel(look)}
+                      {look.status === "pending" ? " · Working" : ""}
+                      {look.status === "error" ? " · Could not finish" : ""}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
 
-      {mode !== "shade" && !looks.length ? (
-        <EmptyState
-          title="No looks yet"
-          body="Photo mode works without live camera. Looks stay private until you save."
-        />
-      ) : null}
+          {mode !== "shade" && !looks.length && !showCamera ? (
+            <EmptyState
+              title="No looks yet"
+              body="Photo mode works without live camera. Looks stay private until you save."
+            />
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }

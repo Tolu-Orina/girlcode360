@@ -1,95 +1,59 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   ActionRow,
   AppPage,
   elevatedCardClass,
   leadClass,
-  outlinedCardClass,
 } from "@/components/blocks/app-page";
 import { PageHeader } from "@/components/blocks/page-header";
 import { AskAlenaLink } from "@/components/blocks/ask-alena-link";
-import { SheMatchBanner } from "@/components/blocks/shematch-banner";
-import { CameraStillCapture } from "@/components/blocks/camera-still";
 import { MirrorStudioPanel } from "@/components/blocks/mirror-studio";
 import { MirrorHairPanel } from "@/components/blocks/mirror-hair";
 import { MirrorAccessoriesPanel } from "@/components/blocks/mirror-accessories";
-import { MirrorWardrobePanel } from "@/components/blocks/mirror-wardrobe";
+import { MirrorApparelPanel } from "@/components/blocks/mirror-apparel";
+import { MirrorTimelinePanel } from "@/components/blocks/mirror-timeline";
+import { MirrorWardrobePanel, BoutiqueSamplesCard } from "@/components/blocks/mirror-wardrobe";
+import { MirrorConsentGate } from "@/components/blocks/mirror-consent-gate";
+import { MirrorSkinRail, MirrorSkinStudio } from "@/components/blocks/mirror-skin-studio";
+import { mirrorStudioRowClass } from "@/components/blocks/mirror-stage";
 import {
   MirrorStudioNav,
   type MirrorTab,
 } from "@/components/blocks/mirror-studio-nav";
-import { MakeupFeatureRail, MakeupLookProvider } from "@/components/blocks/makeup-look-context";
+import { MakeupLookProvider } from "@/components/blocks/makeup-look-context";
 import { MirrorPhotoTray } from "@/components/blocks/mirror-photo-tray";
 import { MirrorStill } from "@/components/blocks/mirror-still";
-import { ScoreBar } from "@/components/blocks/score-bar";
 import {
-  EmptyState,
   ErrorBanner,
   OfflineBanner,
   SkeletonBlock,
 } from "@/components/blocks/states";
-import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
-import { FieldSelect } from "@/components/primitives/field";
-import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { useOnline } from "@/hooks/use-online";
 import { MirrorPhotosProvider, useMirrorPhotos } from "@/hooks/use-mirror-photos";
 import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
-  ApparelTryOn,
   MirrorCatalogueItem,
   MirrorStatus,
   SkinScan,
-  StyleAnalytics,
   UserProfile,
 } from "../../../../packages/api-types/src/index";
 import {
   ApiError,
   createMirrorScan,
-  createMirrorTryOn,
   deleteMirrorScan,
   getMe,
   getMirrorCatalogue,
   getMirrorScan,
   getMirrorScanMedia,
   getMirrorStatus,
-  getMirrorTryOn,
-  getMirrorTryOnMedia,
-  getStyleAnalytics,
   listMirrorScans,
-  listMirrorTryOns,
   postMirrorConsent,
 } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
 import { MIRROR_PROCESSOR_LEAD } from "../lib/consent-copy";
 import { elevatedSkinConcerns } from "../../../../packages/domain/src/index";
-
-type CatalogueMode = "all" | "maternity" | "pmos";
-
-const SCORE_LABELS: Record<string, string> = {
-  acne: "Acne",
-  oiliness: "Oiliness",
-  redness: "Redness",
-  texture: "Texture",
-  pore: "Pores",
-  wrinkle: "Wrinkles",
-  radiance: "Radiance",
-  dark_circle: "Dark circles",
-  dark_circle_v2: "Dark circles",
-  moisture: "Moisture",
-  firmness: "Firmness",
-  age_spot: "Dark spots",
-  eye_bag: "Under-eye bags",
-  tear_trough: "Tear trough",
-  droopy_eyelid: "Eyelid droop",
-  droopy_lower_eyelid: "Lower eyelid",
-  droopy_upper_eyelid: "Upper eyelid",
-  all: "Combined",
-  skin_age: "Skin age (estimate)",
-  skin_type: "Skin type aid",
-};
 
 function friendlyError(err: unknown): string {
   if (err instanceof Error && err.message === "image_too_small") {
@@ -158,57 +122,6 @@ function friendlyError(err: unknown): string {
   }
 }
 
-function TrendRow({
-  label,
-  points,
-}: {
-  label: string;
-  points: { id: string; when: string; value: number }[];
-}) {
-  if (points.length < 2) return null;
-  return (
-    <div className="grid gap-2">
-      <p className="m-0 text-[length:var(--text-label)] text-foreground">
-        {label} over time
-      </p>
-      <ol className="m-0 grid min-w-0 list-none grid-cols-[repeat(auto-fit,minmax(2.5rem,1fr))] items-end gap-1 p-0">
-        {points.map((p) => (
-          <li key={p.id} className="grid justify-items-center gap-1">
-            <span
-              className="flex h-12 w-full items-end overflow-hidden rounded-sm bg-muted"
-              title={`${Math.round(p.value)} of 100`}
-            >
-              <span
-                className="block w-full bg-primary"
-                style={{ height: `${Math.min(100, Math.max(0, p.value))}%` }}
-              />
-            </span>
-            <span className="text-center text-[length:var(--text-caption)] text-muted-foreground">
-              {formatWhen(p.when)}
-            </span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
-function phaseLabel(phase: SkinScan["cyclePhaseAtScan"]): string {
-  if (!phase) return "No cycle day";
-  return phase.charAt(0).toUpperCase() + phase.slice(1);
-}
-
-function formatWhen(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      day: "numeric",
-      month: "short",
-    });
-  } catch {
-    return iso.slice(0, 10);
-  }
-}
-
 export function MirrorPage() {
   return (
     <MirrorPhotosProvider>
@@ -231,25 +144,16 @@ function MirrorPageView() {
   const [resultSrc, setResultSrc] = useState<string | null>(null);
   const [maskSrc, setMaskSrc] = useState<string | null>(null);
 
-  const [tryons, setTryons] = useState<ApparelTryOn[]>([]);
   const [catalogue, setCatalogue] = useState<MirrorCatalogueItem[]>([]);
-  const [catalogueMode, setCatalogueMode] = useState<CatalogueMode>("all");
-  const [emptyReason, setEmptyReason] = useState<string | undefined>();
   const [pickedItem, setPickedItem] = useState<string | null>(null);
-  const [tryonResult, setTryonResult] = useState<string | null>(null);
-  const [activeTryOn, setActiveTryOn] = useState<ApparelTryOn | null>(null);
-  const [lastBodyB64, setLastBodyB64] = useState<string | null>(null);
   const [compareA, setCompareA] = useState<string | null>(null);
   const [compareB, setCompareB] = useState<string | null>(null);
   const [compareSrc, setCompareSrc] = useState<{ a: string | null; b: string | null }>({
     a: null,
     b: null,
   });
-  const [style, setStyle] = useState<StyleAnalytics | null>(null);
-  const [styleReady, setStyleReady] = useState(false);
 
   const pendingScan = useRef<string | null>(null);
-  const pendingTryOn = useRef<string | null>(null);
   const lastQueued = useRef("");
   const { queued, consumeQueued } = useMirrorPhotos();
   const online = useOnline();
@@ -258,6 +162,7 @@ function MirrorPageView() {
     src: string;
     file: File;
   } | null>(null);
+  const [heldFaceSrc, setHeldFaceSrc] = useState<string | null>(null);
 
   const pregnancyOn = profile?.modules.includes("pregnancy") ?? false;
   const pmosOn = profile?.modules.includes("pcos_manager") ?? false;
@@ -271,12 +176,8 @@ function MirrorPageView() {
   }, []);
 
   const loadWorkspace = useCallback(async () => {
-    const [scanRes, tryRes] = await Promise.all([
-      listMirrorScans(),
-      listMirrorTryOns(),
-    ]);
+    const scanRes = await listMirrorScans();
     setScans(scanRes.scans);
-    setTryons(tryRes.tryons);
     const latest =
       [...scanRes.scans].reverse().find((s) => !s.seeded) ??
       scanRes.scans[scanRes.scans.length - 1] ??
@@ -313,33 +214,13 @@ function MirrorPageView() {
   }, [loadStatus, loadWorkspace]);
 
   useEffect(() => {
-    if (tab !== "timeline" || !apiBaseUrl) return;
-    let cancelled = false;
-    setStyleReady(false);
-    (async () => {
-      try {
-        const { analytics } = await getStyleAnalytics();
-        if (!cancelled) setStyle(analytics);
-      } catch {
-        if (!cancelled) setStyle(null);
-      } finally {
-        if (!cancelled) setStyleReady(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tab]);
-
-  useEffect(() => {
     if (!status?.consented || !apiBaseUrl) return;
     let cancelled = false;
     (async () => {
       try {
-        const cat = await getMirrorCatalogue({ mode: catalogueMode });
+        const cat = await getMirrorCatalogue({ kind: "apparel" });
         if (cancelled) return;
         setCatalogue(cat.items);
-        setEmptyReason(cat.emptyReason);
       } catch (err) {
         if (!cancelled) setError(friendlyError(err));
       }
@@ -347,7 +228,7 @@ function MirrorPageView() {
     return () => {
       cancelled = true;
     };
-  }, [catalogueMode, status?.consented]);
+  }, [status?.consented]);
 
   useEffect(() => {
     if (!selected?.hasResultImage) {
@@ -429,36 +310,6 @@ function MirrorPageView() {
     return () => window.clearInterval(tick);
   }, [pollNote]);
 
-  useEffect(() => {
-    const id = pendingTryOn.current;
-    if (!id) return;
-    const tick = window.setInterval(async () => {
-      try {
-        const { tryon } = await getMirrorTryOn(id);
-        if (tryon.status !== "pending") {
-          pendingTryOn.current = null;
-          setPollNote(null);
-          window.clearInterval(tick);
-          const { tryons: next } = await listMirrorTryOns();
-          setTryons(next);
-          setActiveTryOn(tryon);
-          if (tryon.hasResultImage) {
-            const media = await getMirrorTryOnMedia(tryon.id);
-            setTryonResult(`data:${media.contentType};base64,${media.imageB64}`);
-          }
-          setBusy(false);
-        }
-      } catch (err) {
-        pendingTryOn.current = null;
-        setPollNote(null);
-        window.clearInterval(tick);
-        setBusy(false);
-        setError(friendlyError(err));
-      }
-    }, 2000);
-    return () => window.clearInterval(tick);
-  }, [pollNote]);
-
   async function onConsent(granted: boolean) {
     setBusy(true);
     setError(null);
@@ -499,62 +350,11 @@ function MirrorPageView() {
     }
   }
 
-  async function runTryOn(imageB64: string) {
-    if (!pickedItem) {
-      setError("Choose a look, then add a full-body photo.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setPollNote("Building the try-on. This can take a short while.");
-    try {
-      const { tryon } = await createMirrorTryOn(imageB64, pickedItem);
-      setActiveTryOn(tryon);
-      if (tryon.status === "pending") {
-        pendingTryOn.current = tryon.id;
-        setPollNote("Still rendering. Keep this screen open.");
-      } else {
-        setPollNote(null);
-        if (tryon.hasResultImage) {
-          const media = await getMirrorTryOnMedia(tryon.id);
-          setTryonResult(`data:${media.contentType};base64,${media.imageB64}`);
-        }
-        const { tryons: next } = await listMirrorTryOns();
-        setTryons(next);
-        setBusy(false);
-      }
-    } catch (err) {
-      setPollNote(null);
-      setBusy(false);
-      setError(friendlyError(err));
-    }
-  }
-
-  async function onBodyFile(file: File | undefined) {
-    if (!file || !pickedItem) {
-      setError("Choose a look, then add a full-body photo.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setPollNote("Preparing your photo…");
-    try {
-      const imageB64 = await fileToJpegDataUrl(file);
-      setLastBodyB64(imageB64);
-      await runTryOn(imageB64);
-    } catch (err) {
-      setPollNote(null);
-      setBusy(false);
-      setError(friendlyError(err));
-    }
-  }
-
   const pickPreview = useCallback((kind: "face" | "body", file: File | undefined) => {
     if (!file) return;
-    setPreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev.src);
-      return { kind, src: URL.createObjectURL(file), file };
-    });
+    const src = URL.createObjectURL(file);
+    setPreview({ kind, src, file });
+    if (kind === "face") setHeldFaceSrc(src);
   }, []);
 
   useEffect(() => {
@@ -565,20 +365,15 @@ function MirrorPageView() {
       if (tab === "timeline") setTab("scan");
       pickPreview("face", queued.file);
     }
-    if (queued.kind === "body" && tab === "tryon") {
-      lastQueued.current = queued.token;
-      consumeQueued(queued.token);
-      pickPreview("body", queued.file);
-    }
   }, [queued, tab, consumeQueued, pickPreview]);
 
   async function confirmPreview() {
     if (!preview) return;
     const { kind, file, src } = preview;
-    URL.revokeObjectURL(src);
+    if (kind === "face") setHeldFaceSrc(src);
+    else URL.revokeObjectURL(src);
     setPreview(null);
     if (kind === "face") await onFaceFile(file);
-    else await onBodyFile(file);
   }
 
   async function onDeleteScan(id: string) {
@@ -596,13 +391,8 @@ function MirrorPageView() {
     }
   }
 
-  const liveScans = scans.filter((s) => !s.seeded);
-  const insight = selected?.insight ?? scans.find((s) => s.insight)?.insight;
   const skinTags = elevatedSkinConcerns(selected?.scores ?? {});
   const apparel = catalogue.filter((i) => i.kind === "apparel");
-  const scoreEntries = Object.entries(selected?.scores ?? {}).filter(
-    ([key, n]) => typeof n === "number" && key !== "all" && key !== "skin_type",
-  );
 
   if (loading) {
     return (
@@ -612,8 +402,8 @@ function MirrorPageView() {
           title="Skin and style"
           lead="Loading Mirror…"
         />
-        <SkeletonBlock className="h-12" />
-        <SkeletonBlock className="h-64" />
+        <SkeletonBlock className="aspect-[4/5] h-auto w-full max-w-md rounded-[var(--radius-sheet)]" />
+        <SkeletonBlock className="h-32" />
       </AppPage>
     );
   }
@@ -621,52 +411,70 @@ function MirrorPageView() {
   if (!status?.consented) {
     const market = profile?.market ?? "UK";
     return (
-      <AppPage>
-        <PageHeader
-          eyebrow="Mirror"
-          title="Photos for skin scores and try-on"
-          lead="A face photo for skin scores; a full-body photo for apparel try-on. Photos stay out of Alena. You can say no and still use Cycle, Health, Alena, and Wallet."
+      <AppPage className="lg:max-w-[var(--shell-max)]">
+        <MirrorConsentGate
+          processorLead={MIRROR_PROCESSOR_LEAD[market]}
+          busy={busy}
+          blocked={!apiBaseUrl || !online}
+          error={error}
+          onAllow={() => void onConsent(true)}
+          onSkip={() => void onConsent(false)}
         />
-        <p className={leadClass}>{MIRROR_PROCESSOR_LEAD[market]}</p>
-        {error ? <ErrorBanner message={error} /> : null}
-        <ActionRow>
-          <Button
-            type="button"
-            disabled={busy || !apiBaseUrl || !online}
-            onClick={() => void onConsent(true)}
-          >
-            Allow Mirror photos
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => void onConsent(false)}
-          >
-            Not now
-          </Button>
-        </ActionRow>
-        <p className={leadClass}>
-          You can change this later in{" "}
-          <Link to="/app/account" className="font-semibold text-primary">
-            Account
-          </Link>
-          .
-        </p>
       </AppPage>
     );
   }
 
   const captureOff = busy || !status.youcamConfigured || !online;
+  const photoTray = (
+    <MirrorPhotoTray
+      preferredKind={
+        tab === "tryon" ? "body" : tab === "wardrobe" ? "garment" : "face"
+      }
+      acceptedKinds={
+        tab === "tryon"
+          ? ["body"]
+          : tab === "wardrobe"
+            ? ["garment", "body"]
+            : tab === "accessories"
+              ? ["face", "hand"]
+              : ["face"]
+      }
+      useLabel={
+        tab === "tryon"
+          ? "Use for apparel try-on"
+          : tab === "makeup"
+            ? "Use for this makeup look"
+            : tab === "hair"
+              ? "Use for Hair Studio"
+              : tab === "wardrobe"
+                ? "Use in Wardrobe"
+                : tab === "accessories"
+                  ? "Use for accessories"
+                  : "Use for skin scan"
+      }
+      disabled={!status.youcamConfigured || !online}
+    />
+  );
 
   return (
     <AppPage className="lg:max-w-[var(--shell-max)] lg:gap-8">
-      <PageHeader
-        eyebrow="Mirror"
-        title="Your studio"
-        lead="Take a photo once. Reuse it for skin, makeup, hair, and try-on. Scores are wellness snapshots, not a diagnosis."
-      />
-      <AskAlenaLink from="mirror" />
+      <MakeupLookProvider>
+      <div className="grid min-w-0 gap-6">
+      <div className="grid min-w-0 gap-4">
+        <p className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-caption)] font-bold tracking-wide text-primary uppercase">
+          Mirror
+        </p>
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-8">
+          <h1 className="m-0 text-[length:var(--text-page)] text-primary max-lg:text-[28px]">
+            Your studio
+          </h1>
+          <MirrorStudioNav value={tab} onChange={setTab} />
+        </div>
+        <p className="m-0 text-[length:var(--text-body)] leading-normal text-muted-foreground">
+          One photo for skin, makeup, hair, and try-on.
+        </p>
+        <AskAlenaLink from="mirror" brief />
+      </div>
 
       {!online ? (
         <OfflineBanner message="You are offline. Capture is paused. Past scans stay on this page." />
@@ -687,147 +495,39 @@ function MirrorPageView() {
         </p>
       ) : null}
 
-      <MakeupLookProvider>
-      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[14rem_minmax(0,1fr)_18rem] lg:gap-8">
-        <MirrorStudioNav value={tab} onChange={setTab} />
-
-        <div className="order-2 grid min-w-0 gap-6 lg:order-none">
-      {preview ? (
-        <div className={cn(elevatedCardClass)}>
-          <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-            Check this photo
-          </h2>
-          <MirrorStill
-            src={preview.src}
-            alt="Selected photo preview"
-            crop={preview.kind === "body" ? "body" : "face"}
-          />
-          <ActionRow>
-            <Button type="button" onClick={() => void confirmPreview()}>
-              Use this photo
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                URL.revokeObjectURL(preview.src);
-                setPreview(null);
-              }}
-            >
-              Choose another
-            </Button>
-          </ActionRow>
-        </div>
-      ) : null}
-
         {tab === "scan" ? (
-        <div className={cn(elevatedCardClass)}>
-          <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-            New skin scan
-          </h2>
-          <p className={leadClass}>
-            Use even light, face the camera, and keep hair off your forehead.
-          </p>
-          <CameraStillCapture
-            disabled={captureOff}
-            facingMode="user"
-            guide="face"
-            captureLabel="Take a face photo"
-            videoLabel="Live camera for a skin scan still"
-            photoKind="face"
-            onFile={(file) => pickPreview("face", file)}
-            onError={(msg) => setError(msg)}
-          />
-
-          {selected ? (
-            <article className={cn(outlinedCardClass, "grid gap-4")}>
-              <h3 className="m-0 text-[length:var(--text-sub)] text-foreground">
-                {selected.seeded ? "Sample scan" : "Latest scan"} ·{" "}
-                {formatWhen(selected.createdAt)}
-              </h3>
-              <p className={leadClass}>
-                {selected.cycleDayAtScan != null
-                  ? `Cycle day ${selected.cycleDayAtScan}${
-                      selected.cyclePhaseAtScan
-                        ? ` · ${phaseLabel(selected.cyclePhaseAtScan)}`
-                        : ""
-                    }`
-                  : "Cycle day is added when you have logs for this date."}
-                {selected.overallScore != null
-                  ? ` · Overall ${selected.overallScore} of 100`
-                  : ""}
-                {typeof selected.scores.skin_age === "number"
-                  ? ` · Skin age estimate ${selected.scores.skin_age}`
-                  : ""}
-                {selected.status === "pending" ? " · Analysing" : ""}
-                {selected.status === "error" ? " · Could not finish" : ""}
-              </p>
-              {selected.status === "error" ? (
-                <p className={leadClass}>
-                  {selected.insight?.body ??
-                    "YouCam could not finish this still. Face the camera in even light and capture again."}
-                </p>
-              ) : null}
-              {resultSrc ? (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <MirrorStill
-                    src={resultSrc}
-                    alt="Skin scan result"
-                    crop="face"
-                  />
-                  {maskSrc ? (
-                    <MirrorStill
-                      src={maskSrc}
-                      alt="Skin overlay map"
-                      crop="face"
-                    />
-                  ) : null}
-                </div>
-              ) : selected.hasResultImage ? (
-                <p className={leadClass}>Loading result image…</p>
-              ) : selected.seeded ? (
-                <p className={leadClass}>
-                  Sample points have scores only. Take a live scan for a photo.
-                </p>
-              ) : null}
-              {scoreEntries.length ? (
-                <div className="grid gap-3">
-                  {scoreEntries.map(([key, value]) => (
-                    <ScoreBar
-                      key={key}
-                      label={SCORE_LABELS[key] ?? key}
-                      value={value}
-                    />
-                  ))}
-                </div>
-              ) : null}
-              {insight ? (
-                <div className="grid gap-2 border-t border-border pt-4">
-                  <h3 className="m-0 text-[length:var(--text-sub)]">{insight.title}</h3>
-                  <p className="m-0 text-[length:var(--text-body)]">{insight.body}</p>
-                  <p className={leadClass}>
-                    Confidence: {insight.confidence}
-                    {insight.patternFound
-                      ? " · Pattern in your logs"
-                      : " · No cycle claim yet"}
-                  </p>
-                </div>
-              ) : null}
-              {skinTags.length ? (
-                <SheMatchBanner trigger="mirror_skin" extraTags={skinTags} />
-              ) : null}
-            </article>
-          ) : (
-            <EmptyState
-              title="No scans yet"
-              body="Take a face photo to start."
-            />
-          )}
+        <div className={mirrorStudioRowClass}>
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+        <MirrorSkinStudio
+          captureOff={captureOff}
+          previewSrc={preview?.kind === "face" ? preview.src : null}
+          resultSrc={resultSrc}
+          maskSrc={maskSrc}
+          heldSrc={heldFaceSrc}
+          selected={selected}
+          onPickFile={(file) => pickPreview("face", file)}
+          onConfirmPreview={() => void confirmPreview()}
+          onCancelPreview={() => {
+            if (preview) {
+              if (preview.src !== heldFaceSrc) URL.revokeObjectURL(preview.src);
+              setPreview(null);
+            }
+          }}
+          onError={(msg) => setError(msg)}
+        />
         </div>
-      ) : null}
-
-      {tab === "makeup" && status ? (
-        <div className={elevatedCardClass}>
+        <div className="min-w-0 max-lg:col-start-2 max-lg:row-start-1 lg:col-start-3 lg:row-start-1">
+        {photoTray}
+        </div>
+        <div className="min-w-0 max-lg:col-span-2 lg:col-start-2 lg:row-start-1">
+        <MirrorSkinRail
+          resultSrc={resultSrc}
+          selected={selected}
+          skinTags={skinTags}
+        />
+        </div>
+        </div>
+      ) : tab === "makeup" && status ? (
         <MirrorStudioPanel
           status={status}
           scans={scans}
@@ -840,12 +540,9 @@ function MirrorPageView() {
             await loadStatus();
           }}
           friendlyError={friendlyError}
+          tray={photoTray}
         />
-        </div>
-      ) : null}
-
-      {tab === "hair" && status ? (
-        <div className={elevatedCardClass}>
+      ) : tab === "hair" && status ? (
         <MirrorHairPanel
           status={status}
           scans={scans}
@@ -854,29 +551,61 @@ function MirrorPageView() {
           onBusy={setBusy}
           onError={(msg) => setError(msg)}
           friendlyError={friendlyError}
+          tray={photoTray}
         />
+      ) : tab === "wardrobe" && status ? (
+        <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,1.2fr)_minmax(14rem,18rem)]">
+          <div className="grid min-w-0 gap-6">
+            {preview?.kind === "body" ? (
+              <div className={cn(elevatedCardClass)}>
+                <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+                  Check this photo
+                </h2>
+                <MirrorStill
+                  src={preview.src}
+                  alt="Selected photo preview"
+                  crop="body"
+                />
+                <ActionRow>
+                  <Button type="button" onClick={() => void confirmPreview()}>
+                    Use this photo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      URL.revokeObjectURL(preview.src);
+                      setPreview(null);
+                    }}
+                  >
+                    Choose another
+                  </Button>
+                </ActionRow>
+              </div>
+            ) : null}
+            <MirrorWardrobePanel
+              status={status}
+              market={profile?.market ?? "UK"}
+              online={online}
+              busy={busy}
+              onBusy={setBusy}
+              onError={(msg) => setError(msg)}
+              onStatus={async () => {
+                await loadStatus();
+              }}
+              friendlyError={friendlyError}
+            />
+          </div>
+          <BoutiqueSamplesCard
+            samples={apparel}
+            onOpenApparel={(itemId) => {
+              setPickedItem(itemId);
+              setTab("tryon");
+            }}
+          />
+          {photoTray}
         </div>
-      ) : null}
-
-      {tab === "wardrobe" && status ? (
-        <div className={elevatedCardClass}>
-        <MirrorWardrobePanel
-          status={status}
-          market={profile?.market ?? "UK"}
-          online={online}
-          busy={busy}
-          onBusy={setBusy}
-          onError={(msg) => setError(msg)}
-          onStatus={async () => {
-            await loadStatus();
-          }}
-          friendlyError={friendlyError}
-        />
-        </div>
-      ) : null}
-
-      {tab === "accessories" && status ? (
-        <div className={elevatedCardClass}>
+      ) : tab === "accessories" && status ? (
         <MirrorAccessoriesPanel
           status={status}
           scans={scans}
@@ -885,438 +614,36 @@ function MirrorPageView() {
           onBusy={setBusy}
           onError={(msg) => setError(msg)}
           friendlyError={friendlyError}
+          tray={photoTray}
         />
-        </div>
-      ) : null}
-
-      {tab === "tryon" ? (
-        <div className={cn(elevatedCardClass)}>
-          <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-            Apparel try-on
-          </h2>
-          <p className={leadClass}>
-            Choose a look, then take a full-body photo in similar lighting.
-            Mix a top and bottom with the same photo — no swimwear in this
-            catalogue.
-          </p>
-          <SegmentedTabs
-            ariaLabel="Catalogue filter"
-            value={catalogueMode}
-            onChange={(id) => setCatalogueMode(id as CatalogueMode)}
-            items={[
-              { id: "all", label: "All looks" },
-              { id: "maternity", label: "Maternity" },
-              { id: "pmos", label: "PMOS comfort" },
-            ]}
-          />
-          {catalogueMode === "maternity" && !pregnancyOn ? (
-            <p className={leadClass}>
-              Turn on the Pregnancy module in Account to filter by week. Nothing
-              is hidden from All looks.
-            </p>
-          ) : null}
-          {catalogueMode === "pmos" && !pmosOn ? (
-            <p className={leadClass}>
-              PMOS comfort tags are a demo filter. Enable PMOS Manager if you
-              want that module elsewhere in the app.
-            </p>
-          ) : null}
-          {emptyReason === "pregnancy_week_unknown" ? (
-            <p className={leadClass}>
-              Add a pregnancy start date in Health to match looks to your week.
-            </p>
-          ) : null}
-          {!apparel.length && emptyReason !== "pregnancy_week_unknown" ? (
-            <EmptyState
-              title="No looks in this filter"
-              body="Try All looks."
-            />
-          ) : null}
-          <ul className="m-0 grid list-none gap-3 p-0">
-            {apparel.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className={cn(
-                    outlinedCardClass,
-                    "grid min-h-[var(--tap)] w-full gap-1 text-left",
-                    pickedItem === item.id && "border-primary bg-muted",
-                  )}
-                  onClick={() => setPickedItem(item.id)}
-                >
-                  <strong className="text-foreground">{item.title}</strong>
-                  <span className="text-[length:var(--text-label)] text-muted-foreground">
-                    {item.garmentCategory === "upper_body"
-                      ? "Top · "
-                      : item.garmentCategory === "lower_body"
-                        ? "Bottom · "
-                        : ""}
-                    {item.subtitle} · {item.boutiqueName}, {item.boutiqueArea}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <CameraStillCapture
-            disabled={captureOff || !pickedItem}
-            facingMode="environment"
-            guide="body"
-            captureLabel="Take a full-body photo"
-            videoLabel="Live camera for a full-body try-on still"
-            photoKind="body"
-            onFile={(file) => pickPreview("body", file)}
-            onError={(msg) => setError(msg)}
-          />
-          {lastBodyB64 ? (
-            <ActionRow>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={captureOff || !pickedItem || busy}
-                onClick={() => void runTryOn(lastBodyB64)}
-              >
-                Use last photo
-              </Button>
-            </ActionRow>
-          ) : null}
-          {tryonResult ? (
-            <MirrorStill
-              src={tryonResult}
-              alt="Apparel try-on result"
-              crop="body"
-            />
-          ) : activeTryOn?.status === "error" ? (
-            <ErrorBanner message="Try-on could not finish. Try another photo." />
-          ) : null}
-          {tryons.length ? (
-            <p className={leadClass}>
-              {tryons.length} saved try-on{tryons.length === 1 ? "" : "s"} in this
-              account.
-            </p>
-          ) : (
-            <EmptyState title="No try-ons yet" body="Pick a look, then add a full-body photo." />
-          )}
-        </div>
-      ) : null}
-
-      {tab === "timeline" ? (
-        <div className={cn(elevatedCardClass)}>
-          <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-            Progress timeline
-          </h2>
-          <p className={leadClass}>
-            Sample points fill a thin history. Live scans are marked as yours.
-            Cycle claims need two live scans in different phases. Wardrobe
-            utilisation uses pieces you already catalogued — no extra consent.
-          </p>
-          {style ? (
-            <div className={cn(outlinedCardClass, "grid gap-4")}>
-              <h3 className="m-0 text-[length:var(--text-sub)] text-foreground">
-                Style over {style.windowDays} days
-              </h3>
-              {style.utilisationPct != null ? (
-                <ScoreBar
-                  label="Closet utilisation"
-                  value={style.utilisationPct}
-                />
-              ) : (
-                <p className={leadClass}>
-                  Catalogue clothing in My Wardrobe to see how much of the closet
-                  you wore in this window.
-                </p>
-              )}
-              <p className={leadClass}>
-                {style.itemsWornInWindow} of {style.itemsCatalogued} pieces worn
-                in this window. Cost per wear is price ÷ times worn. Missing
-                prices show wear count only.
-              </p>
-              {style.costPerWear.length ? (
-                <ul className="m-0 grid list-none gap-2 p-0">
-                  {style.costPerWear.slice(0, 8).map((row) => (
-                    <li
-                      key={row.itemId}
-                      className="text-[length:var(--text-label)] text-foreground"
-                    >
-                      {row.name || "Piece"} · worn {row.wornCount}
-                      {row.costPerWearMinor != null
-                        ? ` · ${(row.costPerWearMinor / 100).toFixed(2)} per wear`
-                        : ""}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              <TrendRow
-                label="Skin overall"
-                points={style.skinTrend
-                  .filter((p) => typeof p.value === "number")
-                  .map((p) => ({
-                    id: p.id,
-                    when: p.createdAt,
-                    value: p.value as number,
-                  }))}
-              />
-              <TrendRow
-                label="Hair density"
-                points={style.hairTrend
-                  .filter((p) => typeof p.value === "number")
-                  .map((p) => ({
-                    id: p.id,
-                    when: p.createdAt,
-                    value: p.value as number,
-                  }))}
-              />
-              {style.shadeHistory.length ? (
-                <div className="grid gap-2">
-                  <p className="m-0 text-[length:var(--text-label)] text-foreground">
-                    Shade matches
-                  </p>
-                  <ol className="m-0 grid list-none gap-1 p-0">
-                    {style.shadeHistory.map((p) => (
-                      <li
-                        key={p.id}
-                        className="text-[length:var(--text-caption)] text-muted-foreground"
-                      >
-                        {formatWhen(p.createdAt)} · {p.label}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              ) : (
-                <p className={leadClass}>
-                  Shade history appears after a Shade Finder match. Hair density
-                  uses Hair Studio analysis, not try-on.
-                </p>
-              )}
-            </div>
-          ) : !styleReady && apiBaseUrl ? (
-            <SkeletonBlock className="h-24" />
-          ) : apiBaseUrl ? (
-            <EmptyState
-              title="Style series not loaded"
-              body="Connect and open this tab again. No extra consent is required for these numbers."
-            />
-          ) : null}
-          {!scans.length ? (
-            <EmptyState
-              title="No timeline yet"
-              body="Take a skin scan to add the first point."
-            />
-          ) : (
-            <ol className="m-0 grid list-none gap-3 p-0">
-              {scans.map((scan) => (
-                <li key={scan.id} className="grid grid-cols-[1fr_auto] items-start gap-2">
-                  <button
-                    type="button"
-                    className={cn(
-                      outlinedCardClass,
-                      "grid gap-1 text-left",
-                      selected?.id === scan.id && "border-primary",
-                    )}
-                    onClick={() => setSelected(scan)}
-                  >
-                    <strong>
-                      {formatWhen(scan.createdAt)} · {phaseLabel(scan.cyclePhaseAtScan)}
-                    </strong>
-                    <span className="text-[length:var(--text-label)] text-muted-foreground">
-                      {scan.seeded ? "Sample" : "Your scan"}
-                      {scan.overallScore != null
-                        ? ` · overall ${scan.overallScore} of 100`
-                        : ""}
-                      {scan.status === "pending" ? " · analysing" : ""}
-                    </span>
-                  </button>
-                  {!scan.seeded ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void onDeleteScan(scan.id)}
-                    >
-                      Remove
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          )}
-          {scans.length >= 2 ? (
-            <div className={cn(outlinedCardClass, "grid gap-4")}>
-              <h3 className="m-0 text-[length:var(--text-sub)] text-foreground">
-                Compare two dates
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1">
-                  <span className="text-[length:var(--text-label)] text-muted-foreground">
-                    Earlier
-                  </span>
-                  <FieldSelect
-                    value={compareA ?? ""}
-                    onChange={(e) => setCompareA(e.target.value || null)}
-                  >
-                    {scans.map((scan) => (
-                      <option key={scan.id} value={scan.id}>
-                        {formatWhen(scan.createdAt)} · {phaseLabel(scan.cyclePhaseAtScan)}
-                      </option>
-                    ))}
-                  </FieldSelect>
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-[length:var(--text-label)] text-muted-foreground">
-                    Later
-                  </span>
-                  <FieldSelect
-                    value={compareB ?? ""}
-                    onChange={(e) => setCompareB(e.target.value || null)}
-                  >
-                    {scans.map((scan) => (
-                      <option key={scan.id} value={scan.id}>
-                        {formatWhen(scan.createdAt)} · {phaseLabel(scan.cyclePhaseAtScan)}
-                      </option>
-                    ))}
-                  </FieldSelect>
-                </label>
-              </div>
-              {(() => {
-                const a = scans.find((s) => s.id === compareA);
-                const b = scans.find((s) => s.id === compareB);
-                if (!a || !b || a.id === b.id) {
-                  return (
-                    <p className={leadClass}>Pick two different dates to compare.</p>
-                  );
-                }
-                const keys = ["acne", "oiliness", "redness", "texture"] as const;
-                return (
-                  <div className="grid gap-4">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="grid gap-2">
-                        <p className="m-0 text-[length:var(--text-label)]">
-                          {formatWhen(a.createdAt)} · {phaseLabel(a.cyclePhaseAtScan)}
-                        </p>
-                        {compareSrc.a ? (
-                          <MirrorStill
-                            src={compareSrc.a}
-                            alt={`Scan from ${formatWhen(a.createdAt)}`}
-                            crop="face"
-                          />
-                        ) : (
-                          <p className={leadClass}>
-                            {a.seeded
-                              ? "Sample point — scores only."
-                              : "No result photo for this date."}
-                          </p>
-                        )}
-                      </div>
-                      <div className="grid gap-2">
-                        <p className="m-0 text-[length:var(--text-label)]">
-                          {formatWhen(b.createdAt)} · {phaseLabel(b.cyclePhaseAtScan)}
-                        </p>
-                        {compareSrc.b ? (
-                          <MirrorStill
-                            src={compareSrc.b}
-                            alt={`Scan from ${formatWhen(b.createdAt)}`}
-                            crop="face"
-                          />
-                        ) : (
-                          <p className={leadClass}>
-                            {b.seeded
-                              ? "Sample point — scores only."
-                              : "No result photo for this date."}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <ul className="m-0 grid list-none gap-2 p-0">
-                      {keys.map((key) => {
-                        const av = a.scores[key];
-                        const bv = b.scores[key];
-                        if (av == null && bv == null) return null;
-                        return (
-                          <li key={key} className="text-[length:var(--text-label)]">
-                            {SCORE_LABELS[key] ?? key}: {av ?? "—"} → {bv ?? "—"}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                );
-              })()}
-              <TrendRow
-                label="Acne"
-                points={scans
-                  .filter((s) => typeof s.scores.acne === "number")
-                  .map((s) => ({
-                    id: s.id,
-                    when: s.createdAt,
-                    value: s.scores.acne,
-                  }))}
-              />
-              <TrendRow
-                label="Oiliness"
-                points={scans
-                  .filter((s) => typeof s.scores.oiliness === "number")
-                  .map((s) => ({
-                    id: s.id,
-                    when: s.createdAt,
-                    value: s.scores.oiliness,
-                  }))}
-              />
-              <TrendRow
-                label="Redness"
-                points={scans
-                  .filter((s) => typeof s.scores.redness === "number")
-                  .map((s) => ({
-                    id: s.id,
-                    when: s.createdAt,
-                    value: s.scores.redness,
-                  }))}
-              />
-            </div>
-          ) : null}
-          {liveScans.length < 2 ? (
-            <p className={leadClass}>
-              {liveScans.length === 0
-                ? "Take two scans in different cycle phases to look for a pattern."
-                : "One live scan so far. Scan again in another phase before we look for a cycle pattern."}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      <PredictionDisclaimer message="Mirror scores and cycle overlays are wellness tools, not a diagnosis or medical advice." />
-        </div>
-
-        <div className="order-1 grid gap-4 lg:order-none">
-          <MirrorPhotoTray
-            preferredKind={
-              tab === "tryon" ? "body" : tab === "wardrobe" ? "garment" : "face"
-            }
-            acceptedKinds={
-              tab === "tryon"
-                ? ["body"]
-                : tab === "wardrobe"
-                  ? ["garment", "body"]
-                  : tab === "accessories"
-                    ? ["face", "hand"]
-                    : ["face"]
-            }
-            useLabel={
-              tab === "tryon"
-                ? "Use for apparel try-on"
-                : tab === "makeup"
-                  ? "Use for this makeup look"
-                  : tab === "hair"
-                    ? "Use for Hair Studio"
-                    : tab === "wardrobe"
-                      ? "Use in Wardrobe"
-                      : tab === "accessories"
-                        ? "Use for accessories"
-                        : "Use for skin scan"
-            }
-            disabled={!status.youcamConfigured || !online}
-          />
-          {tab === "makeup" ? <MakeupFeatureRail /> : null}
-        </div>
+      ) : tab === "tryon" ? (
+        <MirrorApparelPanel
+          status={status}
+          online={online}
+          busy={busy}
+          onBusy={setBusy}
+          onError={(msg) => setError(msg)}
+          friendlyError={friendlyError}
+          tray={photoTray}
+          pregnancyOn={pregnancyOn}
+          pmosOn={pmosOn}
+          focusItemId={pickedItem}
+        />
+      ) : (
+        <MirrorTimelinePanel
+          scans={scans}
+          selected={selected}
+          onSelectScan={setSelected}
+          onDeleteScan={(id) => void onDeleteScan(id)}
+          busy={busy}
+          market={profile?.market ?? "UK"}
+          compareSrc={compareSrc}
+          compareA={compareA}
+          compareB={compareB}
+          onCompareA={setCompareA}
+          onCompareB={setCompareB}
+        />
+      )}
       </div>
       </MakeupLookProvider>
     </AppPage>

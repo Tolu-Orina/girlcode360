@@ -8,7 +8,7 @@ export const outlinedCardClass =
   "rounded-[var(--radius)] border border-border bg-card p-4";
 
 export const elevatedCardClass =
-  "grid gap-4 rounded-[var(--radius-sheet)] bg-card p-4 shadow-[var(--shadow-2)] lg:gap-6 lg:p-6";
+  "grid gap-4 rounded-[var(--radius-sheet)] border-0 bg-card p-4 shadow-[var(--shadow-2)] lg:gap-6 lg:p-6";
 
 export const formStackClass = "grid gap-4";
 

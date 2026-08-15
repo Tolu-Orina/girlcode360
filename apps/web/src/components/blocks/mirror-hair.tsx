@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ActionRow,
+  elevatedCardClass,
   leadClass,
-  outlinedCardClass,
 } from "@/components/blocks/app-page";
 import { EmptyState } from "@/components/blocks/states";
 import { ScoreBar } from "@/components/blocks/score-bar";
@@ -16,7 +16,7 @@ import {
   listHairScans,
 } from "@/lib/api";
 import { CameraStillCapture } from "@/components/blocks/camera-still";
-import { MirrorStill } from "@/components/blocks/mirror-still";
+import { MirrorStage, MirrorStageEmpty, mirrorStudioRowClass } from "@/components/blocks/mirror-stage";
 import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
 import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
@@ -45,6 +45,10 @@ function hairFailCopy(reason: string | null | undefined): string {
   return "YouCam could not finish hair scores. Try another front-facing still in even light.";
 }
 
+function kindLabel(row: HairScan): string {
+  return row.kind === "tryon" ? "Colour try-on" : "Length scores";
+}
+
 export function MirrorHairPanel({
   status,
   scans,
@@ -53,6 +57,7 @@ export function MirrorHairPanel({
   onBusy,
   onError,
   friendlyError,
+  tray,
 }: {
   status: MirrorStatus;
   scans: SkinScan[];
@@ -61,11 +66,13 @@ export function MirrorHairPanel({
   onBusy: (v: boolean) => void;
   onError: (msg: string | null) => void;
   friendlyError: (err: unknown) => string;
+  tray: ReactNode;
 }) {
   const [mode, setMode] = useState<"analysis" | "tryon">("analysis");
   const [rows, setRows] = useState<HairScan[]>([]);
   const [selected, setSelected] = useState<HairScan | null>(null);
   const [src, setSrc] = useState<string | null>(null);
+  const [rescan, setRescan] = useState(false);
   const [color, setColor] = useState<string>(HAIR_COLOR_PRESETS[0]!.hex);
   const [styleId, setStyleId] = useState<string>(HAIR_STYLE_PRESETS[0]!.id);
   const pending = useRef<string | null>(null);
@@ -73,6 +80,8 @@ export function MirrorHairPanel({
   const photos = useMirrorPhotosOptional();
   const reusable = scans.find((s) => !s.seeded && s.status === "success");
   const captureOff = busy || !status.youcamConfigured || !online;
+  const working = selected?.status === "pending";
+  const showCamera = rescan || !src;
 
   const load = useCallback(async () => {
     const res = await listHairScans();
@@ -85,6 +94,12 @@ export function MirrorHairPanel({
   }, [load, friendlyError, onError]);
 
   useEffect(() => {
+    setRescan(false);
+  }, [mode]);
+
+  useEffect(() => {
+    if (rescan) return;
+    if (selected?.status === "pending") return;
     if (!selected?.hasResultImage) {
       setSrc(null);
       return;
@@ -103,7 +118,7 @@ export function MirrorHairPanel({
     return () => {
       cancelled = true;
     };
-  }, [selected]);
+  }, [selected, rescan]);
 
   useEffect(() => {
     const id = pending.current;
@@ -132,6 +147,7 @@ export function MirrorHairPanel({
     onBusy(true);
     onError(null);
     try {
+      if (file) setSrc(URL.createObjectURL(file));
       const imageB64 = file ? await fileToJpegDataUrl(file) : undefined;
       const scanId = imageB64 ? undefined : reusable?.id;
       if (!imageB64 && !scanId) {
@@ -157,6 +173,7 @@ export function MirrorHairPanel({
             ).scan;
       pending.current = scan.id;
       setSelected(scan);
+      setRescan(false);
       if (scan.status !== "pending") {
         pending.current = null;
         await load();
@@ -180,174 +197,273 @@ export function MirrorHairPanel({
     void runRef.current(mode, queued.file);
   }, [photos, mode]);
 
-  const insight = selected?.kind === "analysis" ? selected.insight : rows.find((r) => r.kind === "analysis")?.insight;
+  const analysis =
+    selected?.kind === "analysis"
+      ? selected
+      : (rows.find((r) => r.kind === "analysis") ?? null);
+  const insight = analysis?.insight;
+  const lengthScore =
+    analysis && typeof analysis.scores.hair_length === "number"
+      ? analysis.scores.hair_length
+      : null;
+  const densityScore =
+    analysis && typeof analysis.scores.hair_density === "number"
+      ? analysis.scores.hair_density
+      : null;
+  const frizzScore =
+    analysis && typeof analysis.scores.hair_frizziness === "number"
+      ? analysis.scores.hair_frizziness
+      : null;
+  const colorPreset = HAIR_COLOR_PRESETS.find((p) => p.hex === color);
 
   return (
-    <div className="grid gap-4">
-      <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-        Hair Studio
-      </h2>
-      <p className={leadClass}>{HAIR_CORRELATION_WELLNESS_NOTE}</p>
-      <p className={leadClass}>
-        Hair scores from a face still report length. Density needs a chin-down
-        still (about 45°). Frizz needs front, left, and right views.
-      </p>
+    <div className="grid min-w-0 gap-6">
       <SegmentedTabs
         ariaLabel="Hair Studio modes"
         value={mode}
         onChange={(id) => setMode(id as typeof mode)}
         items={[
-          { id: "analysis", label: "Hair scores" },
+          { id: "analysis", label: "Length scores" },
           { id: "tryon", label: "Colour try-on" },
         ]}
       />
 
-      <p className={leadClass}>
-        {reusable
-          ? "Uses your latest skin scan when it is under 30 days old, or a new face photo."
-          : "Take a skin scan first, or take a face photo here."}
-      </p>
-
-      {mode === "tryon" ? (
-        <div className="grid gap-3">
-          <p className="m-0 text-[length:var(--text-label)] text-foreground">Colour</p>
-          <div className="flex flex-wrap gap-2">
-            {HAIR_COLOR_PRESETS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={cn(
-                  "min-h-[var(--tap)] min-w-[var(--tap)] rounded-[var(--radius)] border px-3 text-[length:var(--text-caption)]",
-                  color === p.hex
-                    ? "border-primary bg-muted text-foreground"
-                    : "border-border bg-card text-muted-foreground",
-                )}
-                onClick={() => setColor(p.hex)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <p className="m-0 text-[length:var(--text-label)] text-foreground">Style</p>
-          <div className="flex flex-wrap gap-2">
-            {HAIR_STYLE_PRESETS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={cn(
-                  "min-h-[var(--tap)] rounded-[var(--radius)] border px-3 text-[length:var(--text-caption)]",
-                  styleId === p.id
-                    ? "border-primary bg-muted text-foreground"
-                    : "border-border bg-card text-muted-foreground",
-                )}
-                onClick={() => setStyleId(p.id)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <ActionRow>
-        <Button
-          type="button"
-          disabled={captureOff || !reusable}
-          onClick={() => void run(mode)}
-        >
-          {mode === "analysis" ? "Run hair scores" : "Try this colour"}
-        </Button>
-      </ActionRow>
-      <CameraStillCapture
-        disabled={captureOff}
-        facingMode="user"
-        guide="face"
-        captureLabel="Take a face photo"
-        videoLabel="Live camera for a hair still"
-        photoKind="face"
-        onFile={(file) => void run(mode, file)}
-        onError={onError}
-      />
-
-      {selected ? (
-        <article className={cn(outlinedCardClass, "grid gap-4")}>
-          <h3 className="m-0 text-[length:var(--text-sub)]">
-            {selected.kind === "tryon" ? "Colour try-on" : "Hair scores"}
-            {selected.status === "pending" ? " · Working" : ""}
-            {selected.status === "error" ? " · Could not finish" : ""}
-          </h3>
-          {selected.status === "error" ? (
-            <p className={leadClass}>{hairFailCopy(selected.failReason)}</p>
-          ) : null}
-          {src ? (
-            <MirrorStill
-              src={src}
-              alt={selected.kind === "tryon" ? "Hair colour try-on" : "Hair scores"}
-              crop="face"
+      <div className={mirrorStudioRowClass}>
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          {showCamera ? (
+            <CameraStillCapture
+              chrome="stage"
+              disabled={captureOff}
+              facingMode="user"
+              guide="face"
+              captureLabel="Take a face photo"
+              videoLabel="Live camera for a hair still"
+              photoKind="face"
+              onFile={(file) => void run(mode, file)}
+              onError={onError}
             />
-          ) : null}
-          {selected.kind === "analysis" ? (
-            <div className="grid gap-3">
-              {selected.scores.hair_type ? (
+          ) : (
+            <MirrorStage
+              pending={working}
+              pendingLabel={
+                mode === "tryon"
+                  ? "Trying this colour. Keep this screen open."
+                  : "Reading length. Keep this screen open."
+              }
+              dock={
+                <div className="grid gap-4">
+                  {selected?.status === "error" ? (
+                    <p className={leadClass}>{hairFailCopy(selected.failReason)}</p>
+                  ) : null}
+                  <ActionRow>
+                    <Button
+                      type="button"
+                      disabled={captureOff}
+                      onClick={() => setRescan(true)}
+                    >
+                      Try another photo
+                    </Button>
+                  </ActionRow>
+                </div>
+              }
+            >
+              {src ? (
+                <img
+                  src={src}
+                  alt={
+                    selected?.kind === "tryon"
+                      ? "Hair colour try-on"
+                      : "Hair length still"
+                  }
+                  className="size-full object-cover object-center"
+                />
+              ) : (
+                <MirrorStageEmpty />
+              )}
+            </MirrorStage>
+          )}
+        </div>
+
+        <div className="min-w-0 max-lg:col-start-2 max-lg:row-start-1 lg:col-start-3 lg:row-start-1">
+          {tray}
+        </div>
+
+        <aside className="grid min-w-0 gap-6 max-lg:col-span-2 lg:col-start-2 lg:row-start-1">
+          {mode === "tryon" ? (
+            <article className={cn(elevatedCardClass, "border-0")}>
+              <header className="grid gap-1">
+                <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                  Colour
+                </h2>
                 <p className={leadClass}>
-                  Texture aid: {selected.scores.hair_type}. Not a medical type.
+                  {colorPreset
+                    ? `${colorPreset.label}. Preview only — not a product match.`
+                    : "Pick a colour, then a style."}
+                </p>
+              </header>
+              <ul className="m-0 grid list-none grid-cols-6 gap-2 p-0">
+                {HAIR_COLOR_PRESETS.map((p) => {
+                  const on = color === p.hex;
+                  return (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        aria-pressed={on}
+                        aria-label={p.label}
+                        title={p.label}
+                        className={cn(
+                          "aspect-square w-full min-h-12 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          on ? "ring-2 ring-ring" : "",
+                        )}
+                        style={{ backgroundColor: p.hex }}
+                        onClick={() => setColor(p.hex)}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="grid gap-2">
+                <p className="m-0 text-[length:var(--text-label)] font-semibold text-foreground">
+                  Style
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {HAIR_STYLE_PRESETS.map((p) => {
+                    const on = styleId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        aria-pressed={on}
+                        className={cn(
+                          "min-h-12 rounded-[var(--radius)] px-4 text-[length:var(--text-caption)] font-semibold",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          on
+                            ? "bg-muted text-foreground shadow-[var(--shadow-2)]"
+                            : "bg-card text-muted-foreground",
+                        )}
+                        onClick={() => setStyleId(p.id)}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Button
+                type="button"
+                disabled={captureOff || !reusable}
+                onClick={() => void run("tryon")}
+              >
+                Try on last skin scan
+              </Button>
+              {!reusable ? (
+                <p className={leadClass}>
+                  Capture a face still, or take a Skin scan first.
                 </p>
               ) : null}
-              {typeof selected.scores.hair_density === "number" ? (
-                <ScoreBar label="Density" value={selected.scores.hair_density} />
+            </article>
+          ) : (
+            <article className={cn(elevatedCardClass, "border-0")}>
+              <header className="grid gap-1">
+                <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+                  Length
+                </h2>
+                <p className={leadClass}>
+                  A front face still can score length. Density needs chin-down.
+                  Frizz needs front, left, and right views.
+                </p>
+              </header>
+              {analysis?.status === "error" ? (
+                <p className={leadClass}>{hairFailCopy(analysis.failReason)}</p>
               ) : null}
-              {typeof selected.scores.hair_frizziness === "number" ? (
-                <ScoreBar label="Frizz" value={selected.scores.hair_frizziness} />
+              {analysis?.status === "pending" ? (
+                <p className={leadClass}>Scores will land here when this finishes.</p>
               ) : null}
-              {typeof selected.scores.hair_length === "number" ? (
-                <ScoreBar label="Length" value={selected.scores.hair_length} />
+              {!analysis ? (
+                <EmptyState
+                  title="No length scores yet"
+                  body="Capture a face still, or use your last Skin scan."
+                />
+              ) : (
+                <div className="grid gap-3">
+                  {analysis.scores.hair_type ? (
+                    <p className={leadClass}>
+                      Texture aid: {analysis.scores.hair_type}. Not a medical type.
+                    </p>
+                  ) : null}
+                  {lengthScore != null ? (
+                    <ScoreBar label="Length" value={lengthScore} />
+                  ) : null}
+                  {densityScore != null ? (
+                    <ScoreBar label="Density (needs chin-down)" value={densityScore} />
+                  ) : null}
+                  {frizzScore != null ? (
+                    <ScoreBar label="Frizz (needs side views)" value={frizzScore} />
+                  ) : null}
+                </div>
+              )}
+              {insight ? (
+                <div className="grid gap-2 pt-4">
+                  <h3 className="m-0 text-[length:var(--text-label)] font-semibold">
+                    {insight.title}
+                  </h3>
+                  <p className="m-0 text-[length:var(--text-body)] text-foreground">
+                    {insight.body}
+                  </p>
+                  <p className={leadClass}>
+                    Confidence: {insight.confidence}
+                    {insight.patternFound
+                      ? " · Pattern in your logs"
+                      : " · No PMOS claim yet"}
+                  </p>
+                </div>
               ) : null}
-            </div>
-          ) : null}
-          {insight ? (
-            <div className="grid gap-2 border-t border-border pt-4">
-              <h3 className="m-0 text-[length:var(--text-sub)]">{insight.title}</h3>
-              <p className="m-0 text-[length:var(--text-body)]">{insight.body}</p>
-              <p className={leadClass}>
-                Confidence: {insight.confidence}
-                {insight.patternFound ? " · Pattern in your logs" : " · No PMOS claim yet"}
-              </p>
-            </div>
-          ) : null}
-        </article>
-      ) : (
-        <EmptyState
-          title="No hair scans yet"
-          body="Run hair scores from a face photo. Colour try-on is a preview, not a product match."
-        />
-      )}
+              <Button
+                type="button"
+                disabled={captureOff || !reusable}
+                onClick={() => void run("analysis")}
+              >
+                Score last skin scan
+              </Button>
+              <p className={leadClass}>{HAIR_CORRELATION_WELLNESS_NOTE}</p>
+            </article>
+          )}
 
-      {rows.length > 1 ? (
-        <div className="grid gap-2">
-          <h3 className="m-0 text-[length:var(--text-sub)]">Earlier scans</h3>
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {rows.slice(0, 8).map((row) => (
-              <li key={row.id}>
-                <button
-                  type="button"
-                  className={cn(
-                    "min-h-[var(--tap)] w-full rounded-[var(--radius)] border px-3 py-2 text-left text-[length:var(--text-caption)]",
-                    selected?.id === row.id
-                      ? "border-primary bg-muted text-foreground"
-                      : "border-border bg-card text-muted-foreground",
-                  )}
-                  onClick={() => setSelected(row)}
-                >
-                  {row.kind === "tryon" ? "Colour try-on" : "Hair scores"} ·{" "}
-                  {new Date(row.createdAt).toLocaleDateString()}
-                  {row.status === "pending" ? " · Working" : ""}
-                  {row.status === "error" ? " · Could not finish" : ""}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+          {rows.length > 1 ? (
+            <ul
+              className="m-0 flex list-none flex-wrap gap-2 p-0"
+              aria-label="Earlier hair stills"
+            >
+              {rows.slice(0, 8).map((row) => {
+                const on = selected?.id === row.id;
+                return (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      className={cn(
+                        "min-h-12 rounded-[var(--radius)] px-4 text-[length:var(--text-caption)] font-semibold",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        on
+                          ? "bg-muted text-foreground shadow-[var(--shadow-2)]"
+                          : "bg-card text-muted-foreground",
+                      )}
+                      onClick={() => {
+                        setRescan(false);
+                        setSelected(row);
+                      }}
+                    >
+                      {kindLabel(row)}
+                      {row.status === "pending" ? " · Working" : ""}
+                      {row.status === "error" ? " · Could not finish" : ""}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }

@@ -5,15 +5,14 @@ import {
   leadClass,
 } from "@/components/blocks/app-page";
 import { EmptyState } from "@/components/blocks/states";
-import { SheMatchBanner } from "@/components/blocks/shematch-banner";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import {
-  createAccessoryLook,
-  getAccessoryLook,
-  getAccessoryLookMedia,
+  createMirrorTryOn,
   getMirrorCatalogue,
-  listAccessoryLooks,
+  getMirrorTryOn,
+  getMirrorTryOnMedia,
+  listMirrorTryOns,
 } from "@/lib/api";
 import { CameraStillCapture } from "@/components/blocks/camera-still";
 import {
@@ -25,103 +24,106 @@ import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
 import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
-  AccessoryLook,
+  ApparelTryOn,
   MirrorCatalogueItem,
   MirrorStatus,
-  SkinScan,
 } from "../../../../../packages/api-types/src/index";
-import { ACCESSORY_NO_2D_TO_3D_NOTE } from "../../../../../packages/domain/src/index";
 
-type AccMode = "jewellery" | "eyewear" | "nail";
+type CatalogueMode = "all" | "maternity" | "pmos";
 
-function needsHand(item: MirrorCatalogueItem | undefined, mode: AccMode): boolean {
-  if (mode === "nail") return true;
-  if (mode !== "jewellery" || !item) return false;
-  const cat = item.accessoryCategory;
-  return cat === "ring" || cat === "bracelet" || cat === "watch";
+function garmentKind(item: MirrorCatalogueItem): string {
+  if (item.garmentCategory === "upper_body") return "Top";
+  if (item.garmentCategory === "lower_body") return "Bottom";
+  return "Full look";
 }
 
-function modeLead(mode: AccMode): string {
-  if (mode === "jewellery") return ACCESSORY_NO_2D_TO_3D_NOTE;
-  if (mode === "eyewear") {
-    return "Frames are in the catalogue. Eyewear try-on is not on this API.";
-  }
-  return "Photograph a hand in even light. Colour is a preview, not a salon match.";
+function garmentMeta(item: MirrorCatalogueItem): string {
+  const tags = [
+    garmentKind(item),
+    item.boutiqueName,
+    item.pmosFit ? "PMOS" : null,
+    item.trimester ? `trimester ${item.trimester}` : null,
+  ].filter(Boolean);
+  return tags.join(" · ");
 }
 
-function lookKindLabel(row: AccessoryLook): string {
-  if (row.kind === "nail") return "Nails";
-  if (row.kind === "eyewear") return "Eyewear";
-  return row.accessoryCategory?.replaceAll("_", " ") || "Jewellery";
-}
-
-export function MirrorAccessoriesPanel({
+export function MirrorApparelPanel({
   status,
-  scans,
   online,
   busy,
   onBusy,
   onError,
   friendlyError,
   tray,
+  pregnancyOn,
+  pmosOn,
+  focusItemId,
 }: {
   status: MirrorStatus;
-  scans: SkinScan[];
   online: boolean;
   busy: boolean;
   onBusy: (v: boolean) => void;
   onError: (msg: string | null) => void;
   friendlyError: (err: unknown) => string;
   tray: ReactNode;
+  pregnancyOn: boolean;
+  pmosOn: boolean;
+  focusItemId?: string | null;
 }) {
-  const [mode, setMode] = useState<AccMode>("jewellery");
+  const [mode, setMode] = useState<CatalogueMode>("all");
   const [items, setItems] = useState<MirrorCatalogueItem[]>([]);
+  const [emptyReason, setEmptyReason] = useState<string | undefined>();
   const [picked, setPicked] = useState<string | null>(null);
-  const [looks, setLooks] = useState<AccessoryLook[]>([]);
-  const [selected, setSelected] = useState<AccessoryLook | null>(null);
+  const [tryons, setTryons] = useState<ApparelTryOn[]>([]);
+  const [selected, setSelected] = useState<ApparelTryOn | null>(null);
   const [src, setSrc] = useState<string | null>(null);
+  const [lastBodyB64, setLastBodyB64] = useState<string | null>(null);
   const [rescan, setRescan] = useState(false);
   const pending = useRef<string | null>(null);
   const lastQueued = useRef("");
   const photos = useMirrorPhotosOptional();
-  const reusable = scans.find((s) => !s.seeded && s.status === "success");
   const captureOff = busy || !status.youcamConfigured || !online;
-  const catKind = mode === "nail" ? "nail_color" : mode;
   const pickedItem = items.find((i) => i.id === picked);
-  const handShot = needsHand(pickedItem, mode);
-  const canTryOn = Boolean(pickedItem?.tryOnReady) && mode !== "eyewear";
   const working = selected?.status === "pending";
   const showCamera = rescan || !src;
-  const modeLooks = looks.filter((row) => row.kind === mode);
 
-  const load = useCallback(async () => {
-    const [cat, lookRes] = await Promise.all([
-      getMirrorCatalogue({ kind: catKind }),
-      listAccessoryLooks(),
-    ]);
-    setItems(cat.items);
-    setLooks(lookRes.looks);
-    setPicked(
-      (cur) =>
-        cat.items.find((i) => i.id === cur)?.id ??
-        cat.items.find((i) => i.tryOnReady)?.id ??
-        cat.items[0]?.id ??
-        null,
-    );
-    setSelected((cur) => {
-      const same = lookRes.looks.find((row) => row.id === cur?.id);
-      if (same) return same;
-      return lookRes.looks.find((row) => row.kind === mode) ?? lookRes.looks[0] ?? null;
-    });
-  }, [catKind, mode]);
+  const loadLooks = useCallback(async () => {
+    const { tryons: rows } = await listMirrorTryOns();
+    setTryons(rows);
+    setSelected((cur) => rows.find((row) => row.id === cur?.id) ?? rows[0] ?? null);
+  }, []);
 
   useEffect(() => {
-    void load().catch((err) => onError(friendlyError(err)));
-  }, [load, friendlyError, onError]);
+    let cancelled = false;
+    void getMirrorCatalogue({ kind: "apparel", mode })
+      .then((cat) => {
+        if (cancelled) return;
+        const next = cat.items.filter((row) => row.kind === "apparel");
+        setItems(next);
+        setEmptyReason(cat.emptyReason);
+        setPicked((cur) => next.find((row) => row.id === cur)?.id ?? next[0]?.id ?? null);
+      })
+      .catch((err) => {
+        if (!cancelled) onError(friendlyError(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, friendlyError, onError]);
+
+  useEffect(() => {
+    void loadLooks().catch((err) => onError(friendlyError(err)));
+  }, [loadLooks, friendlyError, onError]);
+
+  useEffect(() => {
+    if (!focusItemId) return;
+    setPicked(focusItemId);
+    setMode("all");
+  }, [focusItemId]);
 
   useEffect(() => {
     setRescan(false);
-  }, [mode]);
+  }, [picked]);
 
   useEffect(() => {
     if (rescan) return;
@@ -133,7 +135,7 @@ export function MirrorAccessoriesPanel({
     let cancelled = false;
     (async () => {
       try {
-        const media = await getAccessoryLookMedia(selected.id);
+        const media = await getMirrorTryOnMedia(selected.id);
         if (!cancelled) {
           setSrc(`data:${media.contentType};base64,${media.imageB64}`);
         }
@@ -151,12 +153,12 @@ export function MirrorAccessoriesPanel({
     if (!id) return;
     const tick = window.setInterval(async () => {
       try {
-        const { look } = await getAccessoryLook(id);
-        if (look.status !== "pending") {
+        const { tryon } = await getMirrorTryOn(id);
+        if (tryon.status !== "pending") {
           pending.current = null;
           window.clearInterval(tick);
-          await load();
-          setSelected(look);
+          await loadLooks();
+          setSelected(tryon);
           onBusy(false);
         }
       } catch (err) {
@@ -167,58 +169,24 @@ export function MirrorAccessoriesPanel({
       }
     }, 2000);
     return () => window.clearInterval(tick);
-  }, [selected?.id, load, onBusy, onError, friendlyError]);
+  }, [selected?.id, loadLooks, onBusy, onError, friendlyError]);
 
-  async function run(file?: File) {
-    const item = items.find((i) => i.id === picked);
-    if (!item) {
-      onError("Pick a catalogue piece first.");
-      return;
-    }
-    if (!item.tryOnReady || mode === "eyewear") {
-      onError(
-        mode === "eyewear"
-          ? "Eyewear try-on is not on this API. Browse the frames only."
-          : ACCESSORY_NO_2D_TO_3D_NOTE,
-      );
+  async function runTryOn(imageB64: string) {
+    if (!picked) {
+      onError("Choose a look, then add a full-body photo.");
       return;
     }
     onBusy(true);
     onError(null);
     try {
-      const imageB64 = file ? await fileToJpegDataUrl(file) : undefined;
-      const scanId =
-        mode === "nail" || handShot
-          ? undefined
-          : imageB64
-            ? undefined
-            : reusable?.id;
-      if ((mode === "nail" || handShot) && !imageB64) {
-        onBusy(false);
-        onError(
-          mode === "nail"
-            ? "Nail try-on needs a hand photo."
-            : "This piece needs a hand or wrist photo.",
-        );
-        return;
-      }
-      if (mode !== "nail" && !handShot && !imageB64 && !scanId) {
-        onBusy(false);
-        onError("Add a face photo, or take a skin scan first.");
-        return;
-      }
-      const { look } = await createAccessoryLook(mode, {
-        catalogueItemId: item.id,
-        imageB64,
-        scanId,
-      });
-      pending.current = look.id;
-      setSelected(look);
+      const { tryon } = await createMirrorTryOn(imageB64, picked);
+      pending.current = tryon.id;
+      setSelected(tryon);
       setRescan(false);
-      if (look.status !== "pending") {
+      if (tryon.status !== "pending") {
         pending.current = null;
-        await load();
-        setSelected(look);
+        await loadLooks();
+        setSelected(tryon);
         onBusy(false);
       }
     } catch (err) {
@@ -227,33 +195,49 @@ export function MirrorAccessoriesPanel({
     }
   }
 
-  const runRef = useRef(run);
-  runRef.current = run;
+  async function onBodyFile(file: File | undefined) {
+    if (!file) return;
+    if (!picked) {
+      onError("Choose a look, then add a full-body photo.");
+      return;
+    }
+    onBusy(true);
+    onError(null);
+    try {
+      setSrc(URL.createObjectURL(file));
+      setRescan(false);
+      const imageB64 = await fileToJpegDataUrl(file);
+      setLastBodyB64(imageB64);
+      await runTryOn(imageB64);
+    } catch (err) {
+      onBusy(false);
+      onError(friendlyError(err));
+    }
+  }
+
+  const onBodyFileRef = useRef(onBodyFile);
+  onBodyFileRef.current = onBodyFile;
 
   useEffect(() => {
     const queued = photos?.queued;
     if (!queued) return;
     if (queued.token === lastQueued.current) return;
-    const want = handShot ? "hand" : "face";
-    if (queued.kind !== want) return;
+    if (queued.kind !== "body") return;
     lastQueued.current = queued.token;
     photos?.consumeQueued(queued.token);
-    void runRef.current(queued.file);
-  }, [photos, handShot]);
+    void onBodyFileRef.current(queued.file);
+  }, [photos]);
 
   return (
     <div className="grid min-w-0 gap-6">
       <SegmentedTabs
-        ariaLabel="Accessory type"
+        ariaLabel="Catalogue filter"
         value={mode}
-        onChange={(id) => {
-          setMode(id as AccMode);
-          setPicked(null);
-        }}
+        onChange={(id) => setMode(id as CatalogueMode)}
         items={[
-          { id: "jewellery", label: "Jewellery" },
-          { id: "eyewear", label: "Eyewear" },
-          { id: "nail", label: "Nails" },
+          { id: "all", label: "All looks" },
+          { id: "maternity", label: "Maternity" },
+          { id: "pmos", label: "PMOS comfort" },
         ]}
       />
 
@@ -262,29 +246,19 @@ export function MirrorAccessoriesPanel({
           {showCamera ? (
             <CameraStillCapture
               chrome="stage"
-              disabled={captureOff || !canTryOn}
-              facingMode={handShot ? "environment" : "user"}
-              guide={handShot ? "none" : "face"}
-              captureLabel={
-                handShot
-                  ? mode === "nail"
-                    ? "Photograph a hand"
-                    : "Photograph a hand or wrist"
-                  : "Take a face photo"
-              }
-              videoLabel={
-                handShot
-                  ? "Live camera for a hand still"
-                  : "Live camera for an accessory still"
-              }
-              photoKind={handShot ? "hand" : "face"}
-              onFile={(file) => void run(file)}
+              disabled={captureOff || !picked}
+              facingMode="environment"
+              guide="body"
+              captureLabel="Take a full-body photo"
+              videoLabel="Live camera for a full-body try-on still"
+              photoKind="body"
+              onFile={(file) => void onBodyFile(file)}
               onError={onError}
             />
           ) : (
             <MirrorStage
               pending={working}
-              pendingLabel="Trying this piece. Keep this screen open."
+              pendingLabel="Building the try-on. Keep this screen open."
               dock={
                 <div className="grid gap-4">
                   {selected?.status === "error" ? (
@@ -307,17 +281,11 @@ export function MirrorAccessoriesPanel({
               {src ? (
                 <img
                   src={src}
-                  alt="Accessory try-on"
-                  className="size-full object-cover object-center"
+                  alt="Apparel try-on"
+                  className="size-full object-cover object-[center_12%]"
                 />
               ) : (
-                <MirrorStageEmpty
-                  label={
-                    handShot
-                      ? "Show a hand in even light"
-                      : "Face the camera in even light"
-                  }
-                />
+                <MirrorStageEmpty label="Stand back in even light, full body in frame" />
               )}
             </MirrorStage>
           )}
@@ -331,20 +299,32 @@ export function MirrorAccessoriesPanel({
           <article className={cn(elevatedCardClass, "border-0")}>
             <header className="grid gap-1">
               <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
-                {mode === "jewellery"
-                  ? "Pieces"
-                  : mode === "eyewear"
-                    ? "Frames"
-                    : "Colours"}
+                Boutique looks
               </h2>
-              <p className={leadClass}>{modeLead(mode)}</p>
+              <p className={leadClass}>
+                Pick a look, then a full-body photo. Tops and bottoms can reuse
+                the same still. No swimwear in this catalogue.
+              </p>
             </header>
-
-            {items.length === 0 ? (
-              <EmptyState
-                title="Nothing in this catalogue yet"
-                body="Jewellery needs a SKU still. Eyewear stays catalogue-only. Nails need a colour hex."
-              />
+            {mode === "maternity" && !pregnancyOn ? (
+              <p className={leadClass}>
+                Turn on Pregnancy in Account to filter by week. All looks still
+                shows every piece.
+              </p>
+            ) : null}
+            {mode === "pmos" && !pmosOn ? (
+              <p className={leadClass}>
+                PMOS comfort is a demo filter. Enable PMOS Manager if you want
+                that module elsewhere.
+              </p>
+            ) : null}
+            {emptyReason === "pregnancy_week_unknown" ? (
+              <p className={leadClass}>
+                Add a pregnancy start date in Health to match looks to your week.
+              </p>
+            ) : null}
+            {!items.length && emptyReason !== "pregnancy_week_unknown" ? (
+              <EmptyState title="No looks in this filter" body="Try All looks." />
             ) : (
               <ul className="m-0 grid list-none gap-3 p-0">
                 {items.map((row) => {
@@ -363,13 +343,7 @@ export function MirrorAccessoriesPanel({
                         )}
                         onClick={() => setPicked(row.id)}
                       >
-                        {row.nailColor ? (
-                          <span
-                            className="size-14 rounded-[var(--radius)]"
-                            style={{ backgroundColor: row.nailColor }}
-                            aria-hidden
-                          />
-                        ) : row.refImageUrl ? (
+                        {row.refImageUrl ? (
                           <img
                             src={row.refImageUrl}
                             alt=""
@@ -383,12 +357,7 @@ export function MirrorAccessoriesPanel({
                             {row.title}
                           </strong>
                           <span className="truncate text-[length:var(--text-caption)]">
-                            {row.boutiqueName}
-                            {row.tryOnReady
-                              ? ""
-                              : mode === "eyewear"
-                                ? " · catalogue only"
-                                : " · no SKU still"}
+                            {garmentMeta(row)}
                           </span>
                         </span>
                       </button>
@@ -397,39 +366,28 @@ export function MirrorAccessoriesPanel({
                 })}
               </ul>
             )}
-
-            {mode !== "eyewear" && !handShot ? (
+            {lastBodyB64 ? (
               <Button
                 type="button"
-                disabled={captureOff || !canTryOn || !reusable}
-                onClick={() => void run()}
+                disabled={captureOff || !picked}
+                onClick={() => void runTryOn(lastBodyB64)}
               >
-                Try on last skin scan
+                Try last photo in this look
               </Button>
             ) : null}
-            {mode !== "eyewear" && !handShot && !reusable ? (
-              <p className={leadClass}>
-                Capture a face still, or take a Skin scan first.
-              </p>
-            ) : null}
-            {mode === "eyewear" ? (
-              <p className={leadClass}>
-                Pick a frame to remember it. Capture stays off until eyewear
-                try-on is on the API.
-              </p>
-            ) : null}
-            {mode === "nail" ? (
-              <SheMatchBanner trigger="mirror_nail" extraTags={["nail"]} />
+            {!pickedItem ? (
+              <p className={leadClass}>Pick a look before you capture.</p>
             ) : null}
           </article>
 
-          {modeLooks.length > 1 ? (
+          {tryons.length > 1 ? (
             <ul
               className="m-0 flex list-none flex-wrap gap-2 p-0"
-              aria-label="Earlier accessory try-ons"
+              aria-label="Earlier apparel try-ons"
             >
-              {modeLooks.slice(0, 8).map((row) => {
+              {tryons.slice(0, 8).map((row) => {
                 const on = selected?.id === row.id;
+                const look = items.find((i) => i.id === row.catalogueItemId);
                 return (
                   <li key={row.id}>
                     <button
@@ -445,9 +403,10 @@ export function MirrorAccessoriesPanel({
                       onClick={() => {
                         setRescan(false);
                         setSelected(row);
+                        if (row.catalogueItemId) setPicked(row.catalogueItemId);
                       }}
                     >
-                      {lookKindLabel(row)}
+                      {look?.title ?? "Look"}
                       {row.status === "pending" ? " · Working" : ""}
                       {row.status === "error" ? " · Could not finish" : ""}
                     </button>
@@ -455,6 +414,11 @@ export function MirrorAccessoriesPanel({
                 );
               })}
             </ul>
+          ) : tryons.length === 0 ? (
+            <EmptyState
+              title="No try-ons yet"
+              body="Pick a look, then add a full-body photo."
+            />
           ) : null}
         </aside>
       </div>

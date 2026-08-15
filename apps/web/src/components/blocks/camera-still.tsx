@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ActionRow, leadClass, outlinedCardClass } from "@/components/blocks/app-page";
+import { MirrorStage, MirrorStageEmpty, mirrorStageBoxClass, mirrorStageWrapClass } from "@/components/blocks/mirror-stage";
 import { FieldSelect } from "@/components/primitives/field";
 import { Button } from "@/components/ui/button";
 import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
 import {
   cameraVideoConstraints,
+  guideCropFromElements,
   isFrontCameraLabel,
   listVideoCameras,
   videoFrameToJpegFile,
@@ -51,6 +53,7 @@ export function CameraStillCapture({
   libraryLabel = "Choose from library",
   videoLabel,
   photoKind,
+  chrome = "stack",
   onFile,
   onError,
 }: {
@@ -61,11 +64,14 @@ export function CameraStillCapture({
   libraryLabel?: string;
   videoLabel: string;
   photoKind?: MirrorPhotoKind;
+  chrome?: "stack" | "stage";
   onFile: (file: File) => void;
   onError: (message: string) => void;
 }) {
   const photos = useMirrorPhotosOptional();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const ovalRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -172,9 +178,18 @@ export function CameraStillCapture({
       return;
     }
     try {
+      const box = previewRef.current;
+      const oval = ovalRef.current;
       const file = videoFrameToJpegFile(video, {
         maxLong: facingMode === "user" ? 1024 : 1600,
         allowUpscale: true,
+        guideCrop:
+          guide === "face" && box && oval
+            ? guideCropFromElements(box, oval, {
+                objectPositionY: 0.18,
+                pad: 0.08,
+              })
+            : undefined,
       });
       stopStream();
       setReady(false);
@@ -194,6 +209,149 @@ export function CameraStillCapture({
   }
 
   const live = phase === "live" || phase === "starting";
+  const libraryInput = (
+    <input
+      ref={fileRef}
+      className="sr-only"
+      type="file"
+      accept="image/*"
+      disabled={disabled}
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        pickLibrary(file);
+      }}
+    />
+  );
+
+  const dock = live ? (
+    <ActionRow>
+      <Button
+        type="button"
+        disabled={disabled || phase !== "live" || !ready}
+        onClick={() => void snap()}
+      >
+        Capture
+      </Button>
+      {cameras.length > 1 ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={phase !== "live"}
+          onClick={() => {
+            const i = cameras.findIndex((c) => c.deviceId === deviceId);
+            const next = cameras[(i + 1 + cameras.length) % cameras.length];
+            if (next) void selectCamera(next.deviceId);
+          }}
+        >
+          Switch camera
+        </Button>
+      ) : null}
+      <Button type="button" variant="outline" onClick={cancelCamera}>
+        Cancel
+      </Button>
+    </ActionRow>
+  ) : (
+    <ActionRow>
+      <Button type="button" disabled={disabled} onClick={() => void startCamera()}>
+        {captureLabel}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={disabled}
+        onClick={() => fileRef.current?.click()}
+      >
+        {libraryLabel}
+      </Button>
+    </ActionRow>
+  );
+
+  const faceHint =
+    guide === "face"
+      ? "Move closer until your face fills the oval, then capture."
+      : null;
+
+  const video = (
+    <video
+      ref={videoRef}
+      autoPlay
+      muted
+      playsInline
+      aria-label={videoLabel}
+      className={cn(
+        "block size-full bg-muted object-cover",
+        guide === "face" ? "object-[center_18%]" : "object-[center_12%]",
+        mirror && "-scale-x-100",
+      )}
+    />
+  );
+
+  const livePreview = (
+    <div ref={previewRef} className="relative size-full">
+      {video}
+      {guide === "face" ? (
+        <div
+          ref={ovalRef}
+          className="pointer-events-none absolute inset-4 rounded-[50%] border border-primary/50"
+          aria-hidden
+        />
+      ) : null}
+      {phase === "starting" ? (
+        <p className="absolute inset-0 grid place-items-center bg-card/70 text-[length:var(--text-body)] text-foreground">
+          Starting camera…
+        </p>
+      ) : null}
+    </div>
+  );
+
+  if (chrome === "stage") {
+    return (
+      <div className={cn(mirrorStageWrapClass)}>
+        <MirrorStage
+          dock={
+            <>
+              {faceHint ? <p className={leadClass}>{faceHint}</p> : null}
+              {live && cameras.length > 1 ? (
+                <label className="grid gap-2">
+                  <span className="text-[length:var(--text-label)] text-foreground">
+                    Camera
+                  </span>
+                  <FieldSelect
+                    aria-label="Choose camera"
+                    value={deviceId ?? ""}
+                    onChange={(e) => void selectCamera(e.target.value)}
+                  >
+                    {cameras.map((cam, i) => (
+                      <option key={cam.deviceId} value={cam.deviceId}>
+                        {cam.label || `Camera ${i + 1}`}
+                      </option>
+                    ))}
+                  </FieldSelect>
+                </label>
+              ) : null}
+              {dock}
+            </>
+          }
+        >
+          {live ? (
+            livePreview
+          ) : (
+            <MirrorStageEmpty
+              label={
+                guide === "face"
+                  ? "Move closer until your face fills the oval, then capture one still."
+                  : guide === "body"
+                    ? "Stand in even light so your full outfit is in frame."
+                    : "Hold the piece in even light, then capture one still."
+              }
+            />
+          )}
+        </MirrorStage>
+        {libraryInput}
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4">
@@ -201,35 +359,13 @@ export function CameraStillCapture({
         <div className={cn(outlinedCardClass, "grid gap-4")}>
           <p className={leadClass}>
             {guide === "face"
-              ? "Centre your face in the oval. Capture sends one still — not a video stream."
+              ? faceHint
               : guide === "body"
                 ? "Stand in even light so your full outfit is in frame, then capture one still."
                 : "Hold the piece in even light, then capture one still."}
           </p>
-          <div className="relative w-full overflow-hidden rounded-[var(--radius)] border border-border bg-muted max-lg:aspect-[4/5] lg:mx-auto lg:max-w-[280px]">
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              aria-label={videoLabel}
-              className={cn(
-                "block h-auto w-full bg-muted object-cover max-lg:aspect-[4/5] max-lg:h-full lg:aspect-[3/4]",
-                guide === "face" ? "object-[center_18%]" : "object-[center_12%]",
-                mirror && "-scale-x-100",
-              )}
-            />
-            {guide === "face" ? (
-              <div
-                className="pointer-events-none absolute inset-4 rounded-[50%] border-2 border-primary/70"
-                aria-hidden
-              />
-            ) : null}
-            {phase === "starting" ? (
-              <p className="absolute inset-0 grid place-items-center bg-card/70 text-[length:var(--text-body)] text-foreground">
-                Starting camera…
-              </p>
-            ) : null}
+          <div className={mirrorStageBoxClass}>
+            {livePreview}
           </div>
           {cameras.length > 1 ? (
             <label className="grid gap-2">
@@ -249,60 +385,12 @@ export function CameraStillCapture({
               </FieldSelect>
             </label>
           ) : null}
-          <ActionRow>
-            <Button
-              type="button"
-              disabled={disabled || phase !== "live" || !ready}
-              onClick={() => void snap()}
-            >
-              Capture
-            </Button>
-            {cameras.length > 1 ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={phase !== "live"}
-                onClick={() => {
-                  const i = cameras.findIndex((c) => c.deviceId === deviceId);
-                  const next = cameras[(i + 1 + cameras.length) % cameras.length];
-                  if (next) void selectCamera(next.deviceId);
-                }}
-              >
-                Switch camera
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" onClick={cancelCamera}>
-              Cancel
-            </Button>
-          </ActionRow>
+          {dock}
         </div>
       ) : (
-        <ActionRow>
-          <Button type="button" disabled={disabled} onClick={() => void startCamera()}>
-            {captureLabel}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => fileRef.current?.click()}
-          >
-            {libraryLabel}
-          </Button>
-        </ActionRow>
+        dock
       )}
-      <input
-        ref={fileRef}
-        className="sr-only"
-        type="file"
-        accept="image/*"
-        disabled={disabled}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          pickLibrary(file);
-        }}
-      />
+      {libraryInput}
     </div>
   );
 }

@@ -16,7 +16,11 @@ export function ScoreBar({
       </p>
       <span
         className="block h-2 overflow-hidden rounded-sm bg-muted"
-        aria-hidden="true"
+        role="meter"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-valuenow={Math.round(clamped)}
       >
         <span
           className="block h-full bg-primary"

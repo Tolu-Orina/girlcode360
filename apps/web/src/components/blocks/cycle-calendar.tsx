@@ -68,7 +68,7 @@ export function CycleCalendar({
   const showEstimates = fertileDates.size > 0 || Boolean(ovulationDay);
 
   return (
-    <article className="grid min-w-0 gap-4 overflow-x-clip rounded-[var(--radius-sheet)] bg-card p-4 shadow-[var(--shadow-2)] lg:gap-6 lg:p-6">
+    <article className="grid min-w-0 gap-4 overflow-x-clip rounded-[var(--radius-sheet)] bg-white/40 p-4 shadow-[var(--shadow-2)] backdrop-blur-[20px] lg:gap-6 lg:p-6">
       <div className="grid min-w-0 gap-4 lg:flex lg:flex-wrap lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <Button

@@ -3,8 +3,10 @@ import { useAlena } from "@/hooks/use-alena";
 
 export function AskAlenaLink({
   from,
+  brief,
 }: {
   from: "cycle" | "health" | "mirror";
+  brief?: boolean;
 }) {
   const { openAlena } = useAlena();
   return (
@@ -15,8 +17,8 @@ export function AskAlenaLink({
         onClick={() => openAlena({ from })}
       >
         Ask Alena
-      </button>{" "}
-      about this screen. Anonymous mode never sends your logs.
+      </button>
+      {brief ? " about this screen." : " about this screen. Anonymous mode never sends your logs."}
     </p>
   );
 }

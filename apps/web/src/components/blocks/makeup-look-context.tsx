@@ -14,7 +14,7 @@ import {
   STUDIO_MAKEUP_LABELS,
   type StudioMakeupCategory,
 } from "../../../../../packages/domain/src/index";
-import { leadClass, outlinedCardClass } from "@/components/blocks/app-page";
+import { elevatedCardClass, leadClass } from "@/components/blocks/app-page";
 import { cn } from "@/lib/utils";
 
 export type MakeupStudioMode = "live" | "photo" | "transfer" | "shade";
@@ -136,7 +136,7 @@ export function MakeupFeatureRail() {
   const current = shades.find((s) => s.id === shadeIds[featureFocus]);
 
   return (
-    <div className={cn(outlinedCardClass, "grid gap-4")}>
+    <div className={cn(elevatedCardClass, "min-w-0 border-0")}>
       <header className="grid gap-1">
         <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
           Look
@@ -155,7 +155,7 @@ export function MakeupFeatureRail() {
               type="button"
               aria-pressed={on}
               className={cn(
-                "min-h-8 rounded-full border px-3 text-[length:var(--text-caption)] font-semibold",
+                "min-h-12 rounded-[var(--radius-sheet)] border px-4 text-[length:var(--text-label)] font-semibold",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 on
                   ? "border-primary bg-primary text-primary-foreground"

@@ -1,4 +1,5 @@
 import { ChartLine, Gem, Palette, ScanFace, Scissors, Shirt, UserRound } from "lucide-react";
+import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export type MirrorTab =
@@ -18,7 +19,7 @@ const STUDIOS: {
 }[] = [
   { id: "scan", label: "Skin", hint: "Scores from a face still", icon: ScanFace },
   { id: "makeup", label: "Makeup", hint: "Boutique shade try-on", icon: Palette },
-  { id: "hair", label: "Hair", hint: "Colour and density", icon: Scissors },
+  { id: "hair", label: "Hair", hint: "Length scores and colour try-on", icon: Scissors },
   { id: "wardrobe", label: "Wardrobe", hint: "Pieces you already own", icon: Shirt },
   { id: "accessories", label: "Accessories", hint: "Jewellery, frames, nails", icon: Gem },
   { id: "tryon", label: "Apparel", hint: "Full-body catalogue looks", icon: UserRound },
@@ -32,42 +33,12 @@ export function MirrorStudioNav({
   value: MirrorTab;
   onChange: (id: MirrorTab) => void;
 }) {
+  const reduce = useReducedMotion();
+
   return (
-    <>
+    <LayoutGroup>
       <nav
-        className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden"
-        aria-label="Mirror studios"
-      >
-        <ul className="m-0 flex w-max list-none gap-2 p-0">
-          {STUDIOS.map((s) => {
-            const Icon = s.icon;
-            const active = value === s.id;
-            return (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  aria-current={active ? "page" : undefined}
-                  onClick={() => onChange(s.id)}
-                  className={cn(
-                    "grid min-h-12 min-w-[4.5rem] justify-items-center gap-1 rounded-[var(--radius-sheet)] px-3 py-2",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active
-                      ? "bg-card text-foreground shadow-[var(--shadow-2)]"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  <Icon className="size-6" aria-hidden />
-                  <span className="text-[length:var(--text-caption)] font-semibold whitespace-nowrap">
-                    {s.label}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-      <nav
-        className="hidden lg:sticky lg:top-8 lg:grid lg:gap-2"
+        className="grid w-full min-w-0 grid-cols-4 gap-1 md:w-[28rem]"
         aria-label="Mirror studios"
       >
         {STUDIOS.map((s) => {
@@ -77,27 +48,31 @@ export function MirrorStudioNav({
             <button
               key={s.id}
               type="button"
+              title={s.hint}
+              aria-label={s.label}
               aria-current={active ? "page" : undefined}
               onClick={() => onChange(s.id)}
               className={cn(
-                "grid grid-cols-[24px_1fr] items-start gap-x-3 gap-y-1 rounded-[var(--radius-sheet)] px-4 py-3 text-left",
-                "min-h-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                active
-                  ? "bg-card text-foreground shadow-[var(--shadow-2)]"
-                  : "text-muted-foreground [@media(hover:hover)]:hover:bg-card/70 [@media(hover:hover)]:hover:text-foreground",
+                "relative grid min-h-12 min-w-12 justify-items-center gap-1 rounded-[var(--radius)] px-1 py-2",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                active ? "text-foreground" : "text-muted-foreground",
               )}
             >
-              <Icon className="mt-0.5 size-6" aria-hidden />
-              <span className="text-[length:var(--text-label)] font-semibold text-foreground">
+              {active ? (
+                <motion.span
+                  layoutId={reduce ? undefined : "mirror-studio-pill"}
+                  className="absolute inset-0 rounded-[var(--radius)] bg-card shadow-[var(--shadow-2)]"
+                  transition={{ duration: reduce ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
+                />
+              ) : null}
+              <Icon className="relative z-[1] size-6" aria-hidden />
+              <span className="relative z-[1] text-center text-[length:var(--text-caption)] font-semibold max-md:sr-only">
                 {s.label}
-              </span>
-              <span className="col-start-2 text-[length:var(--text-caption)] text-muted-foreground">
-                {s.hint}
               </span>
             </button>
           );
         })}
       </nav>
-    </>
+    </LayoutGroup>
   );
 }

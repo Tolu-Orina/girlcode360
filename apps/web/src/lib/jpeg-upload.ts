@@ -4,6 +4,85 @@ const DEFAULT_MAX_LONG = 1600;
 
 type JpegOpts = { maxLong?: number; allowUpscale?: boolean };
 
+/** Map a CSS `object-fit: cover` preview region back onto the video frame. */
+export type GuideCrop = {
+  boxW: number;
+  boxH: number;
+  destX: number;
+  destY: number;
+  destW: number;
+  destH: number;
+  /** CSS object-position X as 0–1. `center` → 0.5 */
+  objectPositionX?: number;
+  /** CSS object-position Y as 0–1. `18%` → 0.18 */
+  objectPositionY?: number;
+  /** Grow the dest rect before mapping (0.08 = 8% hair/chin pad). */
+  pad?: number;
+};
+
+export function coverMappedSourceRect(
+  videoW: number,
+  videoH: number,
+  crop: GuideCrop,
+): { sx: number; sy: number; sw: number; sh: number } {
+  const posX = crop.objectPositionX ?? 0.5;
+  const posY = crop.objectPositionY ?? 0.18;
+  const pad = crop.pad ?? 0;
+  const scale = Math.max(crop.boxW / videoW, crop.boxH / videoH);
+  const dispW = videoW * scale;
+  const dispH = videoH * scale;
+  const offX = (crop.boxW - dispW) * posX;
+  const offY = (crop.boxH - dispH) * posY;
+
+  let destX = crop.destX - crop.destW * pad;
+  let destY = crop.destY - crop.destH * pad;
+  let destW = crop.destW * (1 + 2 * pad);
+  let destH = crop.destH * (1 + 2 * pad);
+
+  let sx = (destX - offX) / scale;
+  let sy = (destY - offY) / scale;
+  let sw = destW / scale;
+  let sh = destH / scale;
+
+  if (sx < 0) {
+    sw += sx;
+    sx = 0;
+  }
+  if (sy < 0) {
+    sh += sy;
+    sy = 0;
+  }
+  if (sx + sw > videoW) sw = videoW - sx;
+  if (sy + sh > videoH) sh = videoH - sy;
+
+  return {
+    sx: Math.max(0, sx),
+    sy: Math.max(0, sy),
+    sw: Math.max(1, sw),
+    sh: Math.max(1, sh),
+  };
+}
+
+export function guideCropFromElements(
+  box: HTMLElement,
+  oval: HTMLElement,
+  opts?: Pick<GuideCrop, "objectPositionX" | "objectPositionY" | "pad">,
+): GuideCrop {
+  const br = box.getBoundingClientRect();
+  const or = oval.getBoundingClientRect();
+  return {
+    boxW: Math.max(1, br.width),
+    boxH: Math.max(1, br.height),
+    destX: or.left - br.left,
+    destY: or.top - br.top,
+    destW: Math.max(1, or.width),
+    destH: Math.max(1, or.height),
+    objectPositionX: opts?.objectPositionX ?? 0.5,
+    objectPositionY: opts?.objectPositionY ?? 0.18,
+    pad: opts?.pad ?? 0.08,
+  };
+}
+
 function scaleToJpeg(
   srcW: number,
   srcH: number,
@@ -92,12 +171,25 @@ export async function listVideoCameras(): Promise<MediaDeviceInfo[]> {
 
 export function videoFrameToJpegDataUrl(
   video: HTMLVideoElement,
-  opts?: JpegOpts,
+  opts?: JpegOpts & { guideCrop?: GuideCrop },
 ): string {
+  const videoW = video.videoWidth;
+  const videoH = video.videoHeight;
+  const crop = opts?.guideCrop;
+  if (!crop) {
+    return scaleToJpeg(
+      videoW,
+      videoH,
+      (ctx, w, h) => ctx.drawImage(video, 0, 0, w, h),
+      opts?.maxLong ?? DEFAULT_MAX_LONG,
+      opts?.allowUpscale ?? true,
+    );
+  }
+  const { sx, sy, sw, sh } = coverMappedSourceRect(videoW, videoH, crop);
   return scaleToJpeg(
-    video.videoWidth,
-    video.videoHeight,
-    (ctx, w, h) => ctx.drawImage(video, 0, 0, w, h),
+    sw,
+    sh,
+    (ctx, w, h) => ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h),
     opts?.maxLong ?? DEFAULT_MAX_LONG,
     opts?.allowUpscale ?? true,
   );
@@ -117,7 +209,7 @@ export function dataUrlToJpegFile(
 
 export function videoFrameToJpegFile(
   video: HTMLVideoElement,
-  opts?: JpegOpts,
+  opts?: JpegOpts & { guideCrop?: GuideCrop },
 ): File {
   return dataUrlToJpegFile(videoFrameToJpegDataUrl(video, opts));
 }

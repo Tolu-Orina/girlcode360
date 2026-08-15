@@ -5,19 +5,22 @@ export function MirrorStill({
   src,
   alt,
   crop = "face",
+  framed = false,
   className,
 }: {
   src: string;
   alt: string;
   crop?: "face" | "body" | "result";
+  framed?: boolean;
   className?: string;
 }) {
   return (
     <figure
       className={cn(
         "m-0 w-full overflow-hidden bg-muted",
-        "max-lg:-mx-4 max-lg:w-[calc(100%+2rem)] max-lg:rounded-none",
-        "lg:rounded-[var(--radius)] lg:border lg:border-border",
+        framed
+          ? "rounded-[var(--radius-sheet)] shadow-[var(--shadow-2)]"
+          : "max-lg:-mx-4 max-lg:w-[calc(100%+2rem)] max-lg:rounded-none lg:rounded-[var(--radius)] lg:border lg:border-border",
         className,
       )}
     >

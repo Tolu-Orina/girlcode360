@@ -5,12 +5,49 @@ import { useMirrorPhotos } from "@/hooks/use-mirror-photos";
 import {
   MIRROR_PHOTO_LABELS,
   type MirrorPhotoKind,
+  type MirrorPhoto,
 } from "@/lib/mirror-photos";
-import { leadClass, outlinedCardClass } from "@/components/blocks/app-page";
+import { elevatedCardClass, leadClass } from "@/components/blocks/app-page";
 import { cn } from "@/lib/utils";
 
 const KINDS: MirrorPhotoKind[] = ["face", "body", "hand", "garment"];
 type Filter = "all" | MirrorPhotoKind;
+
+function PhotoTile({
+  photo,
+  src,
+  on,
+  onPick,
+}: {
+  photo: MirrorPhoto;
+  src: string | undefined;
+  on: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      className={cn(
+        "relative overflow-hidden rounded-[var(--radius)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        on ? "ring-2 ring-ring" : "",
+      )}
+      onClick={onPick}
+    >
+      <img
+        src={src}
+        alt={`${MIRROR_PHOTO_LABELS[photo.kind]} from ${new Date(photo.createdAt).toLocaleDateString()}`}
+        className={cn(
+          "aspect-[4/5] w-full object-cover",
+          photo.kind === "body" ? "object-[center_12%]" : "object-[center_18%]",
+        )}
+      />
+      <span className="absolute bottom-1 left-1 rounded-[var(--radius)] bg-background/90 px-1.5 py-0.5 text-[length:var(--text-caption)] text-foreground">
+        {MIRROR_PHOTO_LABELS[photo.kind]}
+      </span>
+    </button>
+  );
+}
 
 export function MirrorPhotoTray({
   preferredKind,
@@ -26,9 +63,12 @@ export function MirrorPhotoTray({
   const { photos, queuePhoto, removePhoto } = useMirrorPhotos();
   const [kind, setKind] = useState<Filter>("all");
   const [picked, setPicked] = useState<string | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const usable = acceptedKinds?.length ? acceptedKinds : [preferredKind];
 
   const visible = photos.filter((p) => kind === "all" || p.kind === kind);
+  const overflow = visible.length > 4;
+  const preview = overflow ? visible.slice(0, 3) : visible.slice(0, 4);
   const urls = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of photos) map.set(p.id, URL.createObjectURL(p.blob));
@@ -41,123 +81,185 @@ export function MirrorPhotoTray({
     };
   }, [urls]);
 
+  useEffect(() => {
+    if (!moreOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMoreOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
+
   const selected = picked
     ? (visible.find((p) => p.id === picked) ?? null)
     : null;
   const canUse = Boolean(selected && usable.includes(selected.kind));
 
+  function pick(id: string) {
+    setPicked(id);
+  }
+
   return (
-    <aside
-      className={cn(
-        outlinedCardClass,
-        "grid gap-4 lg:sticky lg:top-8 lg:max-h-[calc(100dvh-var(--header-height)-4rem)] lg:overflow-y-auto",
-      )}
-      aria-label="Saved Mirror photos"
-    >
-      <header className="grid gap-1">
-        <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
-          Saved photos
-        </h2>
-        <p className={leadClass}>
-          Skin, Makeup, Hair, and Apparel share this tray. Tap a photo, then
-          Use — apparel try-on needs a full-body still.
-        </p>
-      </header>
-      <div className="flex flex-wrap gap-2">
-        <Chip
-          pressed={kind === "all"}
-          className="min-h-8 px-3 text-[length:var(--text-caption)]"
-          onClick={() => {
-            setKind("all");
-            setPicked(null);
-          }}
-        >
-          All
-        </Chip>
-        {KINDS.map((k) => (
-          <Chip
-            key={k}
-            pressed={kind === k}
-            className="min-h-8 px-3 text-[length:var(--text-caption)]"
-            onClick={() => {
-              setKind(k);
-              setPicked(null);
-            }}
-          >
-            {MIRROR_PHOTO_LABELS[k]}
-          </Chip>
-        ))}
-      </div>
-      {photos.length === 0 ? (
-        <p className={leadClass}>
-          No saved photos yet. Capture once in Skin or Makeup and it appears
-          here.
-        </p>
-      ) : visible.length === 0 ? (
-        <p className={leadClass}>
-          No {MIRROR_PHOTO_LABELS[kind as MirrorPhotoKind].toLowerCase()} photos
-          yet. Switch to All to see Skin and Makeup stills.
-        </p>
-      ) : (
-        <ul className="m-0 grid list-none grid-cols-3 gap-2 p-0 lg:grid-cols-2">
-          {visible.map((photo) => {
-            const on = selected?.id === photo.id;
-            return (
+    <>
+      <aside
+        className={cn(elevatedCardClass, "min-w-0 border-0 p-4 lg:p-4")}
+        aria-label="Saved Mirror photos"
+      >
+        <header className="grid gap-1">
+          <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
+            Saved photos
+          </h2>
+        </header>
+        {photos.length === 0 ? (
+          <p className={leadClass}>
+            Capture a still and it appears here.
+          </p>
+        ) : visible.length === 0 ? (
+          <p className={leadClass}>
+            No {MIRROR_PHOTO_LABELS[kind as MirrorPhotoKind].toLowerCase()} photos
+            yet.
+          </p>
+        ) : (
+          <ul className="m-0 grid list-none grid-cols-2 gap-2 p-0">
+            {preview.map((photo) => (
               <li key={photo.id}>
+                <PhotoTile
+                  photo={photo}
+                  src={urls.get(photo.id)}
+                  on={selected?.id === photo.id}
+                  onPick={() => pick(photo.id)}
+                />
+              </li>
+            ))}
+            {overflow ? (
+              <li>
                 <button
                   type="button"
-                  aria-pressed={on}
-                  className={cn(
-                    "relative overflow-hidden rounded-[var(--radius)] border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    on ? "border-primary" : "border-border",
-                  )}
-                  onClick={() => setPicked(photo.id)}
+                  className="grid aspect-[4/5] w-full place-items-center rounded-[var(--radius)] bg-muted text-[length:var(--text-label)] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => setMoreOpen(true)}
                 >
-                  <img
-                    src={urls.get(photo.id)}
-                    alt={`${MIRROR_PHOTO_LABELS[photo.kind]} from ${new Date(photo.createdAt).toLocaleDateString()}`}
-                    className={cn(
-                      "aspect-[4/5] w-full object-cover",
-                      photo.kind === "body"
-                        ? "object-[center_12%]"
-                        : "object-[center_18%]",
-                    )}
-                  />
-                  <span className="absolute bottom-1 left-1 rounded-[var(--radius)] bg-background/90 px-1.5 py-0.5 text-[length:var(--text-caption)] text-foreground">
-                    {MIRROR_PHOTO_LABELS[photo.kind]}
-                  </span>
+                  View more
                 </button>
               </li>
-            );
-          })}
-        </ul>
-      )}
-      {selected ? (
-        <div className="grid gap-2">
-          {!canUse ? (
-            <p className={leadClass}>
-              This studio cannot use a {MIRROR_PHOTO_LABELS[selected.kind].toLowerCase()}{" "}
-              photo. Pick a {usable.map((k) => MIRROR_PHOTO_LABELS[k].toLowerCase()).join(" or ")}{" "}
-              still, or take one.
-            </p>
-          ) : null}
-          <Button
-            type="button"
-            disabled={disabled || !canUse}
-            onClick={() => queuePhoto(selected)}
+            ) : null}
+          </ul>
+        )}
+        {selected ? (
+          <div className="grid gap-2">
+            {!canUse ? (
+              <p className={leadClass}>
+                This studio cannot use a {MIRROR_PHOTO_LABELS[selected.kind].toLowerCase()}{" "}
+                photo. Pick a {usable.map((k) => MIRROR_PHOTO_LABELS[k].toLowerCase()).join(" or ")}{" "}
+                still, or take one.
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              disabled={disabled || !canUse}
+              onClick={() => queuePhoto(selected)}
+            >
+              {useLabel}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => void removePhoto(selected.id)}
+            >
+              Remove from this device
+            </Button>
+          </div>
+        ) : null}
+      </aside>
+
+      {moreOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-foreground/40 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mirror-photos-more-title"
+          onClick={() => setMoreOpen(false)}
+        >
+          <div
+            className={cn(
+              elevatedCardClass,
+              "w-full max-w-[var(--auth-max)] border-0 shadow-[var(--shadow-modal)]",
+            )}
+            onClick={(e) => e.stopPropagation()}
           >
-            {useLabel}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => void removePhoto(selected.id)}
-          >
-            Remove from this device
-          </Button>
+            <header className="grid gap-1">
+              <h2
+                id="mirror-photos-more-title"
+                className="m-0 text-[length:var(--text-sub)] text-foreground"
+              >
+                Saved photos
+              </h2>
+              <p className={leadClass}>Tap a still, then Use.</p>
+            </header>
+            <div className="flex flex-wrap gap-2">
+              <Chip
+                pressed={kind === "all"}
+                className="min-h-8 px-3 text-[length:var(--text-caption)]"
+                onClick={() => {
+                  setKind("all");
+                  setPicked(null);
+                }}
+              >
+                All
+              </Chip>
+              {KINDS.map((k) => (
+                <Chip
+                  key={k}
+                  pressed={kind === k}
+                  className="min-h-8 px-3 text-[length:var(--text-caption)]"
+                  onClick={() => {
+                    setKind(k);
+                    setPicked(null);
+                  }}
+                >
+                  {MIRROR_PHOTO_LABELS[k]}
+                </Chip>
+              ))}
+            </div>
+            {visible.length === 0 ? (
+              <p className={leadClass}>No photos in this filter.</p>
+            ) : (
+              <ul className="m-0 grid max-h-[60dvh] list-none grid-cols-2 gap-2 overflow-y-auto p-0">
+                {visible.map((photo) => (
+                  <li key={photo.id}>
+                    <PhotoTile
+                      photo={photo}
+                      src={urls.get(photo.id)}
+                      on={selected?.id === photo.id}
+                      onPick={() => pick(photo.id)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={disabled || !canUse}
+                onClick={() => {
+                  if (!selected || !canUse) return;
+                  queuePhoto(selected);
+                  setMoreOpen(false);
+                }}
+              >
+                {useLabel}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setMoreOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
         </div>
       ) : null}
-    </aside>
+    </>
   );
 }

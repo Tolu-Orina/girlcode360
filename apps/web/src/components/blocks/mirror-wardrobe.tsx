@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Camera } from "lucide-react";
 import { AskAlenaWearLink } from "@/components/blocks/ask-alena-link";
 import {
   ActionRow,
+  elevatedCardClass,
   leadClass,
   outlinedCardClass,
 } from "@/components/blocks/app-page";
@@ -39,6 +41,7 @@ import { idbGetWardrobeDrafts, type WardrobeDraft } from "@/lib/idb";
 import { cn } from "@/lib/utils";
 import type {
   Market,
+  MirrorCatalogueItem,
   MirrorStatus,
   WardrobeItem,
   WardrobeOutfit,
@@ -107,6 +110,95 @@ function fileToJpeg(
   });
 }
 
+function categoryLabel(value: string | null | undefined): string {
+  if (!value) return "Piece";
+  return value.replaceAll("_", " ");
+}
+
+function ClosetThumb({ id, alt }: { id: string; alt: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void getWardrobeItemMedia(id)
+      .then((media) => {
+        if (!cancelled) {
+          setSrc(`data:${media.contentType};base64,${media.imageB64}`);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSrc(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+  if (!src) {
+    return <div className="aspect-[4/5] w-full bg-muted" aria-hidden />;
+  }
+  return (
+    <img src={src} alt={alt} className="aspect-[4/5] w-full object-cover" />
+  );
+}
+
+export function BoutiqueSamplesCard({
+  samples,
+  onOpenApparel,
+}: {
+  samples: MirrorCatalogueItem[];
+  onOpenApparel?: (itemId: string) => void;
+}) {
+  if (!samples.length) return null;
+  return (
+    <section className={elevatedCardClass}>
+      <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+        Boutique samples
+      </h2>
+      <p className={leadClass}>
+        Starter looks from the boutique. Try them on in Apparel. They are not
+        added to your closet.
+      </p>
+      <ul className="m-0 grid list-none gap-3 p-0">
+        {samples.map((item) => (
+          <li
+            key={item.id}
+            className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3"
+          >
+            {item.refImageUrl ? (
+              <img
+                src={item.refImageUrl}
+                alt=""
+                className="size-[4.5rem] rounded-[var(--radius)] bg-muted object-cover"
+              />
+            ) : (
+              <div className="size-[4.5rem] rounded-[var(--radius)] bg-muted" />
+            )}
+            <div className="grid min-w-0 gap-0.5">
+              <strong className="truncate text-[length:var(--text-sub)] text-foreground">
+                {item.title}
+              </strong>
+              <span className="truncate text-[length:var(--text-caption)] text-muted-foreground">
+                {item.boutiqueName}
+                {item.pmosFit ? " · PMOS" : ""}
+                {item.trimester ? ` · trimester ${item.trimester}` : ""}
+              </span>
+            </div>
+            {onOpenApparel ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => onOpenApparel(item.id)}
+              >
+                Try on
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function MirrorWardrobePanel({
   status,
   market,
@@ -127,6 +219,7 @@ export function MirrorWardrobePanel({
   friendlyError: (err: unknown) => string;
 }) {
   const [mode, setMode] = useState<"closet" | "outfit" | "pack">("closet");
+  const [capturing, setCapturing] = useState(false);
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [drafts, setDrafts] = useState<WardrobeDraft[]>([]);
   const [outfits, setOutfits] = useState<WardrobeOutfit[]>([]);
@@ -160,8 +253,18 @@ export function MirrorWardrobePanel({
       ]);
       setItems(itemRes.items);
       setOutfits(outfitRes.outfits);
-      setSelected(itemRes.items[0] ?? null);
-      setOutfit(outfitRes.outfits[0] ?? null);
+      setSelected(
+        (cur) =>
+          itemRes.items.find((row) => row.id === cur?.id) ??
+          itemRes.items[0] ??
+          null,
+      );
+      setOutfit(
+        (cur) =>
+          outfitRes.outfits.find((row) => row.id === cur?.id) ??
+          outfitRes.outfits[0] ??
+          null,
+      );
     } catch (err) {
       if (!online) return;
       onError(friendlyError(err));
@@ -292,6 +395,7 @@ export function MirrorWardrobePanel({
       }
       setDrafts(await idbGetWardrobeDrafts());
       if (online) await load();
+      setCapturing(false);
     } catch (err) {
       onError(friendlyError(err));
     } finally {
@@ -431,28 +535,27 @@ export function MirrorWardrobePanel({
     }
   }
 
-  if (!status.wardrobeConsented) {
-    return (
-      <div className="grid gap-4">
-        <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-          My Wardrobe
-        </h2>
-        <p className={leadClass}>{copy.body}</p>
-        <ActionRow>
-          <Button type="button" disabled={busy} onClick={() => void grantWardrobe()}>
-            Allow clothing photos
-          </Button>
-        </ActionRow>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-4">
+  const closetCard = !status.wardrobeConsented ? (
+    <section className={elevatedCardClass}>
       <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
-        My Wardrobe
+        Your closet
       </h2>
-      <p className={leadClass}>{WARDROBE_TAG_NOTE}</p>
+      <p className={leadClass}>{copy.body}</p>
+      <ActionRow>
+        <Button type="button" disabled={busy} onClick={() => void grantWardrobe()}>
+          Allow clothing photos
+        </Button>
+      </ActionRow>
+    </section>
+  ) : (
+    <section className={elevatedCardClass}>
+      <h2 className="m-0 text-[length:var(--text-section)] text-foreground">
+        Your closet
+      </h2>
+      <p className={leadClass}>
+        Photograph pieces you already own. Boutique samples stay in the card
+        below — they are not added here.
+      </p>
       {!online ? (
         <p className={leadClass} role="status">
           You can photograph pieces offline. Tagging and try-on wait until you
@@ -469,57 +572,133 @@ export function MirrorWardrobePanel({
         value={mode}
         onChange={(id) => setMode(id as typeof mode)}
         items={[
-          { id: "closet", label: "Closet" },
-          { id: "outfit", label: "Outfit try-on" },
+          { id: "closet", label: "Your closet" },
+          { id: "outfit", label: "Outfits" },
           { id: "pack", label: "Packing list" },
         ]}
       />
 
       {mode === "closet" ? (
         <>
-          <label className="grid gap-2">
-            <span className="text-[length:var(--text-label)]">Name (optional)</span>
-            <input
-              className="min-h-[var(--tap)] rounded-[var(--radius)] border border-border bg-card px-3 text-[length:var(--text-body)]"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
-          <label className="grid gap-2">
-            <span className="text-[length:var(--text-label)]">Category</span>
-            <select
-              className="min-h-[var(--tap)] rounded-[var(--radius)] border border-border bg-card px-3 text-[length:var(--text-body)]"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              <option value="">Suggest from photo</option>
-              {WARDROBE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c.replace("_", " ")}
-                </option>
-              ))}
-            </select>
-          </label>
-          <CameraStillCapture
-            disabled={captureOff}
-            facingMode="environment"
-            guide="none"
-            captureLabel="Photograph a piece"
-            videoLabel="Live camera for a wardrobe still"
-            photoKind="garment"
-            onFile={(file) => void onGarment(file)}
-            onError={onError}
-          />
+          <ul className="m-0 grid list-none grid-cols-2 gap-3 p-0">
+            <li>
+              <button
+                type="button"
+                className="grid aspect-[4/5] w-full place-content-center gap-2 rounded-[var(--radius)] bg-muted px-3 text-center text-foreground"
+                onClick={() => setCapturing((open) => !open)}
+              >
+                <Camera className="mx-auto size-6" aria-hidden />
+                <span className="text-[length:var(--text-sub)] font-semibold">
+                  Photograph piece
+                </span>
+              </button>
+            </li>
+            {drafts.map((draft) => (
+              <li key={draft.id} className="grid gap-2">
+                <div className="overflow-hidden rounded-[var(--radius)] bg-muted">
+                  <img
+                    src={draft.imageB64}
+                    alt=""
+                    className="aspect-[4/5] w-full object-cover opacity-80"
+                  />
+                </div>
+                <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
+                  Waiting to sync
+                </p>
+              </li>
+            ))}
+            {items.map((row) => (
+              <li key={row.id}>
+                <button
+                  type="button"
+                  className={cn(
+                    "grid w-full gap-2 overflow-hidden rounded-[var(--radius)] bg-muted text-left",
+                    selected?.id === row.id && "ring-2 ring-primary",
+                  )}
+                  onClick={() => {
+                    setSelected(row);
+                    setName(row.name ?? "");
+                    setCategory(row.category ?? "");
+                    setCapturing(false);
+                  }}
+                >
+                  <ClosetThumb
+                    id={row.id}
+                    alt={row.name || categoryLabel(row.category)}
+                  />
+                  <span className="grid gap-0.5 px-2 pb-2">
+                    <strong className="truncate text-[length:var(--text-sub)] text-foreground">
+                      {row.name || categoryLabel(row.category)}
+                    </strong>
+                    <span className="truncate text-[length:var(--text-caption)] text-muted-foreground">
+                      {categoryLabel(row.category)}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {items.length === 0 && drafts.length === 0 ? (
+            <p className={leadClass}>
+              No pieces yet. Photograph a garment on a plain surface.
+            </p>
+          ) : null}
+
+          {capturing ? (
+            <div className="grid gap-4">
+              <label className="grid gap-2">
+                <span className="text-[length:var(--text-label)]">
+                  Name (optional)
+                </span>
+                <input
+                  className="min-h-[var(--tap)] rounded-[var(--radius)] border border-border bg-card px-3 text-[length:var(--text-body)]"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-[length:var(--text-label)]">Category</span>
+                <select
+                  className="min-h-[var(--tap)] rounded-[var(--radius)] border border-border bg-card px-3 text-[length:var(--text-body)]"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  <option value="">Suggest from photo</option>
+                  {WARDROBE_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c.replaceAll("_", " ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <CameraStillCapture
+                disabled={captureOff}
+                facingMode="environment"
+                guide="none"
+                captureLabel="Photograph a piece"
+                videoLabel="Live camera for a wardrobe still"
+                photoKind="garment"
+                onFile={(file) => void onGarment(file)}
+                onError={onError}
+              />
+            </div>
+          ) : null}
+
           {selected && online ? (
             <ActionRow>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => void saveTags()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void saveTags()}
+              >
                 Save tag corrections
               </Button>
             </ActionRow>
           ) : null}
 
           {selected ? (
-            <article className={cn(outlinedCardClass, "grid gap-3")}>
+            <article className="grid gap-3">
               <h3 className="m-0 text-[length:var(--text-sub)]">
                 {selected.name || "Catalogued piece"}
               </h3>
@@ -527,19 +706,20 @@ export function MirrorWardrobePanel({
                 <img
                   src={src}
                   alt=""
-                  className="w-full rounded-[var(--radius)] border border-border bg-muted"
+                  className="w-full rounded-[var(--radius)] bg-muted"
                 />
               ) : null}
               <p className={leadClass}>
-                {selected.category ?? "No category yet"}
+                {categoryLabel(selected.category)}
                 {selected.colourTags.length
                   ? ` · ${selected.colourTags.join(", ")}`
                   : ""}
                 {selected.suggestedCategory &&
                 selected.suggestedCategory !== selected.category
-                  ? ` · suggested ${selected.suggestedCategory}`
+                  ? ` · suggested ${categoryLabel(selected.suggestedCategory)}`
                   : ""}
               </p>
+              <p className={leadClass}>{WARDROBE_TAG_NOTE}</p>
               <label className="grid gap-2">
                 <span className="text-[length:var(--text-label)]">
                   List for resale (major units)
@@ -563,41 +743,14 @@ export function MirrorWardrobePanel({
               <p className={leadClass}>
                 Listings go to the existing moderation queue first. Live rows
                 are labelled from a GirlCode360 member.{" "}
-                <Link to="/app/marketplace" className="font-semibold text-primary">
+                <Link
+                  to="/app/marketplace"
+                  className="font-semibold text-primary"
+                >
                   Marketplace
                 </Link>
               </p>
             </article>
-          ) : items.length === 0 && drafts.length === 0 ? (
-            <EmptyState
-              title="No pieces yet"
-              body="Photograph a garment on a plain surface. Face and body photos stay in Mirror skin and boutique try-on."
-            />
-          ) : null}
-
-          {items.length ? (
-            <ul className="m-0 grid list-none gap-2 p-0">
-              {items.map((row) => (
-                <li key={row.id}>
-                  <button
-                    type="button"
-                    className={cn(
-                      "min-h-[var(--tap)] w-full rounded-[var(--radius)] border px-3 py-2 text-left text-[length:var(--text-caption)]",
-                      selected?.id === row.id
-                        ? "border-primary bg-muted text-foreground"
-                        : "border-border bg-card text-muted-foreground",
-                    )}
-                    onClick={() => {
-                      setSelected(row);
-                      setName(row.name ?? "");
-                      setCategory(row.category ?? "");
-                    }}
-                  >
-                    {row.name || row.category || "Piece"} · worn {row.wornCount}
-                  </button>
-                </li>
-              ))}
-            </ul>
           ) : null}
         </>
       ) : null}
@@ -791,6 +944,8 @@ export function MirrorWardrobePanel({
           )}
         </>
       ) : null}
-    </div>
+    </section>
   );
+
+  return closetCard;
 }
