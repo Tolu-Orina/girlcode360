@@ -116,10 +116,11 @@ export async function createCheckoutSession(
     market?: "UK" | "NG" | "GH";
   },
 ) {
-  const base =
-    opts?.successUrl ??
-    process.env.WEB_APP_URL ??
-    "https://app.girlcode360.local/app/account";
+  const origin = (process.env.WEB_APP_URL ?? "https://app.girlcode360.local").replace(
+    /\/$/,
+    "",
+  );
+  const base = opts?.successUrl ?? `${origin}/app/account`;
   const cancelUrl =
     opts?.cancelUrl ??
     base.replace("billing=success", "billing=cancel");
@@ -328,8 +329,7 @@ export async function createPortalSession(sub: string, returnUrl?: string) {
   const status = await getBillingStatus(sub);
   const home =
     returnUrl ??
-    (process.env.WEB_APP_URL ?? "https://app.girlcode360.local") +
-      "/app/account";
+    `${(process.env.WEB_APP_URL ?? "https://app.girlcode360.local").replace(/\/$/, "")}/app/account`;
   if (row?.stripeCustomerId) {
     const portal = await createStripePortal({
       customerId: row.stripeCustomerId,

@@ -10,8 +10,8 @@ variable "aws_region" {
 
 variable "root_domain" {
   type        = string
-  description = "Apex domain owned by Conqueror Foundation (Route53 public hosted zone)"
-  default     = "conquerorfoundation.com"
+  description = "Apex domain (Route 53 public hosted zone in this account)"
+  default     = "rinegansolutions.com"
 }
 
 variable "domain_prefix" {

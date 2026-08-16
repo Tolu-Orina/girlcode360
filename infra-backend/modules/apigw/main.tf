@@ -461,6 +461,10 @@ resource "aws_api_gateway_domain_name" "custom" {
   endpoint_configuration {
     types = ["REGIONAL"]
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_api_gateway_base_path_mapping" "custom" {

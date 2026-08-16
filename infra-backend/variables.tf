@@ -27,23 +27,14 @@ variable "bedrock_enabled" {
 
 variable "cognito_callback_urls" {
   type        = list(string)
-  description = "OAuth redirect URIs for Google IdP (PKCE). Email/password still uses custom pages."
-  default = [
-    "http://localhost:5173/oauth/callback",
-    "https://girlcode-dev.conquerorfoundation.com/oauth/callback",
-    "https://girlcode-test.conquerorfoundation.com/oauth/callback",
-    "https://girlcode.conquerorfoundation.com/oauth/callback",
-  ]
+  default     = null
+  description = "Override Google OAuth callbacks. Null uses localhost plus girlcode{,-dev,-test}.{root_domain}."
 }
 
 variable "cognito_logout_urls" {
-  type = list(string)
-  default = [
-    "http://localhost:5173/signin",
-    "https://girlcode-dev.conquerorfoundation.com/signin",
-    "https://girlcode-test.conquerorfoundation.com/signin",
-    "https://girlcode.conquerorfoundation.com/signin",
-  ]
+  type        = list(string)
+  default     = null
+  description = "Override OAuth logout URLs. Null uses localhost plus girlcode{,-dev,-test}.{root_domain}/signin."
 }
 
 variable "google_oauth_client_id" {
@@ -62,7 +53,7 @@ variable "google_oauth_client_secret" {
 
 variable "root_domain" {
   type        = string
-  default     = "conquerorfoundation.com"
+  default     = "rinegansolutions.com"
   description = "Public Route 53 zone. API host is api.{domain_prefix}.{root_domain}."
 }
 

@@ -55,6 +55,11 @@ variable "api_gateway_execution_arn" {
   description = "REST API execution ARN. Permissions wait on the function resource; integrations do not."
 }
 
+variable "web_app_url" {
+  type        = string
+  description = "Public PWA origin for this environment (Stripe return URLs)."
+}
+
 data "archive_file" "api" {
   type        = "zip"
   source_dir  = "${path.module}/codes/dist"

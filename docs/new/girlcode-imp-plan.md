@@ -3,7 +3,7 @@
 **Version 1.4 · Updated 14 August 2026 · Global product from initial launch markets (UK · Nigeria · Ghana)**  
 **Supersedes:** v1.3 (14 August 2026 carry-forward + Tier 2 close), v1.2 (UI/UX plan), v1.0 (clean-build RDS + CDK + Anthropic).  
 **Stack (locked):** AWS Terraform · Aurora DSQL · Cognito custom auth · React PWA (mobile-shell) · Bedrock Nova 2 Lite · Perfect Corp. YouCam API  
-**Target domain:** `girlcode.conquerorfoundation.com`  
+**Target domain:** `girlcode.rinegansolutions.com`  
 **Primary region:** `eu-west-2` (London)  
 **Pre-Tier 3 source:** `docs/new/girlcode-pretier3-imp-plan.md` v1.0 — folded into **§12.2** (this file is the engineering SoT).
 
@@ -158,7 +158,7 @@ Live route families (do not re-specify as new work):
 
 ```
                          Route 53
-              girlcode.conquerorfoundation.com
+              girlcode.rinegansolutions.com
                                   │
                           CloudFront + ACM
                      (PWA static; global edge)
@@ -184,7 +184,7 @@ Live route families (do not re-specify as new work):
 ### 4.2 Why this shape (not Amplify, not RDS, not CDK)
 
 1. **Already live.** Replacing Terraform with CDK or DSQL with RDS is a one-way cost with no Wave 0 product value.
-2. **Domain control.** `girlcode.conquerorfoundation.com` coexists with the parent zone via explicit CloudFront/ACM/Route 53 — already in `infra-web`.
+2. **Domain control.** `girlcode.rinegansolutions.com` coexists with the parent zone via explicit CloudFront/ACM/Route 53 — already in `infra-web`.
 3. **DSQL cost.** Scale-to-zero DPU billing + permanent free tier (100k DPUs + 1 GB-month) vs RDS Multi-AZ ~$150–250/mo idle, plus NAT if VPC-attached. Integrity is enforced in the API (DSQL has no foreign keys).
 4. **Alena provider.** Nova 2 Lite via IAM matches NFR-AI-10 (swappable provider). Mirror plain-language copy uses the **same** `packages/ai-provider` — not Anthropic.
 5. **YouCam async** is a **handler + optional later SQS**, not a reason to explode into microservices this week.
@@ -758,7 +758,7 @@ These land in the same phase because HealthLens' pattern-flagging logic (HL-F-05
 - **COM-F-04** (Content Reporting & Moderation infrastructure, since article comments/reporting still needs a moderation queue even without full peer groups)
 - **APS-F-01 / F-02 / F-03** (My Data, Data Export, Account Deletion)
 
-**Tier 1 exit criteria:** all 76 Must-priority features live in production at `girlcode.conquerorfoundation.com`; full regression pass against every "Positive" and "Security" test case in the requirements spreadsheet; INF-F-05 monitoring dashboards green for 2 consecutive weeks before Tier 2 begins.
+**Tier 1 exit criteria:** all 76 Must-priority features live in production at `girlcode.rinegansolutions.com`; full regression pass against every "Positive" and "Security" test case in the requirements spreadsheet; INF-F-05 monitoring dashboards green for 2 consecutive weeks before Tier 2 begins.
 
 ---
 
@@ -1028,7 +1028,7 @@ This tier is **after Pre-Tier 3**. It is where the product goes once the 94 HLR 
 
 #### Phase 3.1 — Native app decision point
 
-Revisit the Tier 1 PWA-only decision (§2) with real engagement data: if push notification reliability, camera/photo capture friction, or app-store discoverability prove to be genuine adoption blockers (particularly in Nigeria/Ghana where app-store presence carries more trust signal than a browser install prompt), invest in a thin React Native wrapper around the same API layer — **not a rewrite**, since the entire backend and business logic already live behind `api.girlcode.conquerorfoundation.com`.
+Revisit the Tier 1 PWA-only decision (§2) with real engagement data: if push notification reliability, camera/photo capture friction, or app-store discoverability prove to be genuine adoption blockers (particularly in Nigeria/Ghana where app-store presence carries more trust signal than a browser install prompt), invest in a thin React Native wrapper around the same API layer — **not a rewrite**, since the entire backend and business logic already live behind `api.girlcode.rinegansolutions.com`.
 
 #### Phase 3.2 — Multi-region & scale hardening
 
@@ -1108,9 +1108,9 @@ girlcode360/{env}/app          JSON secrets: youcam_api_key, youcam_webhook_secr
                                paystack_secret_key, paystack_plan_code,
                                paystack_plan_code_ghs (optional Ghana plan).
                                No LLM key — Bedrock is IAM + BEDROCK_ENABLED.
-API host                     api.{girlcode|girlcode-dev|girlcode-test}.conquerorfoundation.com
+API host                     api.{girlcode|girlcode-dev|girlcode-test}.rinegansolutions.com
                                (ACM eu-west-2 + APIGW custom domain + Route 53).
-                               Prod: https://api.girlcode.conquerorfoundation.com
+                               Prod: https://api.girlcode.rinegansolutions.com
 DSQL_ENDPOINT / DSQL_ENABLED   Lambda env from Terraform
 ALENA_MODEL_ID                 global.amazon.nova-2-lite-v1:0 (Global CRIS from eu-west-2)
 BEDROCK_ENABLED                Lambda env kill switch; Terraform default true (not a secret)

@@ -43,7 +43,7 @@ provider "aws" {
 }
 
 locals {
-  # prod: girlcode.conquerorfoundation.com
+  # prod: girlcode.rinegansolutions.com
   # nonprod: girlcode-dev / girlcode-test under the same apex
   domain_name          = var.domain_prefix == "" ? var.root_domain : "${var.domain_prefix}.${var.root_domain}"
   enable_custom_domain = var.enable_custom_domain

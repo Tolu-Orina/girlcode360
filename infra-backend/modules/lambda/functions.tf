@@ -11,6 +11,7 @@ locals {
     CONSENT_POLICY_VERSION = "2026-07-v1"
     ALENA_MODEL_ID         = var.alena_model_id
     BEDROCK_ENABLED        = tostring(var.bedrock_enabled)
+    WEB_APP_URL            = var.web_app_url
   }
 
   # identity keeps girlcode360-api-{env} so state can `moved` the monolith in place

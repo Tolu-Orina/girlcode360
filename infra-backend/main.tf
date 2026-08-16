@@ -36,7 +36,24 @@ locals {
       var.environment == "test" ? "girlcode-test" : "girlcode-dev"
     )
   )
-  api_fqdn = var.api_domain_name != "" ? var.api_domain_name : "api.${local.domain_prefix}.${var.root_domain}"
+  api_fqdn    = var.api_domain_name != "" ? var.api_domain_name : "api.${local.domain_prefix}.${var.root_domain}"
+  web_app_url = "https://${local.domain_prefix}.${var.root_domain}"
+  cognito_callback_urls = concat(
+    ["http://localhost:5173/oauth/callback"],
+    [
+      "https://girlcode-dev.${var.root_domain}/oauth/callback",
+      "https://girlcode-test.${var.root_domain}/oauth/callback",
+      "https://girlcode.${var.root_domain}/oauth/callback",
+    ],
+  )
+  cognito_logout_urls = concat(
+    ["http://localhost:5173/signin"],
+    [
+      "https://girlcode-dev.${var.root_domain}/signin",
+      "https://girlcode-test.${var.root_domain}/signin",
+      "https://girlcode.${var.root_domain}/signin",
+    ],
+  )
 }
 
 data "aws_route53_zone" "root" {
@@ -68,8 +85,8 @@ module "cognito" {
   source      = "./modules/cognito"
   environment = var.environment
   # Custom auth pages in PWA — Cognito domain is OAuth plumbing for Google only
-  callback_urls        = var.cognito_callback_urls
-  logout_urls          = var.cognito_logout_urls
+  callback_urls        = var.cognito_callback_urls != null ? var.cognito_callback_urls : local.cognito_callback_urls
+  logout_urls          = var.cognito_logout_urls != null ? var.cognito_logout_urls : local.cognito_logout_urls
   google_client_id     = var.google_oauth_client_id
   google_client_secret = var.google_oauth_client_secret
 }
@@ -99,6 +116,7 @@ module "lambda" {
   alena_model_id            = var.alena_model_id
   bedrock_enabled           = var.bedrock_enabled
   api_gateway_execution_arn = module.apigw.execution_arn
+  web_app_url               = local.web_app_url
 }
 
 module "apigw" {

@@ -17,6 +17,11 @@ Parameters:
     Description: SSM parameter that holds the CodeConnections GitHub ARN
     Default: /girlcode360/cicd/codeconnections_arn
 
+  RootDomain:
+    Type: String
+    Description: Public Route 53 apex. Terraform TF_VAR_root_domain.
+    Default: rinegansolutions.com
+
 # Mappings:
 #   BranchToEnvironment:
 #     Note: This mapping is kept for reference/documentation purposes.
@@ -969,6 +974,8 @@ Resources:
             Value: dev
           - Name: TF_VAR_domain_prefix
             Value: girlcode-dev
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/webapp-build-dev'
@@ -1011,6 +1018,8 @@ Resources:
             Value: test
           - Name: TF_VAR_domain_prefix
             Value: girlcode-test
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/webapp-build-test'
@@ -1053,6 +1062,8 @@ Resources:
             Value: prod
           - Name: TF_VAR_domain_prefix
             Value: girlcode
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/webapp-build-prod'
@@ -1089,6 +1100,8 @@ Resources:
         EnvironmentVariables:
           - Name: TF_VAR_environment
             Value: dev
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-validate'
@@ -1123,6 +1136,8 @@ Resources:
         EnvironmentVariables:
           - Name: TF_VAR_environment
             Value: test
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-validate-test'
@@ -1161,6 +1176,8 @@ Resources:
             Value: dev
           - Name: TF_VAR_domain_prefix
             Value: girlcode-dev
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-plan'
@@ -1199,6 +1216,8 @@ Resources:
             Value: test
           - Name: TF_VAR_domain_prefix
             Value: girlcode-test
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-plan-test'
@@ -1237,6 +1256,8 @@ Resources:
             Value: dev
           - Name: TF_VAR_domain_prefix
             Value: girlcode-dev
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-deploy'
@@ -1275,6 +1296,8 @@ Resources:
             Value: test
           - Name: TF_VAR_domain_prefix
             Value: girlcode-test
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-deploy-test'
@@ -1309,6 +1332,8 @@ Resources:
         EnvironmentVariables:
           - Name: TF_VAR_environment
             Value: prod
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-validate-prod'
@@ -1349,6 +1374,8 @@ Resources:
             Value: prod
           - Name: TF_VAR_domain_prefix
             Value: girlcode
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-plan-prod'
@@ -1389,6 +1416,8 @@ Resources:
             Value: prod
           - Name: TF_VAR_domain_prefix
             Value: girlcode
+          - Name: TF_VAR_root_domain
+            Value: !Ref RootDomain
       Cache:
         Type: S3
         Location: !Sub '${PipelineArtifactsBucket}/cache/terraform-deploy-prod'
