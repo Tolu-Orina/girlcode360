@@ -10,6 +10,7 @@ import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { SkinScan } from "../../../../../packages/api-types/src/index";
+import { snapshotSkinReport } from "../../../../../packages/domain/src/index";
 
 const SCORE_LABELS: Record<string, string> = {
   acne: "Acne",
@@ -172,7 +173,18 @@ export function MirrorSkinRail({
   const scoreEntries = Object.entries(selected?.scores ?? {}).filter(
     ([key, n]) => typeof n === "number" && key !== "all" && key !== "skin_type",
   );
-  const insight = selected?.insight;
+  const stored = selected?.insight;
+  const insight =
+    selected && selected.status === "success" && !stored?.enoughScans && !stored?.patternFound
+      ? snapshotSkinReport({
+          id: selected.id,
+          createdAt: selected.createdAt,
+          cyclePhase: selected.cyclePhaseAtScan,
+          scores: selected.scores,
+          symptomIds: [],
+          seeded: selected.seeded,
+        })
+      : stored;
 
   return (
     <aside className="grid min-w-0 gap-6">
@@ -240,7 +252,9 @@ export function MirrorSkinRail({
                 Confidence: {insight.confidence}
                 {insight.patternFound
                   ? " · Pattern in your logs"
-                  : " · No cycle claim yet"}
+                  : insight.enoughScans
+                    ? " · No cycle pattern yet"
+                    : " · Today's snapshot"}
               </p>
             </div>
           ) : null}

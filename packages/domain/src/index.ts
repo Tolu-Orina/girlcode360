@@ -778,23 +778,89 @@ export type MirrorInsight = {
   patternFound: boolean;
 };
 
-/**
- * MIR-F-02: no cycle claims until 2+ scans in genuinely different phases.
- * Never fabricates a trend. Wellness language only.
- */
-export function correlateSkinAndCycle(scans: MirrorScanPoint[]): MirrorInsight {
-  const real = scans.filter((s) => !s.seeded);
-  const phases = new Set(
-    real.map((s) => s.cyclePhase).filter((p): p is CyclePhase => Boolean(p)),
-  );
-  if (real.length < 2 || phases.size < 2) {
+/** MIR-F-04: SheMatch-style banner only when a concern is clearly elevated. */
+export const ELEVATED_SKIN_SCORE = 60;
+
+const SNAPSHOT_SCORE_LABEL: Record<string, string> = {
+  acne: "acne",
+  oiliness: "oiliness",
+  redness: "redness",
+  texture: "texture",
+  pore: "pores",
+  wrinkle: "wrinkles",
+  radiance: "radiance",
+  dark_circle: "dark circles",
+  dark_circle_v2: "dark circles",
+  moisture: "moisture",
+  firmness: "firmness",
+  age_spot: "dark spots",
+  eye_bag: "under-eye bags",
+  tear_trough: "tear trough",
+  droopy_eyelid: "eyelid droop",
+  droopy_lower_eyelid: "lower eyelid",
+  droopy_upper_eyelid: "upper eyelid",
+};
+
+const SNAPSHOT_SKIP = new Set(["all", "skin_age", "skin_type"]);
+
+function joinPlainList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+/** Today's YouCam scores as a report. Not a cycle claim. */
+export function snapshotSkinReport(scan: MirrorScanPoint | undefined): MirrorInsight {
+  if (!scan) {
     return {
-      title: "Skin report ready",
-      body: "We need at least two scans from different cycle phases before we can look for a pattern. This is a snapshot of today — not a cycle claim.",
+      title: "Skin report",
+      body: "Take a face photo in even light. You get a score snapshot from that first still. Cycle patterns wait until we have another scan in a different phase.",
       confidence: "Low",
       enoughScans: false,
       patternFound: false,
     };
+  }
+  const elevated = Object.entries(scan.scores)
+    .filter(
+      ([key, n]) =>
+        !SNAPSHOT_SKIP.has(key) &&
+        typeof n === "number" &&
+        n > ELEVATED_SKIN_SCORE,
+    )
+    .sort((a, b) => b[1] - a[1]);
+  const labels = elevated
+    .slice(0, 3)
+    .map(([key]) => SNAPSHOT_SCORE_LABEL[key] ?? key.replaceAll("_", " "));
+  let body: string;
+  if (labels.length) {
+    const verb = labels.length === 1 ? "reads" : "read";
+    body = `On this still, ${joinPlainList(labels)} ${verb} high (over ${ELEVATED_SKIN_SCORE} on YouCam's 0-100 scale). That is today's reading, not a diagnosis. Another scan in a different cycle phase is how we look for a pattern later.`;
+  } else if (Object.keys(scan.scores).length) {
+    body = `On this still, no concern sits clearly above ${ELEVATED_SKIN_SCORE} on YouCam's 0-100 scale. That is today's reading, not a diagnosis. Another scan in a different cycle phase is how we look for a pattern later.`;
+  } else {
+    body = "This scan is saved. Scores appear when YouCam finishes. Another scan in a different cycle phase is how we look for a pattern later.";
+  }
+  return {
+    title: "Skin report ready",
+    body,
+    confidence: labels.length ? "Medium" : "Low",
+    enoughScans: false,
+    patternFound: false,
+  };
+}
+
+/**
+ * MIR-F-02: no cycle claims until 2+ scans in genuinely different phases.
+ * The first live scan still gets a score snapshot. Never fabricates a trend.
+ */
+export function correlateSkinAndCycle(scans: MirrorScanPoint[]): MirrorInsight {
+  const real = scans.filter((s) => !s.seeded);
+  const latest = [...real].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+  const phases = new Set(
+    real.map((s) => s.cyclePhase).filter((p): p is CyclePhase => Boolean(p)),
+  );
+  if (real.length < 2 || phases.size < 2) {
+    return snapshotSkinReport(latest);
   }
 
   const luteal = real.filter((s) => s.cyclePhase === "luteal");
@@ -858,9 +924,6 @@ export function correlateSkinAndCycle(scans: MirrorScanPoint[]): MirrorInsight {
     patternFound: true,
   };
 }
-
-/** MIR-F-04: SheMatch-style banner only when a concern is clearly elevated. */
-export const ELEVATED_SKIN_SCORE = 60;
 
 export function elevatedSkinConcerns(
   scores: Record<string, number>,

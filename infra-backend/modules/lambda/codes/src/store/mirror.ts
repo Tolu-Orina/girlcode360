@@ -171,7 +171,7 @@ async function narrateMirrorInsight(insight: MirrorInsight): Promise<MirrorInsig
   try {
     const result = await converseNova({
       system:
-        "Rewrite this wellness skin-and-cycle finding in plain language. Do not diagnose. Do not invent a pattern or a hormonal cause. Keep the same meaning. Two or three short sentences.",
+        "Rewrite this wellness skin finding in plain language. Do not diagnose. Do not invent a cycle pattern or a hormonal cause. If enoughScans is false, this is today's score snapshot: keep that. Do not tell the reader they must wait for a second scan before they have a report. Two or three short sentences.",
       messages: [
         {
           role: "user",

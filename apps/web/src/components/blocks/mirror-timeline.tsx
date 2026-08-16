@@ -755,16 +755,16 @@ export function MirrorTimelinePanel({
           {liveScans.length < 2 ? (
             <p className={leadClass}>
               {liveScans.length === 0
-                ? "Take two scans in different cycle phases to look for a pattern."
-                : "One live scan so far. Scan again in another phase before we look for a cycle pattern."}
+                ? "Take a face scan to start your archive. Scores show on Skin from the first still."
+                : "Today's scores are on Skin. Another scan in a different cycle phase is how we look for a pattern."}
             </p>
           ) : null}
         </section>
       ) : (
         <p className={leadClass}>
           {liveScans.length === 0
-            ? "Take two scans in different cycle phases to look for a pattern."
-            : "One live scan so far. Scan again in another phase before we look for a cycle pattern."}
+            ? "Take a face scan to start your archive. Scores show on Skin from the first still."
+            : "Today's scores are on Skin. Another scan in a different cycle phase is how we look for a pattern."}
         </p>
       )}
 

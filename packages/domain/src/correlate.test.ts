@@ -28,6 +28,10 @@ describe("correlateSkinAndCycle (MIR-F-02)", () => {
     ]);
     assert.equal(insight.patternFound, false);
     assert.equal(insight.enoughScans, false);
+    assert.equal(insight.title, "Skin report ready");
+    assert.match(insight.body, /acne/i);
+    assert.match(insight.body, /today/i);
+    assert.doesNotMatch(insight.body, /at least two scans/i);
   });
 
   it("ignores seeded rows when counting live scans", () => {
@@ -46,6 +50,7 @@ describe("correlateSkinAndCycle (MIR-F-02)", () => {
     ]);
     assert.equal(insight.enoughScans, false);
     assert.equal(insight.patternFound, false);
+    assert.match(insight.body, /acne|oiliness/i);
   });
 
   it("reports no pattern when scores are similar across phases", () => {
