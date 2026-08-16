@@ -89,6 +89,7 @@ function moduleHintFor(
 ): HealthModule | undefined {
   if (from === "cycle") return "period_tracker";
   if (from === "health") return "pcos_manager";
+  if (from === "mirror") return "mirror";
   return undefined;
 }
 

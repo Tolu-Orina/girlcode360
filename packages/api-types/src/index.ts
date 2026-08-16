@@ -3,6 +3,7 @@
 export type Market = "UK" | "NG" | "GH";
 
 export type HealthModule =
+  | "mirror"
   | "period_tracker"
   | "pcos_manager"
   | "pregnancy"
@@ -78,12 +79,15 @@ export type PostConsentsRequest = {
 export const CURRENT_POLICY_VERSION = "2026-07-v1";
 
 export const ALL_MODULES: HealthModule[] = [
+  "mirror",
   "period_tracker",
   "pcos_manager",
   "pregnancy",
   "ttc",
   "wallet",
 ];
+
+export const DEFAULT_MODULES: HealthModule[] = ["mirror", "period_tracker"];
 
 /* ——— Phase 2: Period Tracker ——— */
 

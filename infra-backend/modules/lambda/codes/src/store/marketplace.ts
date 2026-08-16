@@ -201,6 +201,7 @@ export async function getSheMatchPrefs(sub: string): Promise<{
   const modules = isDsqlEnabled()
     ? await dsql.getModulePrefs(sub)
     : (modulePrefs.get(sub) ?? {
+        mirror: false,
         period_tracker: false,
         pcos_manager: false,
         pregnancy: false,
@@ -217,6 +218,7 @@ export async function patchSheMatchPrefs(
   if (isDsqlEnabled()) return dsql.setModulePrefs(sub, modules);
   const cur =
     modulePrefs.get(sub) ?? {
+      mirror: false,
       period_tracker: false,
       pcos_manager: false,
       pregnancy: false,

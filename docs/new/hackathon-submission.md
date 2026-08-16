@@ -1,86 +1,93 @@
-# GirlCode360 — YouCam hackathon submission
+# GirlCode360: YouCam hackathon submission
 
 **Hackathon:** [YouCam API Skin AI & Apparel VTO](https://youcam-api.devpost.com/)  
 **Topic:** Skin AI + Apparel VTO (combined)  
 **Deadline:** 17 August 2026, 11:45am EDT  
 
-Paste the **Project description** into Devpost. Fill the placeholders before you submit.
+Paste **Project story** into Devpost's story field (Markdown). Fill the placeholders before you submit.
 
 | Item | Value |
 |---|---|
 | Live app | _URL_ |
 | Code repository | _GitHub URL_ (public, or private shared with contact_event@PerfectCorp.com) |
-| Demo video | _YouTube / Vimeo / Youku_ (1–3 minutes, public) |
+| Demo video | _YouTube / Vimeo / Youku_ (1 to 3 minutes, public) |
 | Screenshots | Attach on Devpost (Mirror consent, skin scores + cycle day, apparel try-on, nearby / SheMatch if shown) |
 
 ---
 
-## Project description
+## Project story
 
-GirlCode360 is a working web app for women who already track a cycle, symptoms, fertility, or pregnancy, and who also care how their skin and clothes look. Mirror is the YouCam piece. It sits in the same account as those logs. It is not a separate skin toy and not a separate dressing-room demo.
+### Inspiration
 
-A first-time user can sign in, agree to Mirror photos, take a face photo, and see YouCam skin scores on the same screen as the cycle day and phase they chose to share. They can switch to apparel try-on, send a full-body photo, and get a generated look back. Makeup, hair, and wardrobe live in the same Mirror studio. If YouCam is down, Cycle, Alena, and the Health Wallet still run. We fail that way on purpose.
+Cycle apps and skin apps sit in different stores. A woman who already logs bleeds, bloating, and PMOS notes still has to open a second product to ask how her face looks today, and a third if she wants to try a dress. The question we kept hearing was not "is this a nice selfie score?" It was closer to "is this the same pattern I get around my period, or is this something else?" We cannot diagnose that. We can put YouCam's numbers next to the diary she already typed.
 
-Skin apps usually answer “how does my face look in this photo?” Try-on apps usually answer “how might this outfit sit on this body?” The question we hear from people with hormonal skin is closer to “is this the same pattern I get around my period, or is this something else?” We do not diagnose that. We do put YouCam’s numbers next to the cycle and PMOS diary the user already keeps, so the picture is less of a one-off snapshot.
+The hackathon asked for Skin AI and Apparel VTO together. That matched how we already think about Mirror: one studio in a health account, not a landing page that wraps one Playground call. Retail mattered too. Try-on should land on tagged boutique stock and, if she wants a shop, SheMatch nearby, not a single high-street brand.
 
-On the retail side, try-on is wired to tagged boutique inventory through the business portal, then to nearby pharmacies, clinics, and beauty shops the user has already opted into via SheMatch. The catalogue is not locked to one high-street brand.
+### What it does
 
-YouCam never runs in the browser with our API key. The PWA uploads a still to our API. Lambda talks to YouCam S2S (`skin-analysis`, `cloth-v3`, plus makeup, hair, and related try-on tasks). Webhooks and polling bring results back. Consent for biometric photos is a separate event from account signup. Declining Mirror does not turn off period tracking.
+GirlCode360 is a signed-in PWA. Home, Cycle, Mirror, Alena, and Account are the five phone tabs. Mirror is the YouCam piece. It lives in the same Cognito account as cycle logs, PMOS Manager, pregnancy, TTC, and the Health Wallet.
 
-This is a production-shaped AWS PWA (Cognito, API Gateway, Lambda, Aurora DSQL, S3), not a notebook wrapping one API call. Judges can click through Home, Cycle, Mirror, and Alena on a phone or desktop.
+After she agrees to Mirror photos she can take a face still and see `skin-analysis` scores as bars, with cycle day and phase if she has logged them, plus a wellness disclaimer. She can switch to apparel, send a full-body still, and get a `cloth-v3` try-on image. Makeup (photo, live still, look transfer, shade finder), hair (length scores and colour try-on), wardrobe (owned pieces), accessories (jewellery, nails, catalogue-only eyewear), and a timeline of real studio history sit in the same Mirror workspace.
+
+If YouCam is unconfigured, busy, or the circuit breaker is open, capture turns off. Cycle, Alena, and the wallet still load. Declining Mirror does not turn off period tracking. Seeded demo scans are labelled Sample so a judge is not looking at a fake six-month diary.
+
+The app does not dump raw YouCam JSON. It is not a mole map, a clinic, or a sixth tab.
+
+### How we built it
+
+The PWA is Vite (`apps/web`). Stills never call YouCam with a browser key. They POST to our API. Lambda in `infra-backend` runs S2S (`youcam.ts`): `skin-analysis`, `cloth-v3`, makeup, hair, nail, jewellery where we have a SKU still. Many tasks return `pending`. The UI keeps the chosen photo on stage, polls GET, then shows the result image or a mapped error. Webhooks help when they arrive. Polling is the path we cannot skip.
+
+Auth is Cognito. API Gateway, Aurora DSQL, S3 for result bytes, Secrets Manager for `youcam_api_key`. Consent for biometric photos is a separate ledger from signup. Live camera is a second grant. After we finish a YouCam file we delete it on their side.
+
+Scan rows store cycle day and phase at capture. Apparel catalogue items can carry maternity week and PMOS-fit tags; filters go empty on purpose if pregnancy week is missing. SheMatch uses session area and existing boutique tags. Alena only sees what she has allowed. Tray photos stay in IndexedDB on the device. They are not sent to Alena.
+
+Mirror on desktop is a studio row: stage, product rail, saved photos. On a phone the same studios sit under one nav, with the switcher next to "Your studio." Wardrobe is owned clothes. Apparel is boutique SKUs. We kept those tables apart on purpose.
+
+### Challenges we ran into
+
+YouCam POST is often not the answer. Every studio needed its own pending row, media fetch, and "keep this screen open" copy. Treating Playground stills as the product would have skipped that work. Wiring fail-closed across five capture paths was slower than the S2S hello world.
+
+Skin and apparel do not share a photo. Judges want both APIs. Users should not be told to try a gown on a selfie. Face stills stay on Skin, Makeup, and Hair. Apparel Use is disabled unless the tray still is full body. Wardrobe garments are a third kind (piece on a table). Three guides, three tray filters. Mix them once and it looks like a bug.
+
+Wardrobe is not the boutique. One clothing grid was the first sketch. Putting catalogue SKUs into `wardrobe_items` would have taught Alena that shop samples were hers. Boutique samples stay labelled as samples. Several apparel SKUs still reuse the same Perfect Corp PNG. That is ugly and honest. We did not seed a fake owned closet to fill empty states.
+
+Accessories are limited by assets, not by UI ambition. Jewellery try-on needs a catalogue SKU still. We do not invent 3D from a random product photo. Pieces without a still stay visible with "no SKU still" and capture off. Eyewear S2S is not on this API key, so frames are catalogue only. Nails need a hand photo and a hex. Rings, bracelets, and watches want hand or wrist. Earrings and necklaces want face. Saying no without looking unfinished was the actual design problem.
+
+A front face still can score hair length. Density needs another pose. Plotting density from a selfie would be a lie, even if the JSON has a number. Makeup had a quieter trap: thumbnail tap selects, Use runs. Auto-running on tap felt fast and was wrong.
+
+PWA camera is not the Playground webcam. iOS Safari, HTTPS, permissions, and mapping an on-screen oval onto the video buffer. Live zoom and FaceDetector were unreliable. We crop from geometry at capture (JPEG, small pad) so the file matches what she framed. Face gets a guide. Body and hand do not fake an oval. Offline wardrobe photos can queue in IndexedDB. Try-on waits for a connection.
+
+UK GDPR treats these photos as special category. Wellness copy only: no diagnosis, no invented hospitals, no "this score means PMOS." Cycle context appears only if she logged it.
+
+Seven studios had to fit five tabs. Sidebar plus a three-column studio overlapped (scores over the photo tray) more than once. Timeline pulls real events from skin, makeup, hair, wardrobe, apparel, and accessories. We did not invent month-over-month cost-per-wear arrows the API does not give. UK, Nigeria, and Ghana share one English UI. Currency follows market, not a dollar sign from a mock.
+
+### Accomplishments that we're proud of
+
+We shipped both required YouCam products in one signed-in app, called from Lambda, not from the browser. Skin scores can sit next to a cycle day she already logged. Apparel try-on uses her body still and a boutique SKU.
+
+Consent is split from signup. YouCam down does not take Cycle with it. Sample history is labelled. Empty maternity and PMOS filters tell the truth. Jewellery without a SKU still does not pretend to try on. Hair length is labelled as length.
+
+The PWA has Home, Cycle, Mirror (those seven studios), and Alena on phone and desktop, with offline, pending, and error states instead of "coming soon."
+
+### What we learned
+
+S2S try-on is a job queue with pictures. If the UI assumes POST returns the look, it will lie the first time YouCam says `pending`.
+
+Honesty in VTO is product work. Disabled Use on a face photo, "catalogue only" on eyewear, and Sample on seeded scans cost more copy than another gradient.
+
+iOS capture wants geometry, not a clever live zoom. On-device photos and Alena staying blind to faces is easier to explain than to keep true across every tray "Use" button.
+
+Combining Skin AI and Apparel VTO is easy in a slide and messy in navigation. The health record YouCam cannot see (cycle and PMOS notes) is the part worth keeping if we strip the demo down.
+
+### What's next for GirlCode360
+
+Live Business Portal intake for retailer 3D jewellery assets (catalogue seeds are what we have now). Distinct licensed garment stills so apparel rows do not share one PNG. Eyewear try-on if the API key allows it. Hair density only when we have the extra poses, not from a front selfie. Keep HealthLens as a separate, non-diagnostic report. Do not add a sixth app tab.
 
 ---
 
-## What we built (for judges)
+## Demo video (1 to 3 minutes)
 
-**YouCam APIs in this submission**
-
-- Skin Analysis (`skin-analysis`): face photo in, scores and type out. Shown as numbers and bars, with a wellness disclaimer.
-- Apparel VTO (`cloth-v3`): full-body photo in, generated try-on image out.
-- Same studio, same consent path: makeup try-on / look transfer, shade finder, hair analysis and hair try-on, plus accessory paths where we have assets.
-
-**GirlCode360 around those calls**
-
-- Cycle and PMOS diary (offline-first). Scan rows store cycle day and phase at capture.
-- Cycle-correlated skin view: later scans sit on a timeline against that history. We label seeded demo history vs live scans so judges are not misled.
-- Maternity / PMOS catalogue filter when those modules are on. Honest empty copy when they are not.
-- SheMatch: nearby products and shops from the user’s session area, not a fake hospital list.
-- Alena: in-app assistant that can talk about what the user has allowed. HealthLens is a separate, non-diagnostic report path.
-- Privacy: biometric consent ledger, YouCam file delete after we are done, circuit breaker if YouCam fails repeatedly.
-
-**What it is not**
-
-- Not a diagnosis, mole map, or clinician replacement.
-- Not a wrapper that dumps raw YouCam JSON on the user.
-- Not a sixth phone tab. Mirror is one of five: Home, Cycle, Mirror, Alena, Account.
-
----
-
-## Consumer and retail value
-
-| Who | What they get in a first session |
-|---|---|
-| Someone tracking periods and breakouts | A YouCam skin score next to the cycle day they already logged, plus a way to compare a later photo. |
-| Someone shopping clothes or makeup online | A try-on on their own photo, then nearby shops if they want a real-world next step. |
-| A small boutique | Tagged looks that run through the same Apparel VTO path the shopper uses. |
-
----
-
-## How this maps to judging
-
-**Technological implementation.** Live S2S YouCam tasks, not screenshots of the Playground. Skin and apparel in one module. Keys and rate limits on the server. The rest of the health app stays up if YouCam is unavailable.
-
-**Design.** Signed-in PWA with a real Home, Cycle, Mirror studio (Skin, Makeup, Hair, Wardrobe, Accessories), and Alena. Empty, offline, and consent states are built, not left as “coming soon.”
-
-**Potential impact.** Audience is women in the UK, Nigeria, and Ghana (and anyone who can reach the PWA) who are tired of a cycle app, a skin app, and a shop that do not share context. The demo shows that path. It does not claim clinical outcomes.
-
-**Quality of the idea.** Combined topic on purpose. The non-obvious part is the health record YouCam does not have: cycle and PMOS history the user already typed in. Copying a skin scan into a new landing page would miss that.
-
----
-
-## Demo video (1–3 minutes)
-
-Judges may stop at three minutes. Keep it on-device and quiet (no unlicensed music, no other brands’ logos).
+Judges may stop at three minutes. Keep it on-device and quiet (no unlicensed music, no other brands' logos).
 
 Suggested beat:
 
@@ -110,9 +117,9 @@ Do not commit YouCam keys, Cognito passwords, or wallet passphrases.
 ## Submission checklist
 
 - [ ] Devpost project created under **Skin AI + Apparel VTO**
-- [ ] Description pasted from this file (edit live URL and names)
+- [ ] Project story pasted from this file (edit live URL and names)
 - [ ] Repository URL (public licence, or private + email to contact_event@PerfectCorp.com)
 - [ ] Screenshots: consent, skin + cycle overlay, apparel result, at least one other Mirror tab
-- [ ] Public 1–3 min video link
+- [ ] Public 1 to 3 min video link
 - [ ] Team agrees to an exit interview and a Perfect Corp blog mention if we place
 - [ ] Confirm you are eligible (age of majority; check excluded territories on [the hackathon page](https://youcam-api.devpost.com/))

@@ -48,6 +48,10 @@ export const PURPOSE_COPY: Record<
 };
 
 export const MODULE_COPY: Record<HealthModule, { title: string; body: string }> = {
+  mirror: {
+    title: "Mirror",
+    body: "Skin, makeup, hair, accessories, and your closet. You pick a studio later. Photos stay on this device until you run a scan.",
+  },
   period_tracker: {
     title: "Period Tracker",
     body: "Log cycles, flow, mood, and symptoms. Predictions need two logged periods and do not assume 28 days.",

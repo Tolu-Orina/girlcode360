@@ -722,6 +722,7 @@ export function localYoucamPlugin(opts: {
     ageConfirmed18: true,
     onboardingComplete: true,
     modules: [
+      "mirror",
       "period_tracker",
       "pcos_manager",
       "pregnancy",

@@ -118,6 +118,7 @@ export function AccountPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
   const [sheModules, setSheModules] = useState<Record<HealthModule, boolean>>({
+    mirror: false,
     period_tracker: false,
     pcos_manager: false,
     pregnancy: false,
@@ -842,7 +843,7 @@ export function AccountPage() {
           Modules
         </h2>
         <p className={leadClass}>
-          Turn health areas on or off. At least one must stay on.
+          Turn modules on or off. At least one must stay on.
         </p>
         {ALL_MODULES.map((m) => (
           <Label

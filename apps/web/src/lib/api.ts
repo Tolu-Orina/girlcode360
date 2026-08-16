@@ -4,6 +4,7 @@
 import {
   ALL_MODULES,
   CURRENT_POLICY_VERSION,
+  DEFAULT_MODULES,
   type BootstrapRequest,
   type ConsentPurpose,
   type CreateCycleRequest,
@@ -28,6 +29,7 @@ import { marketplaceQuery } from "./session-geo";
 export {
   ALL_MODULES,
   CURRENT_POLICY_VERSION,
+  DEFAULT_MODULES,
   type ConsentPurpose,
   type CreateCycleRequest,
   type Cycle,

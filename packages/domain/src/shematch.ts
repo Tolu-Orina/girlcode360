@@ -16,6 +16,7 @@ export const MARKETPLACE_CATEGORY_LABEL: Record<MarketplaceCategory, string> = {
 };
 
 export type SheMatchModule =
+  | "mirror"
   | "period_tracker"
   | "pcos_manager"
   | "pregnancy"
@@ -95,7 +96,7 @@ export const SHEMATCH_TRIGGERS: SheMatchTrigger[] = [
   },
   {
     id: "mirror_skin",
-    module: "period_tracker",
+    module: "mirror",
     categories: ["beauty", "pharmacy"],
     tags: ["acne", "oiliness", "texture", "redness", "age_spot", "skincare"],
     why: "A Mirror skin score was clearly elevated on this scan.",
@@ -103,7 +104,7 @@ export const SHEMATCH_TRIGGERS: SheMatchTrigger[] = [
   },
   {
     id: "mirror_shade",
-    module: "period_tracker",
+    module: "mirror",
     categories: ["beauty"],
     tags: ["foundation", "concealer", "beauty"],
     why: "A shade match is ready to shop through SheMatch, not an outbound retailer link.",
@@ -111,7 +112,7 @@ export const SHEMATCH_TRIGGERS: SheMatchTrigger[] = [
   },
   {
     id: "mirror_nail",
-    module: "period_tracker",
+    module: "mirror",
     categories: ["boutique", "beauty"],
     tags: ["nail", "salon"],
     why: "You tried a nail colour in Accessories Studio. This is nearby salons, not a diagnosis.",

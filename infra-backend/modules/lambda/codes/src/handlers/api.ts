@@ -149,7 +149,7 @@ import type {
   UpsertTtcDayRequest,
   WalletCategory,
 } from "../types";
-import { CURRENT_POLICY_VERSION, GENERIC_PUSH_BODY } from "../types";
+import { ALL_MODULES, CURRENT_POLICY_VERSION, GENERIC_PUSH_BODY } from "../types";
 import { isDsqlEnabled } from "../db/client";
 import { isDataBucketEnabled } from "../db/s3";
 import { youcamApiKey } from "../lib/secrets";
@@ -683,6 +683,10 @@ export const handler = async (
     const body = parseBody<PatchModulesRequest>(event);
     if (!Array.isArray(body.modules) || body.modules.length === 0) {
       return json(400, { error: "modules_required" });
+    }
+    const allowed = new Set<string>(ALL_MODULES);
+    if (body.modules.some((m) => !allowed.has(m))) {
+      return json(400, { error: "modules_invalid" });
     }
     return json(200, await setModules(user.sub, body.modules as HealthModule[]));
   }

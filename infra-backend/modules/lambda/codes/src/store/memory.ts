@@ -61,7 +61,7 @@ export async function upsertUser(
     ageConfirmed18: patch.ageConfirmed18 ?? existing?.ageConfirmed18 ?? false,
     onboardingComplete:
       patch.onboardingComplete ?? existing?.onboardingComplete ?? false,
-    modules: patch.modules ?? existing?.modules ?? ["period_tracker"],
+    modules: patch.modules ?? existing?.modules ?? ["mirror", "period_tracker"],
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };

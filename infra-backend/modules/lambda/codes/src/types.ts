@@ -1,11 +1,21 @@
 export type Market = "UK" | "NG" | "GH";
 
 export type HealthModule =
+  | "mirror"
   | "period_tracker"
   | "pcos_manager"
   | "pregnancy"
   | "ttc"
   | "wallet";
+
+export const ALL_MODULES: HealthModule[] = [
+  "mirror",
+  "period_tracker",
+  "pcos_manager",
+  "pregnancy",
+  "ttc",
+  "wallet",
+];
 
 export type ConsentPurpose =
   | "health_data"

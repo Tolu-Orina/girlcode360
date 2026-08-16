@@ -197,6 +197,7 @@ export async function getModulePrefs(
     [sub],
   );
   const out: Record<HealthModule, boolean> = {
+    mirror: false,
     period_tracker: false,
     pcos_manager: false,
     pregnancy: false,

@@ -18,6 +18,7 @@ import {
   ALL_MODULES,
   ApiError,
   CURRENT_POLICY_VERSION,
+  DEFAULT_MODULES,
   bootstrap,
   detectLocale,
   detectMarket,
@@ -68,7 +69,7 @@ export function OnboardingPage() {
     wardrobe: false,
     shematch: false,
   });
-  const [modules, setModules] = useState<HealthModule[]>(["period_tracker"]);
+  const [modules, setModules] = useState<HealthModule[]>([...DEFAULT_MODULES]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +103,7 @@ export function OnboardingPage() {
         }
         setProfile(me);
         setMarket(me.market);
-        setModules(me.modules?.length ? me.modules : ["period_tracker"]);
+        setModules(me.modules?.length ? me.modules : [...DEFAULT_MODULES]);
         if (reconsent) {
           try {
             const c = await getConsents();

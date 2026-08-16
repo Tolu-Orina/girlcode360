@@ -24,11 +24,13 @@ import { MakeupLookProvider } from "@/components/blocks/makeup-look-context";
 import { MirrorPhotoTray } from "@/components/blocks/mirror-photo-tray";
 import { MirrorStill } from "@/components/blocks/mirror-still";
 import {
+  EmptyState,
   ErrorBanner,
   OfflineBanner,
   SkeletonBlock,
 } from "@/components/blocks/states";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import { useOnline } from "@/hooks/use-online";
 import { MirrorPhotosProvider, useMirrorPhotos } from "@/hooks/use-mirror-photos";
 import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
@@ -37,6 +39,7 @@ import type {
   MirrorCatalogueItem,
   MirrorStatus,
   SkinScan,
+  HealthModule,
   UserProfile,
 } from "../../../../packages/api-types/src/index";
 import {
@@ -49,6 +52,7 @@ import {
   getMirrorScanMedia,
   getMirrorStatus,
   listMirrorScans,
+  patchModules,
   postMirrorConsent,
 } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
@@ -166,6 +170,7 @@ function MirrorPageView() {
 
   const pregnancyOn = profile?.modules.includes("pregnancy") ?? false;
   const pmosOn = profile?.modules.includes("pcos_manager") ?? false;
+  const mirrorOn = profile?.modules.includes("mirror") ?? true;
 
   const loadStatus = useCallback(async () => {
     if (!apiBaseUrl) return null;
@@ -324,6 +329,22 @@ function MirrorPageView() {
     }
   }
 
+  async function enableMirror() {
+    setBusy(true);
+    setError(null);
+    try {
+      const base = profile?.modules ?? (["period_tracker"] as HealthModule[]);
+      const modules: HealthModule[] = base.includes("mirror")
+        ? base
+        : ["mirror", ...base];
+      setProfile(await patchModules({ modules }));
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onFaceFile(file: File | undefined) {
     if (!file) return;
     setBusy(true);
@@ -404,6 +425,33 @@ function MirrorPageView() {
         />
         <SkeletonBlock className="aspect-[4/5] h-auto w-full max-w-md rounded-[var(--radius-sheet)]" />
         <SkeletonBlock className="h-32" />
+      </AppPage>
+    );
+  }
+
+  if (!mirrorOn) {
+    return (
+      <AppPage>
+        <PageHeader
+          eyebrow="Mirror"
+          title="Your studio"
+          lead="Mirror is off. Turn it on to use skin, makeup, hair, and wardrobe."
+        />
+        {error ? <ErrorBanner message={error} /> : null}
+        <EmptyState
+          title="Mirror is off"
+          body="Turn it on here or in Account. Cycle, Alena, and Wallet stay as you left them."
+          action={
+            <div className="flex flex-wrap gap-3">
+              <Button type="button" disabled={busy || !apiBaseUrl} onClick={() => void enableMirror()}>
+                {busy ? "Saving…" : "Turn Mirror on"}
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/app/account">Open Account</Link>
+              </Button>
+            </div>
+          }
+        />
       </AppPage>
     );
   }
