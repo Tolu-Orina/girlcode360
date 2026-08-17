@@ -1,3 +1,14 @@
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 6.25.0"
+    }
+  }
+}
+
 # MOCK OPTIONS so CORS preflight never goes through Lambda response streaming.
 # REST API CORS: https://docs.aws.amazon.com/apigateway/latest/developerguide/how-to-cors.html
 # STREAM proxy must emit metadata+delimiter or API Gateway returns 500 with no CORS
@@ -54,16 +65,24 @@ resource "aws_api_gateway_method_response" "options" {
   }
 }
 
+# PutIntegrationResponse 404 "Invalid Integration identifier" if this runs while
+# the method is still AWS_PROXY (no integration response allowed) or before MOCK
+# PutIntegration finishes. Graph-edge + depends_on so MOCK exists first.
 resource "aws_api_gateway_integration_response" "options" {
-  rest_api_id = var.rest_api_id
-  resource_id = var.resource_id
-  http_method = aws_api_gateway_method.options.http_method
+  rest_api_id = aws_api_gateway_integration.options.rest_api_id
+  resource_id = aws_api_gateway_integration.options.resource_id
+  http_method = aws_api_gateway_integration.options.http_method
   status_code = aws_api_gateway_method_response.options.status_code
   response_parameters = {
     "method.response.header.Access-Control-Allow-Headers" = "'${local.allow_headers}'"
     "method.response.header.Access-Control-Allow-Methods" = "'${local.allow_methods}'"
     "method.response.header.Access-Control-Allow-Origin"  = "'*'"
   }
+
+  depends_on = [
+    aws_api_gateway_integration.options,
+    aws_api_gateway_method_response.options,
+  ]
 }
 
 output "integration_id" {

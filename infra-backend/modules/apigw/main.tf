@@ -402,7 +402,7 @@ resource "aws_api_gateway_deployment" "main" {
   # from a failed apply is a Terraform cycle (Lambda destroy + DSQL + Cognito).
   triggers = {
     redeployment = sha1(jsonencode({
-      revision = "guest-alena-cors-mock-moved"
+      revision = "guest-alena-cors-mock-ir-dep"
       invoke   = var.lambda_invoke_arns
       stream   = var.lambda_streaming_invoke_arns
     }))
