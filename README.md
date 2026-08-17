@@ -1,7 +1,6 @@
-<h1 align="center" style="display:flex;align-items:center;justify-content:center;gap:16px;font-weight:800;">
-  <img src="./apps/web/public/logo.png" width="72" height="72" alt="" />
-  GirlCode360
-</h1>
+<p align="center">
+  <img src="./docs/assets/girlcode360-readme-banner.png" alt="GirlCode360" width="520" />
+</p>
 
 <p align="center"><strong>Cycle, skin, and style in one signed-in PWA</strong></p>
 
