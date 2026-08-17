@@ -57,17 +57,27 @@ async function handle(event: APIGatewayProxyEvent, responseStream: NodeJS.Writab
       return;
     }
     const mode = body.mode === "anonymous" ? "anonymous" : "context";
-    const turn = await prepareAlenaChat(user.sub, body.message.trim(), mode, {
-      openedFrom: body.openedFrom,
-      moduleHint: body.moduleHint,
-      history: Array.isArray(body.history) ? body.history : undefined,
-      lat: typeof body.lat === "number" ? body.lat : undefined,
-      lng: typeof body.lng === "number" ? body.lng : undefined,
-      climate:
-        typeof body.climate === "string" && isWardrobeClimate(body.climate)
-          ? body.climate
-          : undefined,
-    });
+    let turn: Awaited<ReturnType<typeof prepareAlenaChat>>;
+    try {
+      turn = await prepareAlenaChat(user.sub, body.message.trim(), mode, {
+        openedFrom: body.openedFrom,
+        moduleHint: body.moduleHint,
+        history: Array.isArray(body.history) ? body.history : undefined,
+        lat: typeof body.lat === "number" ? body.lat : undefined,
+        lng: typeof body.lng === "number" ? body.lng : undefined,
+        climate:
+          typeof body.climate === "string" && isWardrobeClimate(body.climate)
+            ? body.climate
+            : undefined,
+      });
+    } catch (err) {
+      console.error("prepareAlenaChat", err);
+      await pipeProxyResult(
+        responseStream,
+        json(503, { error: "alena_unavailable" }),
+      );
+      return;
+    }
     if (turn.kind === "error") {
       const status = turn.error === "quota_exceeded" ? 429 : 503;
       await pipeProxyResult(

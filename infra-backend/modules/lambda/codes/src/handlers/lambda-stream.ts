@@ -5,17 +5,26 @@ import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
-import { CORS } from "../http";
+import { CORS, json } from "../http";
+
+const STREAM_STARTED = Symbol("httpResponseStarted");
 
 function wrapHttp(
   responseStream: NodeJS.WritableStream,
   statusCode: number,
   headers: Record<string, string>,
 ): NodeJS.WritableStream {
-  return awslambda.HttpResponseStream.from(responseStream, {
+  const dest = awslambda.HttpResponseStream.from(responseStream, {
     statusCode,
-    headers,
+    headers: {
+      "Transfer-Encoding": "chunked",
+      ...headers,
+    },
   });
+  (responseStream as NodeJS.WritableStream & { [STREAM_STARTED]?: boolean })[
+    STREAM_STARTED
+  ] = true;
+  return dest;
 }
 
 function sseFrame(payload: unknown): Buffer {
@@ -53,8 +62,18 @@ export async function pipeSse(
     "X-Accel-Buffering": "no",
   });
   async function* frames() {
-    for await (const payload of events) {
-      yield sseFrame(payload);
+    try {
+      for await (const payload of events) {
+        yield sseFrame(payload);
+      }
+    } catch (err) {
+      console.error("sse frames", err);
+      yield sseFrame({
+        type: "done",
+        reply: "Alena is unavailable right now. Try again in a moment.",
+        crisis: false,
+        stub: true,
+      });
     }
   }
   await pipeline(Readable.from(frames()), dest);
@@ -67,6 +86,22 @@ export function streamify(
   ) => Promise<void>,
 ) {
   return awslambda.streamifyResponse(async (event, responseStream) => {
-    await fn(event, responseStream);
+    try {
+      await fn(event, responseStream);
+    } catch (err) {
+      console.error("stream handler", err);
+      const started = (
+        responseStream as NodeJS.WritableStream & { [STREAM_STARTED]?: boolean }
+      )[STREAM_STARTED];
+      if (started) return;
+      try {
+        await pipeProxyResult(
+          responseStream,
+          json(503, { error: "alena_unavailable" }),
+        );
+      } catch (e2) {
+        console.error("stream handler failsafe", e2);
+      }
+    }
   });
 }

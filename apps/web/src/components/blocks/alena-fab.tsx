@@ -63,7 +63,7 @@ function chatErrorCopy(code: string, signedIn: boolean): string {
       ? "Finish setup in the app to chat with Alena on your account."
       : "Sign in again to chat with Alena on your account.";
   }
-  if (code.startsWith("http_5")) {
+  if (code === "alena_busy" || code === "alena_unavailable" || code.startsWith("http_5")) {
     return "Alena is unavailable right now. Try again in a moment, or open Alena in the app.";
   }
   return "The message didn't send. Check your connection and try again.";

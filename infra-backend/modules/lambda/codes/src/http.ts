@@ -135,7 +135,11 @@ export function parseBody<T>(event: APIGatewayProxyEvent): T {
   const raw = event.isBase64Encoded
     ? Buffer.from(event.body, "base64").toString("utf8")
     : event.body;
-  return JSON.parse(raw) as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return {} as T;
+  }
 }
 
 export function header(

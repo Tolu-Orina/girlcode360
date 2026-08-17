@@ -286,7 +286,7 @@ export function AlenaPage({ embedded = false }: { embedded?: boolean }) {
         );
         setError("Free chats used up today. Premium unlocks unlimited conversations.");
         track({ name: "paywall_shown", props: { surface: "alena" } });
-      } else if (code === "alena_busy") {
+      } else if (code === "alena_busy" || code === "alena_unavailable" || code?.startsWith("http_5")) {
         setError("Alena is busy right now. Wait a moment and try again.");
       } else {
         setError(err instanceof Error ? err.message : "Chat failed");
