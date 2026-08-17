@@ -162,3 +162,25 @@ output "integration_ids" {
     var.include_proxy ? module.proxy_options[0].integration_id : "",
   ])
 }
+
+# OPTIONS already exist on these resources. Without a move, Terraform creates a
+# second OPTIONS method and API Gateway returns 409 ConflictException.
+moved {
+  from = aws_api_gateway_method.root_options[0]
+  to   = module.root_options[0].aws_api_gateway_method.options
+}
+
+moved {
+  from = aws_api_gateway_integration.root_options[0]
+  to   = module.root_options[0].aws_api_gateway_integration.options
+}
+
+moved {
+  from = aws_api_gateway_method.proxy_options[0]
+  to   = module.proxy_options[0].aws_api_gateway_method.options
+}
+
+moved {
+  from = aws_api_gateway_integration.proxy_options[0]
+  to   = module.proxy_options[0].aws_api_gateway_integration.options
+}

@@ -300,6 +300,16 @@ module "guest_alena_options" {
   rest_api_id = aws_api_gateway_rest_api.main.id
   resource_id = aws_api_gateway_resource.guest_alena.id
 }
+
+moved {
+  from = aws_api_gateway_method.guest_alena_options
+  to   = module.guest_alena_options.aws_api_gateway_method.options
+}
+
+moved {
+  from = aws_api_gateway_integration.guest_alena_options
+  to   = module.guest_alena_options.aws_api_gateway_integration.options
+}
 # ——— Public: POST /v1/webhooks/youcam (HMAC; poller remains) ———
 resource "aws_api_gateway_resource" "webhooks" {
   rest_api_id = aws_api_gateway_rest_api.main.id
@@ -392,7 +402,7 @@ resource "aws_api_gateway_deployment" "main" {
   # from a failed apply is a Terraform cycle (Lambda destroy + DSQL + Cognito).
   triggers = {
     redeployment = sha1(jsonencode({
-      revision = "guest-alena-cors-mock"
+      revision = "guest-alena-cors-mock-moved"
       invoke   = var.lambda_invoke_arns
       stream   = var.lambda_streaming_invoke_arns
     }))
