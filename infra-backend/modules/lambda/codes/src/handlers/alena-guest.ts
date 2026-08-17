@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEvent } from "aws-lambda";
-import { header, json, parseBody, pathOf } from "../http";
+import { CORS, header, json, parseBody, pathOf } from "../http";
 import { dispatch, under } from "./dispatch";
 import { pipeProxyResult, pipeSse, streamify } from "./lambda-stream";
 import {
@@ -13,6 +13,15 @@ import type { Market } from "../types";
 async function handle(event: APIGatewayProxyEvent, responseStream: NodeJS.WritableStream) {
   const path = pathOf(event);
   const method = event.httpMethod;
+
+  if (method === "OPTIONS") {
+    await pipeProxyResult(responseStream, {
+      statusCode: 200,
+      headers: CORS,
+      body: "",
+    });
+    return;
+  }
 
   if (method === "POST" && path === "/v1/guest/alena") {
     const body = parseBody<{ message?: string; market?: Market }>(event);

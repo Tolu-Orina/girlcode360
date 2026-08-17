@@ -295,22 +295,10 @@ resource "aws_api_gateway_integration" "guest_alena_post" {
   timeout_milliseconds    = 60000
 }
 
-resource "aws_api_gateway_method" "guest_alena_options" {
-  rest_api_id   = aws_api_gateway_rest_api.main.id
-  resource_id   = aws_api_gateway_resource.guest_alena.id
-  http_method   = "OPTIONS"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "guest_alena_options" {
-  rest_api_id             = aws_api_gateway_rest_api.main.id
-  resource_id             = aws_api_gateway_resource.guest_alena.id
-  http_method             = aws_api_gateway_method.guest_alena_options.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = var.lambda_streaming_invoke_arns["alena-guest"]
-  response_transfer_mode  = "STREAM"
-  timeout_milliseconds    = 60000
+module "guest_alena_options" {
+  source      = "./cors_options"
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = aws_api_gateway_resource.guest_alena.id
 }
 # ——— Public: POST /v1/webhooks/youcam (HMAC; poller remains) ———
 resource "aws_api_gateway_resource" "webhooks" {
@@ -404,7 +392,7 @@ resource "aws_api_gateway_deployment" "main" {
   # from a failed apply is a Terraform cycle (Lambda destroy + DSQL + Cognito).
   triggers = {
     redeployment = sha1(jsonencode({
-      revision = "capability-split-24"
+      revision = "guest-alena-cors-mock"
       invoke   = var.lambda_invoke_arns
       stream   = var.lambda_streaming_invoke_arns
     }))
@@ -422,7 +410,7 @@ resource "aws_api_gateway_deployment" "main" {
     aws_api_gateway_integration.billing_webhooks_paystack_post,
     aws_api_gateway_integration.privacy_purge_tick_post,
     aws_api_gateway_integration.guest_alena_post,
-    aws_api_gateway_integration.guest_alena_options,
+    module.guest_alena_options,
     aws_api_gateway_integration.webhooks_youcam_post,
     aws_api_gateway_integration.webhooks_youcam_options,
     aws_api_gateway_integration.proxy_any,
@@ -445,6 +433,26 @@ resource "aws_api_gateway_stage" "main" {
   deployment_id = aws_api_gateway_deployment.main.id
   rest_api_id   = aws_api_gateway_rest_api.main.id
   stage_name    = var.environment
+}
+
+resource "aws_api_gateway_gateway_response" "cors_4xx" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  response_type = "DEFAULT_4XX"
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept,Idempotency-Key,idempotency-key,x-internal-key,X-Internal-Key,X-Girlcode-Youcam-Key'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'DELETE,GET,HEAD,OPTIONS,PUT,POST,PATCH'"
+  }
+}
+
+resource "aws_api_gateway_gateway_response" "cors_5xx" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  response_type = "DEFAULT_5XX"
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept,Idempotency-Key,idempotency-key,x-internal-key,X-Internal-Key,X-Girlcode-Youcam-Key'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'DELETE,GET,HEAD,OPTIONS,PUT,POST,PATCH'"
+  }
 }
 
 locals {

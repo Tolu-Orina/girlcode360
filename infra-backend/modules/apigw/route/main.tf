@@ -103,26 +103,12 @@ resource "aws_api_gateway_integration" "root_any" {
   timeout_milliseconds    = var.stream ? 60000 : 29000
 }
 
-resource "aws_api_gateway_method" "root_options" {
+module "root_options" {
   count = var.methods_on_root ? 1 : 0
 
-  rest_api_id   = var.rest_api_id
-  resource_id   = local.resource_id
-  http_method   = "OPTIONS"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "root_options" {
-  count = var.methods_on_root ? 1 : 0
-
-  rest_api_id             = var.rest_api_id
-  resource_id             = local.resource_id
-  http_method             = aws_api_gateway_method.root_options[0].http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = var.stream ? var.streaming_invoke_arn : var.invoke_arn
-  response_transfer_mode  = var.stream ? "STREAM" : null
-  timeout_milliseconds    = var.stream ? 60000 : 29000
+  source      = "../cors_options"
+  rest_api_id = var.rest_api_id
+  resource_id = local.resource_id
 }
 
 resource "aws_api_gateway_resource" "proxy" {
@@ -156,26 +142,12 @@ resource "aws_api_gateway_integration" "proxy_any" {
   timeout_milliseconds    = var.stream ? 60000 : 29000
 }
 
-resource "aws_api_gateway_method" "proxy_options" {
+module "proxy_options" {
   count = var.include_proxy ? 1 : 0
 
-  rest_api_id   = var.rest_api_id
-  resource_id   = aws_api_gateway_resource.proxy[0].id
-  http_method   = "OPTIONS"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "proxy_options" {
-  count = var.include_proxy ? 1 : 0
-
-  rest_api_id             = var.rest_api_id
-  resource_id             = aws_api_gateway_resource.proxy[0].id
-  http_method             = aws_api_gateway_method.proxy_options[0].http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = var.stream ? var.streaming_invoke_arn : var.invoke_arn
-  response_transfer_mode  = var.stream ? "STREAM" : null
-  timeout_milliseconds    = var.stream ? 60000 : 29000
+  source      = "../cors_options"
+  rest_api_id = var.rest_api_id
+  resource_id = aws_api_gateway_resource.proxy[0].id
 }
 
 output "resource_id" {
@@ -185,8 +157,8 @@ output "resource_id" {
 output "integration_ids" {
   value = compact([
     var.methods_on_root ? aws_api_gateway_integration.root_any[0].id : "",
-    var.methods_on_root ? aws_api_gateway_integration.root_options[0].id : "",
+    var.methods_on_root ? module.root_options[0].integration_id : "",
     var.include_proxy ? aws_api_gateway_integration.proxy_any[0].id : "",
-    var.include_proxy ? aws_api_gateway_integration.proxy_options[0].id : "",
+    var.include_proxy ? module.proxy_options[0].integration_id : "",
   ])
 }

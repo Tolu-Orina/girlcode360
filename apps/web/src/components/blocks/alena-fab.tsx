@@ -15,11 +15,16 @@ import { useOnline } from "@/hooks/use-online";
 import {
   ApiError,
   detectMarket,
+  postAlenaChat,
   postGuestAlenaChat,
 } from "@/lib/api";
 import { apiBaseUrl } from "@/lib/config";
+import { getSessionOrigin } from "@/lib/session-geo";
 import { cn } from "@/lib/utils";
-import { EMERGENCY_BY_MARKET } from "../../../../../packages/domain/src/index";
+import {
+  EMERGENCY_BY_MARKET,
+  climateFromMarket,
+} from "../../../../../packages/domain/src/index";
 
 const GREET_KEY = "gc360.alenaGreetingSeen";
 const easeOut = [0.22, 1, 0.36, 1] as const;
@@ -40,12 +45,23 @@ const PROMPTS = [
   "What does Health Wallet keep?",
 ];
 
-function guestErrorCopy(code: string): string {
+function chatErrorCopy(code: string, signedIn: boolean): string {
   if (code === "api_base_url_missing" || code === "local_youcam_only") {
     return "The live assistant isn't connected in this build. You can still read a short preview reply.";
   }
   if (code === "message_required") {
     return "Type a message, then send.";
+  }
+  if (code === "alena_consent_required") {
+    return "Alena needs consent in Account before chat that uses your logs.";
+  }
+  if (code === "quota_exceeded") {
+    return "Free chats used up today. Open Alena in the app to see Premium options.";
+  }
+  if (code === "user_not_bootstrapped" || code === "not_authenticated") {
+    return signedIn
+      ? "Finish setup in the app to chat with Alena on your account."
+      : "Sign in again to chat with Alena on your account.";
   }
   if (code.startsWith("http_5")) {
     return "Alena is unavailable right now. Try again in a moment, or open Alena in the app.";
@@ -56,7 +72,7 @@ function guestErrorCopy(code: string): string {
 export function AlenaFab() {
   const reduce = useReducedMotion();
   const online = useOnline();
-  const { signedIn, continueTo } = useMarketingAuth();
+  const { signedIn, continueTo, ready } = useMarketingAuth();
   const alenaTo = signedIn
     ? continueTo === "/onboarding"
       ? "/onboarding"
@@ -151,6 +167,7 @@ export function AlenaFab() {
   async function sendMessage() {
     const message = input.trim().slice(0, 500);
     if (!message || busy) return;
+    if (apiBaseUrl && !ready) return;
     if (!online && apiBaseUrl) {
       setError("You're offline. Reconnect to send a message.");
       return;
@@ -166,15 +183,40 @@ export function AlenaFab() {
         return;
       }
       setMsgs((m) => [...m, { role: "assistant", text: "" }]);
-      const res = await postGuestAlenaChat(message, market, (delta) => {
-        setMsgs((m) => {
-          const next = [...m];
-          const last = next[next.length - 1];
-          if (last?.role !== "assistant") return m;
-          next[next.length - 1] = { ...last, text: last.text + delta };
-          return next;
-        });
-      });
+      const origin = getSessionOrigin();
+      const res = signedIn
+        ? await postAlenaChat(
+            {
+              message,
+              mode: "context",
+              openedFrom: "home",
+              history: msgs.slice(-6).map((m) => ({
+                role: m.role,
+                content: m.text,
+              })),
+              lat: origin?.lat,
+              lng: origin?.lng,
+              climate: climateFromMarket(market),
+            },
+            (delta) => {
+              setMsgs((m) => {
+                const next = [...m];
+                const last = next[next.length - 1];
+                if (last?.role !== "assistant") return m;
+                next[next.length - 1] = { ...last, text: last.text + delta };
+                return next;
+              });
+            },
+          )
+        : await postGuestAlenaChat(message, market, (delta) => {
+            setMsgs((m) => {
+              const next = [...m];
+              const last = next[next.length - 1];
+              if (last?.role !== "assistant") return m;
+              next[next.length - 1] = { ...last, text: last.text + delta };
+              return next;
+            });
+          });
       setDisclaimer(res.disclaimer);
       setMsgs((m) => {
         const next = [...m];
@@ -207,7 +249,7 @@ export function AlenaFab() {
         return next;
       });
       setInput(message);
-      setError(guestErrorCopy(code));
+      setError(chatErrorCopy(code, signedIn));
     } finally {
       setBusy(false);
     }
@@ -278,18 +320,34 @@ export function AlenaFab() {
             {msgs.length === 0 && !busy ? (
               <div className="grid gap-3 py-8">
                 <p className="m-0 text-center text-[length:var(--text-body)] text-muted-foreground">
-                  This chat does not use health records. Ask a general wellness
-                  or beauty question.
+                  {signedIn
+                    ? "Ask with the logs you have allowed. Wellness guidance, not a diagnosis."
+                    : "This chat does not use health records. Ask a general wellness or beauty question."}
                 </p>
                 <p className="m-0 text-center text-[length:var(--text-caption)] text-muted-foreground">
-                  For Alena with your logs,{" "}
-                  <Link
-                    to={alenaTo}
-                    className="font-semibold text-primary underline underline-offset-2"
-                  >
-                    {signedIn ? "open Alena in the app" : "create an account"}
-                  </Link>
-                  .
+                  {signedIn ? (
+                    <>
+                      For the full Alena workspace,{" "}
+                      <Link
+                        to={alenaTo}
+                        className="font-semibold text-primary underline underline-offset-2"
+                      >
+                        open Alena in the app
+                      </Link>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      For Alena with your logs,{" "}
+                      <Link
+                        to={alenaTo}
+                        className="font-semibold text-primary underline underline-offset-2"
+                      >
+                        create an account
+                      </Link>
+                      .
+                    </>
+                  )}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   {PROMPTS.map((p) => (
@@ -354,7 +412,7 @@ export function AlenaFab() {
           value={input}
           onChange={setInput}
           onSend={() => void sendMessage()}
-          disabled={!online && Boolean(apiBaseUrl)}
+          disabled={(!online && Boolean(apiBaseUrl)) || (Boolean(apiBaseUrl) && !ready)}
           busy={busy}
           hint={disclaimer}
         />

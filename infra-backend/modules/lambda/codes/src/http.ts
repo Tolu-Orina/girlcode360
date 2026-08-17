@@ -9,8 +9,8 @@ export { pathOf, schedulerKind, under } from "./routing";
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "Authorization,Content-Type,Idempotency-Key,idempotency-key,x-internal-key,X-Internal-Key",
-  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,Accept,Idempotency-Key,idempotency-key,x-internal-key,X-Internal-Key,X-Girlcode-Youcam-Key",
+  "Access-Control-Allow-Methods": "DELETE,GET,HEAD,OPTIONS,PUT,POST,PATCH",
   "Content-Type": "application/json",
 };
 

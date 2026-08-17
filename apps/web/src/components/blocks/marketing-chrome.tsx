@@ -261,10 +261,7 @@ export function MarketingHeader() {
             <Button
               asChild
               size="sm"
-              className={cn(
-                "relative overflow-hidden rounded-full px-4 active:scale-[0.97]",
-                auth.signedIn ? "inline-flex" : "hidden lg:inline-flex",
-              )}
+              className="relative hidden overflow-hidden rounded-full px-4 active:scale-[0.97] lg:inline-flex"
             >
               <Link to={ctas.primaryTo}>
                 {ctas.primaryLabel}
