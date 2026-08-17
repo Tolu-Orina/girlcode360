@@ -1,5 +1,6 @@
 <p align="center">
-  <img src="./apps/web/public/favicon.svg" width="72" height="72" alt="GirlCode360" />
+  <img src="./apps/web/public/logo.png" width="72" height="72" alt="GirlCode360 image" />
+  <h1>GirlCode360</h1>
 </p>
 
 <h1 align="center">Cycle, skin, and style in one signed-in PWA</h1>
@@ -41,8 +42,6 @@
   <a href="https://girlcode.rinegansolutions.com/privacy">Privacy</a>
   ·
   <a href="./docs/new/girlcode-imp-plan.md">Implementation plan</a>
-  ·
-  <a href="./docs/new/hackathon-submission.md">Hackathon story</a>
 </p>
 
 ```bash
