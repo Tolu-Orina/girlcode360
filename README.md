@@ -1,9 +1,9 @@
-<p align="center">
-  <img src="./apps/web/public/logo.png" width="72" height="72" alt="GirlCode360 image" />
-  <h1>GirlCode360</h1>
-</p>
+<div align="center">
+  <img src="./apps/web/public/logo.png" width="120" alt="GirlCode360" />
+  <h1><strong>GirlCode360</strong></h1>
+</div>
 
-<h1 align="center">Cycle, skin, and style in one signed-in PWA</h1>
+<p align="center"><strong>Cycle, skin, and style in one signed-in PWA</strong></p>
 
 <p align="center"><em>Women’s wellness companion for UK, Nigeria, and Ghana</em></p>
 
