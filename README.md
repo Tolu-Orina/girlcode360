@@ -1,16 +1,16 @@
-<div align="center">
-  <img src="./apps/web/public/logo.png" width="120" alt="GirlCode360" />
-  <h1><strong>GirlCode360</strong></h1>
-</div>
+<h1 align="center" style="display:flex;align-items:center;justify-content:center;gap:16px;font-weight:800;">
+  <img src="./apps/web/public/logo.png" width="72" height="72" alt="" />
+  GirlCode360
+</h1>
 
 <p align="center"><strong>Cycle, skin, and style in one signed-in PWA</strong></p>
 
 <p align="center"><em>Women’s wellness companion for UK, Nigeria, and Ghana</em></p>
 
 <p align="center">
-  GirlCode360 is one Cognito account: period and symptom logging, PMOS Manager,
+  GirlCode360 is one complete women's beauty and wellness app: period and symptom logging, PMOS Manager,
   pregnancy and TTC, a Health Wallet, Alena on Bedrock, and Mirror (Perfect Corp YouCam
-  Skin AI plus apparel try-on). Beauty is optional. The diary is not.
+  Skin AI plus apparel try-on). Beauty is included.
 </p>
 
 <p align="center">
