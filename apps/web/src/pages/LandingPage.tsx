@@ -15,6 +15,7 @@ import { MarketingFooter, MarketingHeader } from "@/components/blocks/marketing-
 import { marketingHeroPad, marketingPad } from "@/components/blocks/marketing-layout";
 import { Button } from "@/components/ui/button";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { marketingCtas, useMarketingAuth } from "@/hooks/use-marketing-auth";
 import { cn } from "@/lib/utils";
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
@@ -321,6 +322,9 @@ function CardGrid({
 export function LandingPage() {
   const reduce = useReducedMotion();
   const desktop = useMediaQuery("(min-width: 1024px)");
+  const auth = useMarketingAuth();
+  const ctas = marketingCtas(auth);
+  const heroPrimary = auth.signedIn ? ctas.primaryLabel : "Create your account";
   const text = rise(reduce);
   const heroRef = useRef<HTMLElement>(null);
   const { hash } = useLocation();
@@ -405,15 +409,19 @@ export function LandingPage() {
                 Listings on this page are samples, not live places.
               </motion.p>
               <motion.div className="mt-2 flex flex-wrap gap-3" variants={text}>
-                <Button
-                  asChild
-                  className="relative h-12 min-h-[var(--tap)] overflow-hidden rounded-full px-6 active:scale-[0.97]"
-                >
-                  <Link to="/signup">
-                    Create your account
-                    <ShineSweep />
-                  </Link>
-                </Button>
+                {auth.ready ? (
+                  <Button
+                    asChild
+                    className="relative h-12 min-h-[var(--tap)] overflow-hidden rounded-full px-6 active:scale-[0.97]"
+                  >
+                    <Link to={ctas.primaryTo}>
+                      {heroPrimary}
+                      <ShineSweep />
+                    </Link>
+                  </Button>
+                ) : (
+                  <span className="inline-flex h-12 w-44" aria-hidden />
+                )}
                 <Button asChild variant="outline" className="h-12 min-h-[var(--tap)] rounded-full px-6">
                   <a href="#how">See how it works</a>
                 </Button>

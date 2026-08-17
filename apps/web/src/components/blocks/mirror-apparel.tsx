@@ -7,6 +7,7 @@ import {
 import { EmptyState } from "@/components/blocks/states";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
 import { Button } from "@/components/ui/button";
+import { ctaLabel } from "@/lib/cta";
 import {
   createMirrorTryOn,
   getMirrorCatalogue,
@@ -129,7 +130,6 @@ export function MirrorApparelPanel({
     if (rescan) return;
     if (selected?.status === "pending") return;
     if (!selected?.hasResultImage) {
-      setSrc(null);
       return;
     }
     let cancelled = false;
@@ -160,6 +160,11 @@ export function MirrorApparelPanel({
           await loadLooks();
           setSelected(tryon);
           onBusy(false);
+          if (tryon.status === "error") {
+            onError(
+              "Try-on could not finish. Use another full-body still in even light, then try again.",
+            );
+          }
         }
       } catch (err) {
         pending.current = null;
@@ -188,6 +193,11 @@ export function MirrorApparelPanel({
         await loadLooks();
         setSelected(tryon);
         onBusy(false);
+        if (tryon.status === "error") {
+          onError(
+            "Try-on could not finish. Use another full-body still in even light, then try again.",
+          );
+        }
       }
     } catch (err) {
       onBusy(false);
@@ -247,6 +257,7 @@ export function MirrorApparelPanel({
             <CameraStillCapture
               chrome="stage"
               disabled={captureOff || !picked}
+              busy={busy}
               facingMode="environment"
               guide="body"
               captureLabel="Take a full-body photo"
@@ -263,7 +274,7 @@ export function MirrorApparelPanel({
                 <div className="grid gap-4">
                   {selected?.status === "error" ? (
                     <p className={leadClass}>
-                      Try-on could not finish. Try another photo.
+                      Try-on could not finish. Use another full-body still in even light, then try again.
                     </p>
                   ) : null}
                   <ActionRow>
@@ -272,7 +283,7 @@ export function MirrorApparelPanel({
                       disabled={captureOff}
                       onClick={() => setRescan(true)}
                     >
-                      Try another photo
+                      {ctaLabel(busy, "Try another photo")}
                     </Button>
                   </ActionRow>
                 </div>
@@ -291,11 +302,11 @@ export function MirrorApparelPanel({
           )}
         </div>
 
-        <div className="min-w-0 max-lg:col-start-2 max-lg:row-start-1 lg:col-start-3 lg:row-start-1">
+        <div className="min-w-0 lg:col-start-3 lg:row-start-1">
           {tray}
         </div>
 
-        <aside className="grid min-w-0 gap-6 max-lg:col-span-2 lg:col-start-2 lg:row-start-1">
+        <aside className="grid min-w-0 gap-6 lg:col-start-2 lg:row-start-1">
           <article className={cn(elevatedCardClass, "border-0")}>
             <header className="grid gap-1">
               <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
@@ -372,7 +383,7 @@ export function MirrorApparelPanel({
                 disabled={captureOff || !picked}
                 onClick={() => void runTryOn(lastBodyB64)}
               >
-                Try last photo in this look
+                {ctaLabel(busy, "Try last photo in this look")}
               </Button>
             ) : null}
             {!pickedItem ? (

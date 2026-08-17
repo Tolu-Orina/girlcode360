@@ -87,8 +87,19 @@ export function mapYoucamErr(err: unknown): APIGatewayProxyResult | null {
     return json(503, { error: "youcam_unconfigured" });
   }
   if (msg === "YOUCAM_RATE_LIMIT") return json(429, { error: "youcam_busy" });
+  if (msg.startsWith("YOUCAM_CLIENT_")) {
+    const reason = msg.slice("YOUCAM_CLIENT_".length);
+    const lower = reason.toLowerCase();
+    if (lower.includes("face_angle") || lower.includes("angle_invalid")) {
+      return json(400, { error: "face_angle_invalid" });
+    }
+    return json(400, { error: "photo_rejected" });
+  }
   if (msg === "YOUCAM_HTTP_400" || msg === "YOUCAM_HTTP_422") {
     return json(400, { error: "photo_rejected" });
+  }
+  if (msg.startsWith("YOUCAM_PUT_") || msg === "YOUCAM_UPLOAD_INIT_FAILED") {
+    return json(503, { error: "youcam_unavailable" });
   }
   if (msg.startsWith("YOUCAM_")) return json(503, { error: "youcam_unavailable" });
   return null;

@@ -9,6 +9,7 @@ export function AlenaComposer({
   disabled,
   busy,
   hint,
+  inputId = "alena-input",
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -16,6 +17,7 @@ export function AlenaComposer({
   disabled: boolean;
   busy: boolean;
   hint?: string;
+  inputId?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const canSend = !disabled && !busy && value.trim().length > 0;
@@ -46,12 +48,12 @@ export function AlenaComposer({
           "focus-within:ring-2 focus-within:ring-ring",
         )}
       >
-        <label className="sr-only" htmlFor="alena-input">
+        <label className="sr-only" htmlFor={inputId}>
           Message Alena
         </label>
         <textarea
           ref={ref}
-          id="alena-input"
+          id={inputId}
           rows={1}
           value={value}
           disabled={disabled || busy}

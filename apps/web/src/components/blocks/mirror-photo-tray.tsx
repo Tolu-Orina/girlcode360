@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Chip } from "@/components/primitives/chip";
 import { Button } from "@/components/ui/button";
 import { useMirrorPhotos } from "@/hooks/use-mirror-photos";
+import { ctaLabel } from "@/lib/cta";
 import {
   MIRROR_PHOTO_LABELS,
   type MirrorPhotoKind,
@@ -54,11 +55,13 @@ export function MirrorPhotoTray({
   acceptedKinds,
   useLabel,
   disabled,
+  busy,
 }: {
   preferredKind: MirrorPhotoKind;
   acceptedKinds?: MirrorPhotoKind[];
   useLabel: string;
   disabled?: boolean;
+  busy?: boolean;
 }) {
   const { photos, queuePhoto, removePhoto } = useMirrorPhotos();
   const [kind, setKind] = useState<Filter>("all");
@@ -102,7 +105,7 @@ export function MirrorPhotoTray({
   return (
     <>
       <aside
-        className={cn(elevatedCardClass, "min-w-0 border-0 p-4 lg:p-4")}
+        className={cn(elevatedCardClass, "min-w-0 overflow-hidden border-0 p-4 lg:p-4")}
         aria-label="Saved Mirror photos"
       >
         <header className="grid gap-1">
@@ -145,7 +148,7 @@ export function MirrorPhotoTray({
           </ul>
         )}
         {selected ? (
-          <div className="grid gap-2">
+          <div className="grid min-w-0 gap-2">
             {!canUse ? (
               <p className={leadClass}>
                 This studio cannot use a {MIRROR_PHOTO_LABELS[selected.kind].toLowerCase()}{" "}
@@ -155,15 +158,17 @@ export function MirrorPhotoTray({
             ) : null}
             <Button
               type="button"
-              disabled={disabled || !canUse}
+              className="h-auto min-h-[var(--tap)] w-full min-w-0 whitespace-normal"
+              disabled={disabled || busy || !canUse}
               onClick={() => queuePhoto(selected)}
             >
-              {useLabel}
+              {ctaLabel(Boolean(busy), useLabel)}
             </Button>
             <Button
               type="button"
               variant="outline"
-              disabled={disabled}
+              className="h-auto min-h-[var(--tap)] w-full min-w-0 whitespace-normal"
+              disabled={disabled || busy}
               onClick={() => void removePhoto(selected.id)}
             >
               Remove from this device
@@ -240,14 +245,15 @@ export function MirrorPhotoTray({
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                disabled={disabled || !canUse}
+                className="h-auto min-h-[var(--tap)] min-w-0 whitespace-normal"
+                disabled={disabled || busy || !canUse}
                 onClick={() => {
                   if (!selected || !canUse) return;
                   queuePhoto(selected);
                   setMoreOpen(false);
                 }}
               >
-                {useLabel}
+                {ctaLabel(Boolean(busy), useLabel)}
               </Button>
               <Button
                 type="button"

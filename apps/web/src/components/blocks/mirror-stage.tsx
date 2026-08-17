@@ -9,7 +9,7 @@ export const mirrorStageWrapClass =
 export const mirrorStageBoxClass =
   "relative h-[213px] w-[171px] overflow-hidden rounded-[var(--radius-sheet)] bg-muted shadow-[var(--shadow-2)] lg:h-[320px] lg:w-[256px]";
 export const mirrorStudioRowClass =
-  "grid grid-cols-[171px_minmax(0,1fr)] items-start gap-4 lg:grid-cols-[256px_minmax(0,1fr)_minmax(14rem,20rem)] lg:gap-8";
+  "grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[256px_minmax(0,1fr)_minmax(14rem,20rem)] lg:gap-8";
 
 /** Fashion PDP stage: 171×213 on phone, 256×320 on desktop (4:5). */
 export function MirrorStage({

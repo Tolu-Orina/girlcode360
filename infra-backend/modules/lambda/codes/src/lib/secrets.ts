@@ -75,7 +75,7 @@ export async function appSecrets(): Promise<Record<string, string>> {
 export async function youcamApiKey(): Promise<string | null> {
   if (youcamKeyOverride) return youcamKeyOverride;
   const s = await appSecrets();
-  const key = s.youcam_api_key?.trim();
+  const key = firstFilled(s, ["youcam_api_key", "YOUCAM_API_KEY"]);
   return key && key.length > 8 ? key : null;
 }
 

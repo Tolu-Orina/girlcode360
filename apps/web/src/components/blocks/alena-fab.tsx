@@ -1,14 +1,16 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MessageCircle, X } from "lucide-react";
+import { AlenaComposer } from "@/components/blocks/alena-composer";
 import { AlenaMarkdown } from "@/components/blocks/alena-markdown";
 import {
   ErrorBanner,
   OfflineBanner,
 } from "@/components/blocks/states";
-import { FieldTextarea } from "@/components/primitives/field";
 import { Button } from "@/components/ui/button";
+import { useMarketingAuth } from "@/hooks/use-marketing-auth";
 import { useOnline } from "@/hooks/use-online";
 import {
   ApiError,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/api";
 import { apiBaseUrl } from "@/lib/config";
 import { cn } from "@/lib/utils";
+import { EMERGENCY_BY_MARKET } from "../../../../../packages/domain/src/index";
 
 const GREET_KEY = "gc360.alenaGreetingSeen";
 const easeOut = [0.22, 1, 0.36, 1] as const;
@@ -31,12 +34,21 @@ const LOCAL_STUB = [
   "Ask about general skincare habits, optional cycle logging, or the private Health Wallet. Create an account to talk with Alena using the logs you allow.",
 ].join("\n");
 
+const PROMPTS = [
+  "What is a gentle evening skincare habit?",
+  "How do I start logging my cycle?",
+  "What does Health Wallet keep?",
+];
+
 function guestErrorCopy(code: string): string {
-  if (code === "api_base_url_missing") {
+  if (code === "api_base_url_missing" || code === "local_youcam_only") {
     return "The live assistant isn't connected in this build. You can still read a short preview reply.";
   }
+  if (code === "message_required") {
+    return "Type a message, then send.";
+  }
   if (code.startsWith("http_5")) {
-    return "Alena is unavailable right now. Try again in a moment, or create an account to use in-app chat.";
+    return "Alena is unavailable right now. Try again in a moment, or open Alena in the app.";
   }
   return "The message didn't send. Check your connection and try again.";
 }
@@ -44,11 +56,16 @@ function guestErrorCopy(code: string): string {
 export function AlenaFab() {
   const reduce = useReducedMotion();
   const online = useOnline();
+  const { signedIn, continueTo } = useMarketingAuth();
+  const alenaTo = signedIn
+    ? continueTo === "/onboarding"
+      ? "/onboarding"
+      : "/app/alena"
+    : "/signup";
   const titleId = useId();
-  const inputId = useId();
   const fabRef = useRef<HTMLButtonElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [market] = useState(() => detectMarket());
 
   const [open, setOpen] = useState(false);
   const [greet, setGreet] = useState(false);
@@ -59,6 +76,7 @@ export function AlenaFab() {
   const [disclaimer, setDisclaimer] = useState(
     "This is AI-generated wellness guidance, not medical advice.",
   );
+  const [kbInset, setKbInset] = useState(0);
 
   useEffect(() => {
     try {
@@ -81,6 +99,8 @@ export function AlenaFab() {
 
   useEffect(() => {
     if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -89,12 +109,26 @@ export function AlenaFab() {
       }
     };
     window.addEventListener("keydown", onKey);
-    const focusT = window.setTimeout(() => inputRef.current?.focus(), 40);
     return () => {
+      document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
-      window.clearTimeout(focusT);
     };
   }, [open]);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const sync = () => {
+      const obscured = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKbInset(obscured);
+    };
+    vv.addEventListener("resize", sync);
+    vv.addEventListener("scroll", sync);
+    return () => {
+      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("scroll", sync);
+    };
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
@@ -109,8 +143,12 @@ export function AlenaFab() {
     }
   }
 
-  async function onSend(e: FormEvent) {
-    e.preventDefault();
+  function close() {
+    setOpen(false);
+    fabRef.current?.focus();
+  }
+
+  async function sendMessage() {
     const message = input.trim().slice(0, 500);
     if (!message || busy) return;
     if (!online && apiBaseUrl) {
@@ -128,7 +166,7 @@ export function AlenaFab() {
         return;
       }
       setMsgs((m) => [...m, { role: "assistant", text: "" }]);
-      const res = await postGuestAlenaChat(message, detectMarket(), (delta) => {
+      const res = await postGuestAlenaChat(message, market, (delta) => {
         setMsgs((m) => {
           const next = [...m];
           const last = next[next.length - 1];
@@ -141,28 +179,31 @@ export function AlenaFab() {
       setMsgs((m) => {
         const next = [...m];
         const last = next[next.length - 1];
+        const text = res.reply || last?.text || LOCAL_STUB;
         if (last?.role !== "assistant") {
-          next.push({ role: "assistant", text: res.reply, crisis: res.crisis });
+          next.push({ role: "assistant", text, crisis: res.crisis });
           return next;
         }
-        next[next.length - 1] = {
-          ...last,
-          text: res.reply || last.text,
-          crisis: res.crisis,
-        };
+        next[next.length - 1] = { ...last, text, crisis: res.crisis };
         return next;
       });
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "chat_failed";
-      if (code === "api_base_url_missing") {
-        setMsgs((m) => [...m, { role: "assistant", text: LOCAL_STUB }]);
+      if (code === "api_base_url_missing" || code === "local_youcam_only") {
+        setMsgs((m) => {
+          const next = [...m];
+          if (next[next.length - 1]?.role === "assistant" && !next[next.length - 1]?.text) {
+            next[next.length - 1] = { role: "assistant", text: LOCAL_STUB };
+            return next;
+          }
+          return [...next, { role: "assistant", text: LOCAL_STUB }];
+        });
         return;
       }
       setMsgs((m) => {
         let next = m;
         if (next[next.length - 1]?.role === "assistant") next = next.slice(0, -1);
-        const last = next[next.length - 1];
-        if (last?.role === "user" && last.text === message) return next.slice(0, -1);
+        if (next[next.length - 1]?.role === "user") next = next.slice(0, -1);
         return next;
       });
       setInput(message);
@@ -172,147 +213,154 @@ export function AlenaFab() {
     }
   }
 
-  return (
-    <div className="pointer-events-none fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 flex flex-col items-end gap-3 sm:right-6">
-      <AnimatePresence>
-        {open ? (
-          <motion.section
-            key="panel"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            className="pointer-events-auto glass-surface flex h-[min(70dvh,560px)] w-[min(calc(100vw-2rem),24rem)] flex-col overflow-hidden rounded-[var(--radius-sheet)] border shadow-[var(--shadow-modal)]"
-            initial={reduce ? false : { opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 380, damping: 28 }}
-          >
-            <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-              <div className="min-w-0">
-                <h2
-                  id={titleId}
-                  className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-sub)] font-semibold text-foreground"
-                >
-                  Alena
-                </h2>
-                <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
-                  Beauty and wellness. Not a diagnosis.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Close chat"
-                onClick={() => {
-                  setOpen(false);
-                  fabRef.current?.focus();
-                }}
-              >
-                <X />
-              </Button>
-            </header>
+  const tree = (
+    <>
+      {open ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-foreground/45 backdrop-blur-[2px]"
+          aria-label="Close Alena"
+          onClick={close}
+        />
+      ) : null}
 
-            <div
-              className="grid min-h-0 flex-1 gap-3 overflow-y-auto px-4 py-4"
-              aria-live="polite"
-              aria-busy={busy}
+      <motion.aside
+        role="dialog"
+        aria-modal={open}
+        aria-labelledby={titleId}
+        aria-hidden={!open}
+        inert={!open}
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[min(100%,28rem)] flex-col overflow-x-clip border-0 bg-background shadow-[var(--shadow-modal)]",
+          !open && "pointer-events-none",
+        )}
+        initial={false}
+        animate={{ x: open ? 0 : "100%" }}
+        transition={
+          reduce
+            ? { duration: 0.15 }
+            : { type: "spring", stiffness: 380, damping: 32 }
+        }
+        style={{ paddingBottom: kbInset }}
+      >
+        <header className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <h2
+              id={titleId}
+              className="m-0 font-[family-name:var(--font-display)] text-[length:var(--text-sub)] font-semibold text-foreground"
             >
-              {!online ? (
-                <OfflineBanner message="You're offline. Send is paused until you reconnect." />
-              ) : null}
-              {error ? (
-                <ErrorBanner
-                  message={error}
-                  onRetry={() => setError(null)}
-                />
-              ) : null}
-
-              {msgs.length === 0 && !busy ? (
-                <div className="grid gap-3 self-center py-6 text-center">
-                  <p className="m-0 text-[length:var(--text-body)] text-foreground">
-                    This chat does not use health records.
-                  </p>
-                  <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
-                    Ask a general wellness or beauty question. For Alena with
-                    your logs,{" "}
-                    <Link
-                      to="/signup"
-                      className="font-semibold text-primary underline underline-offset-2"
-                    >
-                      create an account
-                    </Link>
-                    .
-                  </p>
-                </div>
-              ) : null}
-
-              {msgs.map((m, i) => (
-                <div
-                  key={`${i}-${m.role}`}
-                  className={cn(
-                    "max-w-[92%] rounded-[var(--radius)] px-4 py-3",
-                    m.role === "user"
-                      ? "justify-self-end bg-primary text-primary-foreground"
-                      : "justify-self-start bg-muted text-foreground",
-                    m.crisis && "outline outline-2 outline-destructive",
-                  )}
-                >
-                  <AlenaMarkdown text={m.text} />
-                </div>
-              ))}
-              {busy ? (
-                <p className="m-0 justify-self-start text-[length:var(--text-caption)] text-muted-foreground">
-                  Alena is writing…
-                </p>
-              ) : null}
-              <div ref={bottomRef} />
-            </div>
-
-            <p className="m-0 border-t px-4 py-2 text-[length:var(--text-caption)] text-muted-foreground">
-              {disclaimer}
+              Alena
+            </h2>
+            <p className="m-0 text-[length:var(--text-caption)] text-muted-foreground">
+              Wellness guidance. Not a diagnosis.
             </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Close Alena"
+            onClick={close}
+          >
+            <X />
+          </Button>
+        </header>
 
-            <form
-              className="grid gap-2 border-t px-4 py-3"
-              onSubmit={(e) => void onSend(e)}
-            >
-              <label className="sr-only" htmlFor={inputId}>
-                Message Alena
-              </label>
-              <FieldTextarea
-                ref={inputRef}
-                id={inputId}
-                rows={2}
-                maxLength={500}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask Alena…"
-                disabled={busy || (!online && Boolean(apiBaseUrl))}
-                className="min-h-[4.5rem]"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    e.currentTarget.form?.requestSubmit();
-                  }
-                }}
-              />
-              <Button
-                type="submit"
-                disabled={
-                  busy ||
-                  !input.trim() ||
-                  (!online && Boolean(apiBaseUrl))
-                }
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-live="polite">
+          <div className="grid gap-3">
+            {!online ? (
+              <OfflineBanner message="You are offline. Send is paused until you reconnect." />
+            ) : null}
+            {error ? (
+              <ErrorBanner message={error} onRetry={() => setError(null)} />
+            ) : null}
+
+            {msgs.length === 0 && !busy ? (
+              <div className="grid gap-3 py-8">
+                <p className="m-0 text-center text-[length:var(--text-body)] text-muted-foreground">
+                  This chat does not use health records. Ask a general wellness
+                  or beauty question.
+                </p>
+                <p className="m-0 text-center text-[length:var(--text-caption)] text-muted-foreground">
+                  For Alena with your logs,{" "}
+                  <Link
+                    to={alenaTo}
+                    className="font-semibold text-primary underline underline-offset-2"
+                  >
+                    {signedIn ? "open Alena in the app" : "create an account"}
+                  </Link>
+                  .
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {PROMPTS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className="min-h-12 rounded-full bg-muted px-4 text-[length:var(--text-label)] font-semibold text-foreground"
+                      onClick={() => setInput(p)}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {msgs.map((m, i) => (
+              <div
+                key={`${i}-${m.role}`}
+                className={cn(
+                  "max-w-[92%] rounded-[var(--radius-sheet)] px-4 py-3",
+                  m.role === "user"
+                    ? "justify-self-end bg-primary text-primary-foreground shadow-[var(--shadow-2)]"
+                    : "justify-self-start bg-card text-foreground shadow-[var(--shadow-2)]",
+                  m.crisis && "outline outline-2 outline-destructive",
+                )}
               >
-                {busy ? "Alena is writing…" : "Send message"}
-              </Button>
-            </form>
-          </motion.section>
-        ) : null}
-      </AnimatePresence>
+                {m.role === "assistant" ? (
+                  <AlenaMarkdown text={m.text} />
+                ) : (
+                  <p className="m-0 text-[length:var(--text-body)] leading-normal whitespace-pre-wrap">
+                    {m.text}
+                  </p>
+                )}
+                {m.crisis ? (
+                  <ul className="mt-3 grid list-none gap-1 p-0">
+                    {EMERGENCY_BY_MARKET[market].map((n) => (
+                      <li key={n.number}>
+                        <a
+                          className="font-semibold underline underline-offset-2"
+                          href={`tel:${n.number.replace(/\s/g, "")}`}
+                        >
+                          {n.label}: {n.number}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ))}
+            {busy ? (
+              <p className="m-0 justify-self-start text-[length:var(--text-caption)] text-muted-foreground">
+                Alena is writing…
+              </p>
+            ) : null}
+            <div ref={bottomRef} />
+          </div>
+        </div>
 
-      <div className="relative">
+        <AlenaComposer
+          inputId="alena-guest-input"
+          value={input}
+          onChange={setInput}
+          onSend={() => void sendMessage()}
+          disabled={!online && Boolean(apiBaseUrl)}
+          busy={busy}
+          hint={disclaimer}
+        />
+      </motion.aside>
+
+      <div className="pointer-events-none fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 sm:right-6">
         <AnimatePresence>
           {greet && !open ? (
             <motion.p
@@ -336,20 +384,24 @@ export function AlenaFab() {
         <motion.button
           ref={fabRef}
           type="button"
-          className="pointer-events-auto inline-flex size-14 items-center justify-center rounded-full bg-[image:var(--cta-fill)] text-primary-foreground shadow-[var(--shadow-2)] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          aria-label={open ? "Close chat with Alena" : "Chat with Alena"}
+          hidden={open}
+          className="pointer-events-auto grid size-14 place-items-center rounded-full bg-[image:var(--cta-fill)] text-primary-foreground shadow-[var(--shadow-2)] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          aria-label="Ask Alena"
           aria-expanded={open}
           whileHover={reduce ? undefined : { scale: 1.06 }}
           whileTap={reduce ? undefined : { scale: 0.94 }}
           transition={{ type: "spring", stiffness: 420, damping: 22 }}
           onClick={() => {
             dismissGreet();
-            setOpen((v) => !v);
+            setOpen(true);
           }}
         >
-          {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
+          <MessageCircle className="size-6" />
         </motion.button>
       </div>
-    </div>
+    </>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(tree, document.body);
 }

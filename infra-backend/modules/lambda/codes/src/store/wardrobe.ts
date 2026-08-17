@@ -13,7 +13,7 @@ import { isDsqlEnabled } from "../db/client";
 import { deleteObject, getObject, putObject } from "../db/s3";
 import {
   packYoucamIds,
-  pollUntilSettled,
+  pollTask,
   requestYoucamFileDeletion,
   startClothTryOn,
   unpackYoucamIds,
@@ -437,8 +437,7 @@ export async function startWardrobeOutfitTryOn(
     youcamTaskId: packYoucamIds(taskRaw, srcId),
   };
   await putOutfit(next);
-  const settled = await settleOutfitTryOn(sub, next);
-  return publicOutfit(settled ?? next);
+  return publicOutfit(next);
 }
 
 async function settleOutfitTryOn(
@@ -447,7 +446,7 @@ async function settleOutfitTryOn(
 ): Promise<WardrobeOutfitRecord | undefined> {
   if (row.status !== "pending" || !row.youcamTaskId) return row;
   try {
-    const task = await pollUntilSettled("cloth-v3", row.youcamTaskId);
+    const task = await pollTask("cloth-v3", row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as const };

@@ -371,6 +371,7 @@ export type SkinScan = {
   skinType?: string;
   hasResultImage: boolean;
   hasMask: boolean;
+  hasSourceImage?: boolean;
   insight: MirrorInsight | null;
   seeded: boolean;
   scanQuality: "sd" | "hd";
@@ -475,6 +476,7 @@ export type HairScan = {
   hairstyleId: string | null;
   hasResultImage: boolean;
   insight: MirrorInsight | null;
+  failReason?: string | null;
 };
 
 export type WardrobeItem = {

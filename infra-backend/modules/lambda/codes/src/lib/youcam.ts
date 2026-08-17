@@ -4,6 +4,7 @@ import {
   type StudioMakeupCategory,
 } from "../../../../../../packages/domain/src/index.ts";
 import { youcamApiKey, youcamWebhookSecret } from "./secrets.ts";
+import { youcamErrorCode } from "../../../../../../packages/domain/src/index.ts";
 
 const BASE =
   process.env.YOUCAM_API_SERVER?.trim() || "https://yce-api-01.makeupar.com";
@@ -143,6 +144,12 @@ async function youcamFetch(
   }
   if (!res.ok) {
     console.error("youcam http", res.status, path, json);
+    const client = youcamErrorCode(json);
+    if (client) {
+      const err = new Error(`YOUCAM_CLIENT_${client}`);
+      (err as Error & { body?: unknown }).body = json;
+      throw err;
+    }
     const err = new Error(`YOUCAM_HTTP_${res.status}`);
     (err as Error & { body?: unknown }).body = json;
     throw err;
@@ -215,10 +222,13 @@ export async function uploadYoucamFile(
   if (!fileId || !uploadUrl) {
     throw new Error("YOUCAM_UPLOAD_INIT_FAILED");
   }
-  const putHeaders: Record<string, string> = { "Content-Type": mime };
+  const putHeaders: Record<string, string> = {};
   for (const [k, v] of Object.entries(extraHeaders)) {
-    if (/^content-length$/i.test(k)) continue;
+    if (/^content-length$/i.test(k) || /^host$/i.test(k)) continue;
     putHeaders[k] = v;
+  }
+  if (!Object.keys(putHeaders).some((k) => /^content-type$/i.test(k))) {
+    putHeaders["Content-Type"] = mime;
   }
   const put = await fetch(uploadUrl, {
     method: "PUT",
@@ -226,7 +236,7 @@ export async function uploadYoucamFile(
     body: new Uint8Array(bytes),
   });
   if (!put.ok) throw new Error(`YOUCAM_PUT_${put.status}`);
-  await new Promise((r) => setTimeout(r, 800));
+  await new Promise((r) => setTimeout(r, 1200));
   return fileId;
 }
 
@@ -558,7 +568,7 @@ export async function pollTask(
     overall,
     resultUrl,
     maskUrls,
-    error: status === "error" ? String(data.error ?? data.message ?? "task_error") : undefined,
+    error: status === "error" ? (youcamErrorCode(data) ?? String(data.message ?? "task_error")) : undefined,
     data,
   };
 }

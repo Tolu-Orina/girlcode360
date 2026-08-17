@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/blocks/states";
 import { SheMatchBanner } from "@/components/blocks/shematch-banner";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
 import { Button } from "@/components/ui/button";
+import { ctaLabel } from "@/lib/cta";
 import {
   createAccessoryLook,
   getAccessoryLook,
@@ -127,7 +128,6 @@ export function MirrorAccessoriesPanel({
     if (rescan) return;
     if (selected?.status === "pending") return;
     if (!selected?.hasResultImage) {
-      setSrc(null);
       return;
     }
     let cancelled = false;
@@ -158,6 +158,11 @@ export function MirrorAccessoriesPanel({
           await load();
           setSelected(look);
           onBusy(false);
+          if (look.status === "error") {
+            onError(
+              "Try-on could not finish. Use another still in even light, then try again.",
+            );
+          }
         }
       } catch (err) {
         pending.current = null;
@@ -263,6 +268,7 @@ export function MirrorAccessoriesPanel({
             <CameraStillCapture
               chrome="stage"
               disabled={captureOff || !canTryOn}
+              busy={busy}
               facingMode={handShot ? "environment" : "user"}
               guide={handShot ? "none" : "face"}
               captureLabel={
@@ -289,7 +295,7 @@ export function MirrorAccessoriesPanel({
                 <div className="grid gap-4">
                   {selected?.status === "error" ? (
                     <p className={leadClass}>
-                      Try-on could not finish. Try another photo.
+                      Try-on could not finish. Use another still in even light, then try again.
                     </p>
                   ) : null}
                   <ActionRow>
@@ -298,7 +304,7 @@ export function MirrorAccessoriesPanel({
                       disabled={captureOff}
                       onClick={() => setRescan(true)}
                     >
-                      Try another photo
+                      {ctaLabel(busy, "Try another photo")}
                     </Button>
                   </ActionRow>
                 </div>
@@ -323,11 +329,11 @@ export function MirrorAccessoriesPanel({
           )}
         </div>
 
-        <div className="min-w-0 max-lg:col-start-2 max-lg:row-start-1 lg:col-start-3 lg:row-start-1">
+        <div className="min-w-0 lg:col-start-3 lg:row-start-1">
           {tray}
         </div>
 
-        <aside className="grid min-w-0 gap-6 max-lg:col-span-2 lg:col-start-2 lg:row-start-1">
+        <aside className="grid min-w-0 gap-6 lg:col-start-2 lg:row-start-1">
           <article className={cn(elevatedCardClass, "border-0")}>
             <header className="grid gap-1">
               <h2 className="m-0 text-[length:var(--text-sub)] text-foreground">
@@ -404,7 +410,7 @@ export function MirrorAccessoriesPanel({
                 disabled={captureOff || !canTryOn || !reusable}
                 onClick={() => void run()}
               >
-                Try on last skin scan
+                {ctaLabel(busy, "Try on last skin scan")}
               </Button>
             ) : null}
             {mode !== "eyewear" && !handShot && !reusable ? (

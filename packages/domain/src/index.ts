@@ -431,6 +431,7 @@ export * from "./hair.ts";
 export * from "./wardrobe.ts";
 export * from "./stylist.ts";
 export * from "./accessories.ts";
+export * from "./youcam-errors.ts";
 
 export type HealthLensInput = {
   cycleIntervalsDays: number[];

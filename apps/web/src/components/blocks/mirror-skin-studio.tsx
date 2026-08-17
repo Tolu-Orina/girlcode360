@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/blocks/states";
 import { PredictionDisclaimer } from "@/components/PredictionDisclaimer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ctaLabel } from "@/lib/cta";
 import type { SkinScan } from "../../../../../packages/api-types/src/index";
 import { snapshotSkinReport } from "../../../../../packages/domain/src/index";
 
@@ -53,6 +54,7 @@ function formatWhen(iso: string): string {
 
 export function MirrorSkinStudio({
   captureOff,
+  busy,
   previewSrc,
   resultSrc,
   maskSrc,
@@ -64,6 +66,7 @@ export function MirrorSkinStudio({
   onError,
 }: {
   captureOff: boolean;
+  busy?: boolean;
   previewSrc: string | null;
   resultSrc: string | null;
   maskSrc: string | null;
@@ -86,8 +89,8 @@ export function MirrorSkinStudio({
           <MirrorStage
             dock={
               <ActionRow>
-                <Button type="button" onClick={onConfirmPreview}>
-                  Use this photo
+                <Button type="button" disabled={busy} onClick={onConfirmPreview}>
+                  {ctaLabel(Boolean(busy), "Use this photo")}
                 </Button>
                 <Button type="button" variant="ghost" onClick={onCancelPreview}>
                   Choose another
@@ -105,6 +108,7 @@ export function MirrorSkinStudio({
           <CameraStillCapture
             chrome="stage"
             disabled={captureOff}
+            busy={busy}
             facingMode="user"
             guide="face"
             captureLabel="Take a face photo"
@@ -133,7 +137,7 @@ export function MirrorSkinStudio({
             dock={
               <ActionRow>
                 <Button type="button" disabled={captureOff} onClick={() => setRescan(true)}>
-                  Scan again
+                  {ctaLabel(Boolean(busy), "Scan again")}
                 </Button>
               </ActionRow>
             }

@@ -4,6 +4,7 @@ import { MirrorStage, MirrorStageEmpty, mirrorStageBoxClass, mirrorStageWrapClas
 import { FieldSelect } from "@/components/primitives/field";
 import { Button } from "@/components/ui/button";
 import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
+import { ctaLabel } from "@/lib/cta";
 import {
   cameraVideoConstraints,
   guideCropFromElements,
@@ -47,6 +48,7 @@ function rememberCameraId(id: string) {
 
 export function CameraStillCapture({
   disabled,
+  busy,
   facingMode,
   guide,
   captureLabel,
@@ -58,6 +60,7 @@ export function CameraStillCapture({
   onError,
 }: {
   disabled?: boolean;
+  busy?: boolean;
   facingMode: "user" | "environment";
   guide: "face" | "body" | "none";
   captureLabel: string;
@@ -228,10 +231,10 @@ export function CameraStillCapture({
     <ActionRow>
       <Button
         type="button"
-        disabled={disabled || phase !== "live" || !ready}
+        disabled={disabled || busy || phase !== "live" || !ready}
         onClick={() => void snap()}
       >
-        Capture
+        {ctaLabel(Boolean(busy), "Capture")}
       </Button>
       {cameras.length > 1 ? (
         <Button
@@ -253,16 +256,16 @@ export function CameraStillCapture({
     </ActionRow>
   ) : (
     <ActionRow>
-      <Button type="button" disabled={disabled} onClick={() => void startCamera()}>
-        {captureLabel}
+      <Button type="button" disabled={disabled || busy} onClick={() => void startCamera()}>
+        {ctaLabel(Boolean(busy), captureLabel)}
       </Button>
       <Button
         type="button"
         variant="outline"
-        disabled={disabled}
+        disabled={disabled || busy}
         onClick={() => fileRef.current?.click()}
       >
-        {libraryLabel}
+        {ctaLabel(Boolean(busy), libraryLabel)}
       </Button>
     </ActionRow>
   );

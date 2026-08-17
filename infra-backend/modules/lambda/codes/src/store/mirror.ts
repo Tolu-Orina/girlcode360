@@ -5,6 +5,7 @@ import {
   dayInCycle,
   findDeniedPhrases,
   assertWardrobeAllowed,
+  youcamClientFailCopy,
   type CyclePhase,
   type MirrorInsight,
   type MirrorScanPoint,
@@ -16,7 +17,7 @@ import { youcamApiKey } from "../lib/secrets";
 import {
   downloadUrl,
   packYoucamIds,
-  pollUntilSettled,
+  pollTask,
   requestYoucamFileDeletion,
   startClothTryOn,
   startSkinAnalysis,
@@ -51,6 +52,7 @@ function publicScan(row: MemScan): SkinScan {
     scores: row.scores,
     hasResultImage: row.hasResultImage,
     hasMask: row.hasMask,
+    hasSourceImage: Boolean(row.sourceS3Key),
     insight: row.insight,
     seeded: row.seeded,
     scanQuality: row.scanQuality,
@@ -304,12 +306,20 @@ function decodeImage(b64: string): { bytes: Buffer; contentType: string } {
 async function settleScan(sub: string, row: MemScan): Promise<MemScan | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollUntilSettled("skin-analysis", row.youcamTaskId);
+    const task = await pollTask("skin-analysis", row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
-      const next = { ...row, status: "error" as const };
-      if (isDsqlEnabled()) await dsql.updateScan(sub, row.id, { status: "error" });
-      else {
+      const insight = {
+        title: "Scan could not finish",
+        body: youcamClientFailCopy(task.error),
+        confidence: "Low" as const,
+        enoughScans: false,
+        patternFound: false,
+      };
+      const next = { ...row, status: "error" as const, insight };
+      if (isDsqlEnabled()) {
+        await dsql.updateScan(sub, row.id, { status: "error", insight });
+      } else {
         const list = (scans.get(sub) ?? []).map((s) => (s.id === row.id ? next : s));
         scans.set(sub, list);
       }
@@ -429,8 +439,7 @@ export async function createSkinScan(
   } else {
     scans.set(sub, [...(scans.get(sub) ?? []), row]);
   }
-  const settled = await settleScan(sub, row);
-  return publicScan(settled ?? row);
+  return publicScan(row);
 }
 
 export async function deleteSkinScan(sub: string, id: string): Promise<boolean> {
@@ -509,12 +518,17 @@ export async function purgeUserMirror(sub: string): Promise<void> {
 export async function getScanMedia(
   sub: string,
   id: string,
-  kind: "result" | "mask",
+  kind: "result" | "mask" | "source",
 ): Promise<{ contentType: string; bytes: Buffer } | undefined> {
   const row = isDsqlEnabled()
     ? await dsql.getScan(sub, id)
     : (scans.get(sub) ?? []).find((s) => s.id === id);
-  const key = kind === "mask" ? row?.maskS3Key : row?.resultS3Key;
+  const key =
+    kind === "mask"
+      ? row?.maskS3Key
+      : kind === "source"
+        ? row?.sourceS3Key
+        : row?.resultS3Key;
   if (!key) return undefined;
   const bytes = await getObject(key);
   if (!bytes) return undefined;
@@ -591,14 +605,13 @@ export async function createTryOn(
   } else {
     tryons.set(sub, [row, ...(tryons.get(sub) ?? [])]);
   }
-  const settled = await settleTryOn(sub, row);
-  return publicTryOn(settled ?? row);
+  return publicTryOn(row);
 }
 
 async function settleTryOn(sub: string, row: MemTry): Promise<MemTry | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollUntilSettled("cloth-v3", row.youcamTaskId);
+    const task = await pollTask("cloth-v3", row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as MirrorTaskStatus };

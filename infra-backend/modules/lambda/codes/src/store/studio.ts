@@ -13,7 +13,6 @@ import { MIRROR_CATALOGUE } from "../lib/mirrorCatalogue";
 import {
   packYoucamIds,
   pollTask,
-  pollUntilSettled,
   requestYoucamFileDeletion,
   startMakeupTransfer,
   startMakeupVto,
@@ -213,7 +212,7 @@ async function settleMakeupLook(
 ): Promise<MakeupLookRecord | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollUntilSettled(makeupCapability(row.sourceKind), row.youcamTaskId);
+    const task = await pollTask(makeupCapability(row.sourceKind), row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
       const next = { ...row, status: "error" as const };
@@ -332,8 +331,7 @@ export async function createMakeupLook(
     createdAt: new Date().toISOString(),
   };
   await insertMakeupLook(row);
-  const settled = await settleMakeupLook(sub, row);
-  return publicLook(settled ?? row);
+  return publicLook(row);
 }
 
 export async function createShadeMatch(

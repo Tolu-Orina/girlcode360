@@ -8,7 +8,7 @@ import { isDsqlEnabled } from "../db/client";
 import { deleteObject, getObject } from "../db/s3";
 import {
   packYoucamIds,
-  pollUntilSettled,
+  pollTask,
   requestYoucamFileDeletion,
   startAccessoryTryOn,
   startNailTryOn,
@@ -129,7 +129,7 @@ async function settleLook(
 ): Promise<AccessoryLookRecord | undefined> {
   if (row.status !== "pending") return row;
   try {
-    const task = await pollUntilSettled(
+    const task = await pollTask(
       capabilityFor(row.kind, row.accessoryCategory),
       row.youcamTaskId,
     );
@@ -265,8 +265,7 @@ export async function createAccessoryLook(
     createdAt,
   };
   await insertRow(row);
-  const settled = await settleLook(sub, row);
-  return publicLook(settled ?? row);
+  return publicLook(row);
 }
 
 export async function purgeUserAccessories(sub: string): Promise<void> {

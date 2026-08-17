@@ -5,6 +5,7 @@ import { MirrorStage, MirrorStageEmpty } from "@/components/blocks/mirror-stage"
 import { PageHeader } from "@/components/blocks/page-header";
 import { ErrorBanner } from "@/components/blocks/states";
 import { Button } from "@/components/ui/button";
+import { ctaLabel } from "@/lib/cta";
 
 export function MirrorConsentGate({
   processorLead,
@@ -72,10 +73,10 @@ export function MirrorConsentGate({
 
         <ActionRow>
           <Button type="button" disabled={busy || blocked} onClick={onAllow}>
-            Allow Mirror photos
+            {ctaLabel(busy, "Allow Mirror photos")}
           </Button>
           <Button type="button" variant="outline" disabled={busy} onClick={onSkip}>
-            Not now
+            {ctaLabel(busy, "Not now")}
           </Button>
         </ActionRow>
         <p className={leadClass}>

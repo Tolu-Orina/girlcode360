@@ -14,6 +14,7 @@ import {
 } from "@/components/blocks/states";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
 import { Button } from "@/components/ui/button";
+import { ctaLabel } from "@/lib/cta";
 import {
   CURRENT_POLICY_VERSION,
   createWardrobeOutfit,
@@ -303,7 +304,6 @@ export function MirrorWardrobePanel({
 
   useEffect(() => {
     if (!outfit?.hasResultImage) {
-      setTrySrc(null);
       return;
     }
     let cancelled = false;
@@ -334,6 +334,11 @@ export function MirrorWardrobePanel({
           await load();
           setOutfit(next);
           onBusy(false);
+          if (next.status === "error") {
+            onError(
+              "Try-on could not finish. Use another body still in even light, then try again.",
+            );
+          }
         }
       } catch (err) {
         pendingOutfit.current = null;
@@ -543,7 +548,7 @@ export function MirrorWardrobePanel({
       <p className={leadClass}>{copy.body}</p>
       <ActionRow>
         <Button type="button" disabled={busy} onClick={() => void grantWardrobe()}>
-          Allow clothing photos
+          {ctaLabel(busy, "Allow clothing photos")}
         </Button>
       </ActionRow>
     </section>
@@ -673,6 +678,7 @@ export function MirrorWardrobePanel({
               </label>
               <CameraStillCapture
                 disabled={captureOff}
+                busy={busy}
                 facingMode="environment"
                 guide="none"
                 captureLabel="Photograph a piece"
@@ -692,7 +698,7 @@ export function MirrorWardrobePanel({
                 disabled={busy}
                 onClick={() => void saveTags()}
               >
-                Save tag corrections
+                {ctaLabel(busy, "Save tag corrections")}
               </Button>
             </ActionRow>
           ) : null}
@@ -737,7 +743,7 @@ export function MirrorWardrobePanel({
                 disabled={busy || !online}
                 onClick={() => void onResale()}
               >
-                List this piece
+                {ctaLabel(busy, "List this piece")}
               </Button>
               {resaleNote ? <SuccessBanner message={resaleNote} /> : null}
               <p className={leadClass}>
@@ -770,7 +776,7 @@ export function MirrorWardrobePanel({
               disabled={busy || !online}
               onClick={() => void onSuggestToday()}
             >
-              Outfit for today
+              {ctaLabel(busy, "Outfit for today")}
             </Button>
           </ActionRow>
           <ul className="m-0 grid list-none gap-2 p-0">
@@ -801,11 +807,12 @@ export function MirrorWardrobePanel({
           </ul>
           <ActionRow>
             <Button type="button" disabled={busy || !online} onClick={() => void saveOutfit()}>
-              Save outfit
+              {ctaLabel(busy, "Save outfit")}
             </Button>
           </ActionRow>
           <CameraStillCapture
             disabled={busy || !online || !outfit}
+            busy={busy}
             facingMode="environment"
             guide="body"
             captureLabel="Try on with a body photo"
@@ -912,7 +919,7 @@ export function MirrorWardrobePanel({
           </label>
           <ActionRow>
             <Button type="button" disabled={busy || !online} onClick={() => void onPack()}>
-              Build packing list
+              {ctaLabel(busy, "Build packing list")}
             </Button>
           </ActionRow>
           {pack ? (

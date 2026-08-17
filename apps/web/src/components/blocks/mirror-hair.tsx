@@ -25,24 +25,16 @@ import type {
   MirrorStatus,
   SkinScan,
 } from "../../../../../packages/api-types/src/index";
-import {
-  HAIR_COLOR_PRESETS,
-  HAIR_CORRELATION_WELLNESS_NOTE,
-  HAIR_STYLE_PRESETS,
-} from "../../../../../packages/domain/src/index";
+import { HAIR_COLOR_PRESETS, HAIR_CORRELATION_WELLNESS_NOTE, HAIR_STYLE_PRESETS, youcamClientFailCopy } from "../../../../../packages/domain/src/index";
+import { ctaLabel } from "@/lib/cta";
+import { latestByCreatedAt } from "@/lib/mirror-latest";
 
 function hairFailCopy(reason: string | null | undefined): string {
   const r = (reason ?? "").toLowerCase();
   if (r.includes("face_angle") || r.includes("angle_invalid")) {
-    return "YouCam needs a face looking straight at the camera for length. Density is a separate chin-down still — this face photo cannot score density.";
+    return "YouCam needs a face looking straight at the camera for length. Density is a separate chin-down still — this face photo cannot score density. Sit square, fill the oval, then try again.";
   }
-  if (r.includes("face") || r.includes("noface") || r.includes("detect")) {
-    return "YouCam could not read a clear face. Use a front-facing still in even light, hair down.";
-  }
-  if (reason) {
-    return `YouCam could not finish hair scores (${reason}). Try another front-facing still.`;
-  }
-  return "YouCam could not finish hair scores. Try another front-facing still in even light.";
+  return youcamClientFailCopy(reason);
 }
 
 function kindLabel(row: HairScan): string {
@@ -85,9 +77,14 @@ export function MirrorHairPanel({
 
   const load = useCallback(async () => {
     const res = await listHairScans();
-    setRows(res.scans);
-    setSelected(res.scans[0] ?? null);
-  }, []);
+    const sorted = [...res.scans].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+    setRows(sorted);
+    setSelected(
+      sorted.find((row) => row.kind === mode) ?? sorted[0] ?? null,
+    );
+  }, [mode]);
 
   useEffect(() => {
     void load().catch((err) => onError(friendlyError(err)));
@@ -101,7 +98,6 @@ export function MirrorHairPanel({
     if (rescan) return;
     if (selected?.status === "pending") return;
     if (!selected?.hasResultImage) {
-      setSrc(null);
       return;
     }
     let cancelled = false;
@@ -132,6 +128,9 @@ export function MirrorHairPanel({
           await load();
           setSelected(scan);
           onBusy(false);
+          if (scan.status === "error") {
+            onError(hairFailCopy(scan.failReason));
+          }
         }
       } catch (err) {
         pending.current = null;
@@ -177,7 +176,11 @@ export function MirrorHairPanel({
       if (scan.status !== "pending") {
         pending.current = null;
         await load();
+        setSelected(scan);
         onBusy(false);
+        if (scan.status === "error") {
+          onError(hairFailCopy(scan.failReason));
+        }
       }
     } catch (err) {
       onBusy(false);
@@ -200,7 +203,7 @@ export function MirrorHairPanel({
   const analysis =
     selected?.kind === "analysis"
       ? selected
-      : (rows.find((r) => r.kind === "analysis") ?? null);
+      : latestByCreatedAt(rows.filter((row) => row.kind === "analysis"));
   const insight = analysis?.insight;
   const lengthScore =
     analysis && typeof analysis.scores.hair_length === "number"
@@ -234,6 +237,7 @@ export function MirrorHairPanel({
             <CameraStillCapture
               chrome="stage"
               disabled={captureOff}
+              busy={busy}
               facingMode="user"
               guide="face"
               captureLabel="Take a face photo"
@@ -261,7 +265,7 @@ export function MirrorHairPanel({
                       disabled={captureOff}
                       onClick={() => setRescan(true)}
                     >
-                      Try another photo
+                      {ctaLabel(busy, "Try another photo")}
                     </Button>
                   </ActionRow>
                 </div>
@@ -284,11 +288,11 @@ export function MirrorHairPanel({
           )}
         </div>
 
-        <div className="min-w-0 max-lg:col-start-2 max-lg:row-start-1 lg:col-start-3 lg:row-start-1">
+        <div className="min-w-0 lg:col-start-3 lg:row-start-1">
           {tray}
         </div>
 
-        <aside className="grid min-w-0 gap-6 max-lg:col-span-2 lg:col-start-2 lg:row-start-1">
+        <aside className="grid min-w-0 gap-6 lg:col-start-2 lg:row-start-1">
           {mode === "tryon" ? (
             <article className={cn(elevatedCardClass, "border-0")}>
               <header className="grid gap-1">
@@ -354,7 +358,7 @@ export function MirrorHairPanel({
                 disabled={captureOff || !reusable}
                 onClick={() => void run("tryon")}
               >
-                Try on last skin scan
+                {ctaLabel(busy, "Try on last skin scan")}
               </Button>
               {!reusable ? (
                 <p className={leadClass}>
@@ -382,7 +386,7 @@ export function MirrorHairPanel({
               {!analysis ? (
                 <EmptyState
                   title="No length scores yet"
-                  body="Capture a face still, or use your last Skin scan."
+                  body="Capture a face still, or use your last Skin scan. If a score fails, keep this screen open and try again with a straight-on face."
                 />
               ) : (
                 <div className="grid gap-3">
@@ -423,7 +427,7 @@ export function MirrorHairPanel({
                 disabled={captureOff || !reusable}
                 onClick={() => void run("analysis")}
               >
-                Score last skin scan
+                {ctaLabel(busy, "Score last skin scan")}
               </Button>
               <p className={leadClass}>{HAIR_CORRELATION_WELLNESS_NOTE}</p>
             </article>

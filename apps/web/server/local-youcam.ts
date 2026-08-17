@@ -3,8 +3,11 @@ import {
   MAKEUP_TRYON_SHADES,
   parseMakeupCategories,
   parseMakeupPalettes,
+  detectCrisis,
+  crisisMessage,
   parseHairAnalysisPayload,
   accessoryTryOnReady,
+  youcamClientFailCopy,
 } from "../../../packages/domain/src/index.ts";
 import { CURRENT_POLICY_VERSION } from "../../../packages/api-types/src/index.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -500,6 +503,7 @@ export function localYoucamPlugin(opts: {
       scores: row.scores,
       hasResultImage: row.hasResultImage,
       hasMask: row.hasMask,
+      hasSourceImage: Boolean(row.srcB64),
       insight:
         row.status === "error" && row.failReason
           ? {
@@ -516,17 +520,7 @@ export function localYoucamPlugin(opts: {
   }
 
   function youcamFailCopy(reason: string): string {
-    const r = reason.toLowerCase();
-    if (
-      r.includes("face") ||
-      r.includes("noface") ||
-      r.includes("detect") ||
-      r.includes("invalidimage") ||
-      r.includes("quality")
-    ) {
-      return "YouCam could not find a clear face. Face the camera in even light, hair off the forehead, then capture again.";
-    }
-    return "Skin analysis could not finish. Try another still in even light.";
+    return youcamClientFailCopy(reason);
   }
 
   async function settle(row: ScanRow): Promise<ScanRow> {
@@ -922,8 +916,13 @@ export function localYoucamPlugin(opts: {
             const media = path.match(/^\/v1\/mirror\/scans\/([^/]+)\/media$/);
             if (media && method === "GET") {
               const row = scans.get(decodeURIComponent(media[1]!));
-              const kind = url.searchParams.get("kind") === "mask" ? "mask" : "result";
-              const b64 = kind === "mask" ? row?.maskB64 : row?.resultB64;
+              const kindParam = url.searchParams.get("kind");
+              const b64 =
+                kindParam === "mask"
+                  ? row?.maskB64
+                  : kindParam === "source"
+                    ? row?.srcB64
+                    : row?.resultB64;
               if (!row || !b64) {
                 json(res, 404, { error: "media_not_found" });
                 return;
@@ -1196,11 +1195,6 @@ export function localYoucamPlugin(opts: {
                 resultB64: null,
                 kind: "analysis",
               };
-              for (let i = 0; i < 10; i++) {
-                await new Promise((r) => setTimeout(r, 2000));
-                await settleJob(job);
-                if (job.status !== "pending") break;
-              }
               hairRows.set(job.id, job);
               json(res, 202, { scan: publicHair(job) });
               return;
@@ -1240,7 +1234,6 @@ export function localYoucamPlugin(opts: {
                 hairColor: color,
                 hairstyleId: body.hairstyleId ? String(body.hairstyleId) : null,
               };
-              await settleJob(job);
               hairRows.set(job.id, job);
               json(res, 202, { scan: publicHair(job) });
               return;
@@ -1410,6 +1403,36 @@ export function localYoucamPlugin(opts: {
                   hairTrend: [],
                   shadeHistory: [],
                 },
+              });
+              return;
+            }
+
+            if (method === "POST" && path === "/v1/guest/alena") {
+              const body = await readJson(req);
+              const message = String(body.message ?? "").trim().slice(0, 500);
+              if (!message) {
+                json(res, 400, { error: "message_required" });
+                return;
+              }
+              const market =
+                body.market === "NG" || body.market === "GH" || body.market === "UK"
+                  ? body.market
+                  : "UK";
+              const crisis = detectCrisis(message);
+              json(res, 200, {
+                reply: crisis
+                  ? crisisMessage(market)
+                  : [
+                      "I'm Alena. This landing chat does not use health records.",
+                      "",
+                      "I can talk about general skincare habits, optional cycle logging, and the private Health Wallet.",
+                      "I don't diagnose. Create an account to talk with Alena using the logs you allow.",
+                    ].join("\n"),
+                crisis,
+                stub: true,
+                remaining: 5,
+                disclaimer:
+                  "This is AI-generated wellness guidance, not medical advice.",
               });
               return;
             }

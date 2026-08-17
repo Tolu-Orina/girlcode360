@@ -5,6 +5,7 @@ import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShineSweep } from "@/components/blocks/motion-glow";
 import { marketingChromePad } from "@/components/blocks/marketing-layout";
+import { marketingCtas, useMarketingAuth } from "@/hooks/use-marketing-auth";
 import { cn } from "@/lib/utils";
 
 const navFocus =
@@ -152,6 +153,8 @@ export function MarketingHeader() {
   const { pathname, hash } = useLocation();
   const [open, setOpen] = useState(false);
   const menuId = useId();
+  const auth = useMarketingAuth();
+  const ctas = marketingCtas(auth);
 
   useEffect(() => {
     setOpen(false);
@@ -242,26 +245,35 @@ export function MarketingHeader() {
           </nav>
         </LayoutGroup>
         <div className="flex shrink-0 items-center gap-1 sm:gap-3">
-          <Link
-            to="/signin"
-            className={cn(
-              "hidden h-10 min-h-10 items-center text-[length:var(--text-label)] font-semibold text-foreground no-underline lg:inline-flex [@media(hover:hover)]:hover:text-primary",
-              navFocus,
-              "rounded-[var(--radius)]",
-            )}
-          >
-            Sign in
-          </Link>
-          <Button
-            asChild
-            size="sm"
-            className="relative hidden overflow-hidden rounded-full px-4 active:scale-[0.97] lg:inline-flex"
-          >
-            <Link to="/signup">
-              Create account
-              <ShineSweep />
+          {auth.ready && ctas.secondaryTo ? (
+            <Link
+              to={ctas.secondaryTo}
+              className={cn(
+                "hidden h-10 min-h-10 items-center text-[length:var(--text-label)] font-semibold text-foreground no-underline lg:inline-flex [@media(hover:hover)]:hover:text-primary",
+                navFocus,
+                "rounded-[var(--radius)]",
+              )}
+            >
+              {ctas.secondaryLabel}
             </Link>
-          </Button>
+          ) : null}
+          {auth.ready ? (
+            <Button
+              asChild
+              size="sm"
+              className={cn(
+                "relative overflow-hidden rounded-full px-4 active:scale-[0.97]",
+                auth.signedIn ? "inline-flex" : "hidden lg:inline-flex",
+              )}
+            >
+              <Link to={ctas.primaryTo}>
+                {ctas.primaryLabel}
+                <ShineSweep />
+              </Link>
+            </Button>
+          ) : (
+            <span className="hidden h-10 w-28 lg:inline-flex" aria-hidden />
+          )}
           <button
             type="button"
             className={cn(
@@ -356,16 +368,22 @@ export function MarketingHeader() {
                 })}
               </motion.nav>
               <div className="flex flex-col gap-3 pb-[env(safe-area-inset-bottom)]">
-                <Button asChild className="h-12 min-h-[var(--tap)] rounded-full">
-                  <Link to="/signup" onClick={() => setOpen(false)}>
-                    Create account
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="h-12 min-h-[var(--tap)] rounded-full">
-                  <Link to="/signin" onClick={() => setOpen(false)}>
-                    Sign in
-                  </Link>
-                </Button>
+                {auth.ready ? (
+                  <>
+                    <Button asChild className="h-12 min-h-[var(--tap)] rounded-full">
+                      <Link to={ctas.primaryTo} onClick={() => setOpen(false)}>
+                        {ctas.primaryLabel}
+                      </Link>
+                    </Button>
+                    {ctas.secondaryTo ? (
+                      <Button asChild variant="outline" className="h-12 min-h-[var(--tap)] rounded-full">
+                        <Link to={ctas.secondaryTo} onClick={() => setOpen(false)}>
+                          {ctas.secondaryLabel}
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </>
+                ) : null}
               </div>
             </div>
           </motion.div>
@@ -376,6 +394,12 @@ export function MarketingHeader() {
 }
 
 export function MarketingFooter() {
+  const auth = useMarketingAuth();
+  const ctas = marketingCtas(auth);
+  const accountLink: [string, string] = auth.signedIn
+    ? [ctas.primaryTo, ctas.primaryLabel]
+    : ["/signin", "Sign in"];
+
   return (
     <footer className="bg-foreground py-8 text-primary-foreground">
       <div
@@ -391,7 +415,7 @@ export function MarketingFooter() {
               ["/privacy", "Privacy"],
               ["/terms", "Terms"],
               ["/business", "Business"],
-              ["/signin", "Sign in"],
+              accountLink,
             ].map(([to, label]) => (
               <Link
                 key={to}

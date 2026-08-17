@@ -797,7 +797,7 @@ export function deleteMirrorScan(id: string) {
   );
 }
 
-export function getMirrorScanMedia(id: string, kind: "result" | "mask") {
+export function getMirrorScanMedia(id: string, kind: "result" | "mask" | "source") {
   return request<{ contentType: string; imageB64: string }>(
     "GET",
     `/v1/mirror/scans/${encodeURIComponent(id)}/media?kind=${kind}`,

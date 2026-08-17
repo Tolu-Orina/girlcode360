@@ -769,6 +769,7 @@ export type SkinScan = {
   skinType?: string;
   hasResultImage: boolean;
   hasMask: boolean;
+  hasSourceImage?: boolean;
   insight: MirrorInsight | null;
   seeded: boolean;
   scanQuality: "sd" | "hd";

@@ -1351,7 +1351,11 @@ export const handler = async (
     const blocked = await requireMirrorConsent(user.sub);
     if (blocked) return blocked;
     const kind =
-      event.queryStringParameters?.kind === "mask" ? "mask" : "result";
+      event.queryStringParameters?.kind === "mask"
+        ? "mask"
+        : event.queryStringParameters?.kind === "source"
+          ? "source"
+          : "result";
     const media = await getScanMedia(user.sub, scanMedia[1]!, kind);
     if (!media) return json(404, { error: "media_not_found" });
     return json(200, {

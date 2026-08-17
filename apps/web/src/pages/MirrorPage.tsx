@@ -57,6 +57,8 @@ import {
 } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
 import { MIRROR_PROCESSOR_LEAD } from "../lib/consent-copy";
+import { ctaLabel } from "../lib/cta";
+import { latestLiveScan } from "../lib/mirror-latest";
 import { elevatedSkinConcerns } from "../../../../packages/domain/src/index";
 
 function friendlyError(err: unknown): string {
@@ -69,6 +71,8 @@ function friendlyError(err: unknown): string {
       return "That photo is too large. Use a closer, well-lit shot.";
     case "image_too_small":
       return "That photo is too small. Use a clearer face-on selfie (at least 480 pixels on the short side).";
+    case "face_angle_invalid":
+      return "YouCam needs a face looking straight at the camera. Sit square to the lens, fill the oval, then try again.";
     case "photo_rejected":
       return "YouCam could not read that photo. Use a well-lit, face-on selfie with hair off the face.";
     case "youcam_unconfigured":
@@ -183,11 +187,7 @@ function MirrorPageView() {
   const loadWorkspace = useCallback(async () => {
     const scanRes = await listMirrorScans();
     setScans(scanRes.scans);
-    const latest =
-      [...scanRes.scans].reverse().find((s) => !s.seeded) ??
-      scanRes.scans[scanRes.scans.length - 1] ??
-      null;
-    setSelected(latest);
+    setSelected(latestLiveScan(scanRes.scans));
     if (scanRes.scans.length >= 2) {
       setCompareA((cur) => cur ?? scanRes.scans[0]!.id);
       setCompareB((cur) => cur ?? scanRes.scans[scanRes.scans.length - 1]!.id);
@@ -236,18 +236,27 @@ function MirrorPageView() {
   }, [status?.consented]);
 
   useEffect(() => {
-    if (!selected?.hasResultImage) {
+    if (!selected) {
       setResultSrc(null);
+      setMaskSrc(null);
+      return;
+    }
+    const kind = selected.hasResultImage
+      ? "result"
+      : selected.hasSourceImage
+        ? "source"
+        : null;
+    if (!kind) {
       setMaskSrc(null);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const result = await getMirrorScanMedia(selected.id, "result");
+        const result = await getMirrorScanMedia(selected.id, kind);
         if (cancelled) return;
         setResultSrc(`data:${result.contentType};base64,${result.imageB64}`);
-        if (selected.hasMask) {
+        if (kind === "result" && selected.hasMask) {
           const mask = await getMirrorScanMedia(selected.id, "mask");
           if (!cancelled) {
             setMaskSrc(`data:${mask.contentType};base64,${mask.imageB64}`);
@@ -256,10 +265,7 @@ function MirrorPageView() {
           setMaskSrc(null);
         }
       } catch {
-        if (!cancelled) {
-          setResultSrc(null);
-          setMaskSrc(null);
-        }
+        if (!cancelled) setMaskSrc(null);
       }
     })();
     return () => {
@@ -303,6 +309,12 @@ function MirrorPageView() {
           setScans(next);
           setSelected(scan);
           setBusy(false);
+          if (scan.status === "error") {
+            setError(
+              scan.insight?.body ??
+                "YouCam could not finish this still. Face the camera in even light and try again.",
+            );
+          }
         }
       } catch (err) {
         pendingScan.current = null;
@@ -404,7 +416,7 @@ function MirrorPageView() {
       await deleteMirrorScan(id);
       const { scans: next } = await listMirrorScans();
       setScans(next);
-      setSelected(next[next.length - 1] ?? null);
+      setSelected(latestLiveScan(next));
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -444,7 +456,7 @@ function MirrorPageView() {
           action={
             <div className="flex flex-wrap gap-3">
               <Button type="button" disabled={busy || !apiBaseUrl} onClick={() => void enableMirror()}>
-                {busy ? "Saving…" : "Turn Mirror on"}
+                {ctaLabel(busy, "Turn Mirror on")}
               </Button>
               <Button asChild variant="outline">
                 <Link to="/app/account">Open Account</Link>
@@ -501,6 +513,7 @@ function MirrorPageView() {
                   : "Use for skin scan"
       }
       disabled={!status.youcamConfigured || !online}
+      busy={busy}
     />
   );
 
@@ -562,12 +575,13 @@ function MirrorPageView() {
             }
           }}
           onError={(msg) => setError(msg)}
+          busy={busy}
         />
         </div>
-        <div className="min-w-0 max-lg:col-start-2 max-lg:row-start-1 lg:col-start-3 lg:row-start-1">
+        <div className="min-w-0 lg:col-start-3 lg:row-start-1">
         {photoTray}
         </div>
-        <div className="min-w-0 max-lg:col-span-2 lg:col-start-2 lg:row-start-1">
+        <div className="min-w-0 max-lg:col-span-1 lg:col-start-2 lg:row-start-1">
         <MirrorSkinRail
           resultSrc={resultSrc}
           selected={selected}
@@ -616,7 +630,7 @@ function MirrorPageView() {
                 />
                 <ActionRow>
                   <Button type="button" onClick={() => void confirmPreview()}>
-                    Use this photo
+                    {ctaLabel(busy, "Use this photo")}
                   </Button>
                   <Button
                     type="button"

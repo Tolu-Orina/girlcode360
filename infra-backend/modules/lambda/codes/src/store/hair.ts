@@ -9,7 +9,7 @@ import { isDsqlEnabled } from "../db/client";
 import { deleteObject, getObject } from "../db/s3";
 import {
   packYoucamIds,
-  pollUntilSettled,
+  pollTask,
   requestYoucamFileDeletion,
   startHairAnalysis,
   startHairTryOn,
@@ -84,7 +84,7 @@ async function insightFor(sub: string, rows: HairScanRecord[]): Promise<HairInsi
 }
 
 function publicHair(row: HairScanRecord, insight: HairInsight | null): HairScan {
-  const scores = row.scores as HairScores;
+  const scores = row.scores as HairScores & { failReason?: string };
   return {
     id: row.id,
     kind: row.kind,
@@ -102,6 +102,7 @@ function publicHair(row: HairScanRecord, insight: HairInsight | null): HairScan 
     hairstyleId: row.hairstyleId,
     hasResultImage: Boolean(row.resultS3Key) && row.status === "success",
     insight: row.kind === "analysis" ? insight : null,
+    failReason: typeof scores.failReason === "string" ? scores.failReason : null,
   };
 }
 
@@ -136,10 +137,14 @@ async function settleHair(
   if (row.status !== "pending") return row;
   const capability = row.kind === "tryon" ? "hair-tryon" : "hair-length-detection";
   try {
-    const task = await pollUntilSettled(capability, row.youcamTaskId);
+    const task = await pollTask(capability, row.youcamTaskId);
     if (task.status === "running") return row;
     if (task.status === "error") {
-      const next = { ...row, status: "error" as const };
+      const next = {
+        ...row,
+        status: "error" as const,
+        scores: { ...row.scores, failReason: task.error ?? "task_error" },
+      };
       await putRow(next);
       return next;
     }
@@ -254,9 +259,7 @@ export async function createHairScan(
     createdAt,
   };
   await insertRow(row);
-  const settled = await settleHair(sub, row);
-  const insight = await insightFor(sub, await listRows(sub));
-  return publicHair(settled ?? row, insight);
+  return publicHair(row, await insightFor(sub, await listRows(sub)));
 }
 
 export async function purgeUserHair(sub: string): Promise<void> {

@@ -17,7 +17,7 @@ import {
 import { elevatedCardClass, leadClass } from "@/components/blocks/app-page";
 import { cn } from "@/lib/utils";
 
-export type MakeupStudioMode = "live" | "photo" | "transfer" | "shade";
+export type MakeupStudioMode = "photo" | "transfer" | "shade";
 
 function defaultShadeIds(): Record<StudioMakeupCategory, string> {
   const out = {} as Record<StudioMakeupCategory, string>;
@@ -130,7 +130,7 @@ export function MakeupFeatureRail() {
     pickShade,
   } = useMakeupLook();
 
-  if (mode !== "photo" && mode !== "live") return null;
+  if (mode !== "photo") return null;
 
   const shades = makeupShadesForCategory(featureFocus);
   const current = shades.find((s) => s.id === shadeIds[featureFocus]);

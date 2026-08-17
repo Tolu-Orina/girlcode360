@@ -9,21 +9,19 @@ import { EmptyState } from "@/components/blocks/states";
 import { SegmentedTabs } from "@/components/primitives/segmented-tabs";
 import { MakeupFeatureRail, useMakeupLook } from "@/components/blocks/makeup-look-context";
 import { Button } from "@/components/ui/button";
+import { ctaLabel } from "@/lib/cta";
 import {
-  CURRENT_POLICY_VERSION,
   createMakeupLook,
   createShadeMatch,
   getMakeupLook,
   getMakeupLookMedia,
   listMakeupLooks,
   listShadeMatches,
-  postConsents,
   saveMakeupLook,
 } from "@/lib/api";
 import { CameraStillCapture } from "@/components/blocks/camera-still";
 import { MirrorStage, MirrorStageEmpty, mirrorStudioRowClass } from "@/components/blocks/mirror-stage";
 import { useMirrorPhotosOptional } from "@/hooks/use-mirror-photos";
-import { PURPOSE_COPY } from "@/lib/consent-copy";
 import { fileToJpegDataUrl } from "@/lib/jpeg-upload";
 import { cn } from "@/lib/utils";
 import type {
@@ -33,38 +31,26 @@ import type {
   ShadeMatch,
   SkinScan,
 } from "../../../../../packages/api-types/src/index";
+import { youcamClientFailCopy } from "../../../../../packages/domain/src/index";
 
 function makeupFailCopy(reason: string | null | undefined): string {
   const r = (reason ?? "").toLowerCase();
-  if (
-    r.includes("face") ||
-    r.includes("noface") ||
-    r.includes("detect") ||
-    r.includes("invalidimage")
-  ) {
-    return "YouCam could not find a clear face in that still. Use a front-facing photo in even light, then press Use again.";
-  }
   if (r.includes("filesize") || r.includes("too_large") || r.includes("exceed")) {
     return "That photo is larger than YouCam allows. Take a new face still, then try the look again.";
   }
   if (r.includes("credit") || r.includes("quota")) {
     return "YouCam could not run this look (account quota). Try again in a minute.";
   }
-  if (reason) {
-    return `YouCam could not finish this look (${reason}). Try another face still.`;
-  }
-  return "YouCam could not finish this look. Try another face still in even light.";
+  return youcamClientFailCopy(reason);
 }
 
 export function MirrorStudioPanel({
   status,
   scans,
-  market,
   online,
   busy,
   onBusy,
   onError,
-  onStatus,
   friendlyError,
   tray,
 }: {
@@ -144,6 +130,9 @@ export function MirrorStudioPanel({
           await load(look.id);
           setSelected(look);
           onBusy(false);
+          if (look.status === "error") {
+            onError(makeupFailCopy(look.failReason));
+          }
         }
       } catch (err) {
         pendingLook.current = null;
@@ -156,7 +145,7 @@ export function MirrorStudioPanel({
   }, [selected?.id, load, onBusy, onError, friendlyError]);
 
   async function runLook(
-    kind: "live" | "photo" | "transfer",
+    kind: "photo" | "transfer",
     body: Parameters<typeof createMakeupLook>[1],
   ) {
     onBusy(true);
@@ -223,26 +212,6 @@ export function MirrorStudioPanel({
     void onFaceFileRef.current(queued.file, "photo");
   }, [photos, mode]);
 
-  async function grantLiveCamera() {
-    onBusy(true);
-    onError(null);
-    try {
-      await postConsents({
-        jurisdiction: market,
-        policyVersion: CURRENT_POLICY_VERSION,
-        items: [
-          { purpose: "health_data", granted: true },
-          { purpose: "mirror_live_camera", granted: true },
-        ],
-      });
-      await onStatus();
-    } catch (err) {
-      onError(friendlyError(err));
-    } finally {
-      onBusy(false);
-    }
-  }
-
   async function onShade() {
     onBusy(true);
     onError(null);
@@ -262,37 +231,15 @@ export function MirrorStudioPanel({
 
   async function onStageFile(file: File) {
     setRescan(false);
-    if (mode === "live") {
-      try {
-        setSelected(null);
-        setLookSrc(URL.createObjectURL(file));
-        if (features.length === 0) {
-          onError("Turn on at least one makeup feature.");
-          return;
-        }
-        const imageB64 = await fileToJpegDataUrl(file, { maxLong: 1024 });
-        await runLook("live", { imageB64, ...lookSelection() });
-      } catch (err) {
-        onError(
-          err instanceof Error && err.message === "image_too_small"
-            ? "Move closer so your face fills the oval."
-            : friendlyError(err),
-        );
-      }
-      return;
-    }
     void onFaceFile(file, mode === "transfer" ? "transfer" : "photo");
   }
 
   const captureOff = busy || !status.youcamConfigured || !online;
-  const liveCopy = PURPOSE_COPY.mirror_live_camera;
   const pending = selected?.status === "pending";
   const showCamera =
     mode !== "shade" && (rescan || !lookSrc);
-  const needLiveConsent = mode === "live" && !status.liveCameraConsented;
 
   function lookKindLabel(look: MakeupLook): string {
-    if (look.sourceKind === "live") return "Live";
     if (look.sourceKind === "transfer") return "Transferred";
     return "Photo";
   }
@@ -305,7 +252,6 @@ export function MirrorStudioPanel({
         onChange={(id) => setMode(id as typeof mode)}
         items={[
           { id: "photo", label: "Photo" },
-          { id: "live", label: "Live" },
           { id: "transfer", label: "Get this look" },
           { id: "shade", label: "Shade match" },
         ]}
@@ -325,24 +271,6 @@ export function MirrorStudioPanel({
                 <MirrorStageEmpty label="Shade match uses your latest skin scan, not a new still." />
               )}
             </MirrorStage>
-          ) : needLiveConsent ? (
-            <MirrorStage
-              dock={
-                <div className="grid gap-4">
-                  <p className={leadClass}>{liveCopy.body}</p>
-                  <ActionRow>
-                    <Button type="button" disabled={busy} onClick={() => void grantLiveCamera()}>
-                      Allow live camera
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => setMode("photo")}>
-                      Use photo mode
-                    </Button>
-                  </ActionRow>
-                </div>
-              }
-            >
-              <MirrorStageEmpty />
-            </MirrorStage>
           ) : showCamera ? (
             <div className="grid min-w-0 gap-4">
               {mode === "transfer" ? (
@@ -361,7 +289,7 @@ export function MirrorStudioPanel({
                       disabled={captureOff}
                       onClick={() => refInput.current?.click()}
                     >
-                      Choose reference
+                      {ctaLabel(busy, "Choose reference")}
                     </Button>
                   </ActionRow>
                 </>
@@ -369,13 +297,14 @@ export function MirrorStudioPanel({
               <CameraStillCapture
                 chrome="stage"
                 disabled={captureOff}
+                busy={busy}
                 facingMode="user"
                 guide="face"
                 captureLabel="Take a face photo"
                 videoLabel={
                   mode === "transfer"
-                    ? "Live camera for a look-transfer still"
-                    : "Live camera for a makeup still"
+                    ? "Camera for a look-transfer still"
+                    : "Camera for a makeup still"
                 }
                 photoKind="face"
                 onFile={(file) => void onStageFile(file)}
@@ -393,7 +322,7 @@ export function MirrorStudioPanel({
                   ) : null}
                   <ActionRow>
                     <Button type="button" disabled={captureOff} onClick={() => setRescan(true)}>
-                      Try another photo
+                      {ctaLabel(busy, "Try another photo")}
                     </Button>
                   </ActionRow>
                 </div>
@@ -412,11 +341,11 @@ export function MirrorStudioPanel({
           )}
         </div>
 
-        <div className="min-w-0 max-lg:col-start-2 max-lg:row-start-1 lg:col-start-3 lg:row-start-1">
+        <div className="min-w-0 lg:col-start-3 lg:row-start-1">
           {tray}
         </div>
 
-        <aside className="grid min-w-0 gap-6 max-lg:col-span-2 lg:col-start-2 lg:row-start-1">
+        <aside className="grid min-w-0 gap-6 lg:col-start-2 lg:row-start-1">
           {mode === "shade" ? (
             <article className={cn(elevatedCardClass, "border-0")}>
               <header className="grid gap-1">
@@ -434,7 +363,7 @@ export function MirrorStudioPanel({
                   disabled={captureOff || !reusable}
                   onClick={() => void onShade()}
                 >
-                  Match my shade
+                  {ctaLabel(busy, "Match my shade")}
                 </Button>
               </ActionRow>
               {!reusable ? (
@@ -514,7 +443,7 @@ export function MirrorStudioPanel({
                     })
                   }
                 >
-                  {selected.saved ? "Saved privately" : "Save look"}
+                  {selected.saved ? "Saved privately" : ctaLabel(busy, "Save look")}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setMode("shade")}>
                   Shop this shade
@@ -560,7 +489,7 @@ export function MirrorStudioPanel({
           {mode !== "shade" && !looks.length && !showCamera ? (
             <EmptyState
               title="No looks yet"
-              body="Photo mode works without live camera. Looks stay private until you save."
+              body="Take a face photo. Looks stay private until you save."
             />
           ) : null}
         </aside>
